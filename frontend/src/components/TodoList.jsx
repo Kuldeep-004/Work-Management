@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { PlusIcon, TrashIcon, CheckIcon, CalendarIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
-import { API_BASE_URL } from '../apiConfig';
+import { API_BASE_URL } from '../apiConfig.js';
 
 const TodoList = () => {
   const { user } = useAuth();

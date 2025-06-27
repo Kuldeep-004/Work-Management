@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { API_BASE_URL } from '../apiConfig';
 
 const FileUpload = ({ taskId, onFileUploaded, onFileDeleted }) => {
   const { user: loggedInUser } = useAuth();
@@ -26,7 +27,7 @@ const FileUpload = ({ taskId, onFileUploaded, onFileDeleted }) => {
     });
 
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/files`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/files`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${loggedInUser.token}`,
@@ -57,7 +58,7 @@ const FileUpload = ({ taskId, onFileUploaded, onFileDeleted }) => {
 
   const handleDelete = async (fileId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/files/${fileId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/files/${fileId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${loggedInUser.token}`,

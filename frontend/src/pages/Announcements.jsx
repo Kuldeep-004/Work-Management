@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
+import { API_BASE_URL } from '../apiConfig';
 
 // Create axios instance with base URL
 const api = axios.create({
-  baseURL: 'http://localhost:5000'
+  baseURL: `${API_BASE_URL}/api`
 });
 
 const Announcements = () => {
@@ -20,7 +21,7 @@ const Announcements = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get('/api/announcements', {
+      const response = await api.get('/announcements', {
         headers: {
           Authorization: `Bearer ${user.token}`
         }
@@ -45,7 +46,7 @@ const Announcements = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/api/announcements', {
+      await api.post('/announcements', {
         content,
         expiresAt: new Date(expiresAt)
       }, {
@@ -64,7 +65,7 @@ const Announcements = () => {
 
   const handleDelete = async (id) => {
     try {
-      await api.delete(`/api/announcements/${id}`, {
+      await api.delete(`/announcements/${id}`, {
         headers: {
           Authorization: `Bearer ${user.token}`
         }

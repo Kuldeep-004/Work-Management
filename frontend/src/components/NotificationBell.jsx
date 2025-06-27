@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { BellIcon, XMarkIcon, InboxIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { API_BASE_URL } from '../apiConfig';
 
 const NotificationBell = () => {
   const [notifications, setNotifications] = useState([]);
@@ -30,10 +31,10 @@ const NotificationBell = () => {
     try {
       setLoading(true);
       const [notificationsRes, unreadRes] = await Promise.all([
-        fetch('http://localhost:5000/api/notifications', {
+        fetch(`${API_BASE_URL}/api/notifications`, {
           headers: { Authorization: `Bearer ${user.token}` },
         }),
-        fetch('http://localhost:5000/api/notifications/unread-count', {
+        fetch(`${API_BASE_URL}/api/notifications/unread-count`, {
           headers: { Authorization: `Bearer ${user.token}` },
         })
       ]);
@@ -58,13 +59,13 @@ const NotificationBell = () => {
 
   const handleDeleteNotification = async (notificationId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/notifications/${notificationId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/notifications/${notificationId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${user.token}` },
       });
       if (response.ok) {
         setNotifications(prev => prev.filter(n => n._id !== notificationId));
-        const unreadRes = await fetch('http://localhost:5000/api/notifications/unread-count', {
+        const unreadRes = await fetch(`${API_BASE_URL}/api/notifications/unread-count`, {
           headers: { Authorization: `Bearer ${user.token}` },
         });
         if (unreadRes.ok) {
@@ -83,7 +84,7 @@ const NotificationBell = () => {
 
   const handleMarkAsRead = async (notificationId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/notifications/${notificationId}/read`, {
+      const response = await fetch(`${API_BASE_URL}/api/notifications/${notificationId}/read`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${user.token}` },
       });

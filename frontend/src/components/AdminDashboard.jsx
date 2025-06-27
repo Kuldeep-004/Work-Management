@@ -16,6 +16,7 @@ import TaskComments from './TaskComments';
 import defaultProfile from '../assets/avatar.jpg';
 import FilterPopup from './FilterPopup';
 import * as XLSX from 'xlsx';
+import { API_BASE_URL } from '../apiConfig';
 
 function formatDate(date) {
   if (!date) return 'NA';
@@ -91,7 +92,7 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async (url, setter) => {
       try {
-        const response = await fetch(url, {
+        const response = await fetch(`${API_BASE_URL}/api/${url}`, {
           headers: { Authorization: `Bearer ${user.token}` },
         });
         if (!response.ok) {
@@ -106,10 +107,10 @@ const Dashboard = () => {
     };
 
     if (user && user.token) {
-      fetchData('http://localhost:5000/api/users', setUsers);
-      fetchData('http://localhost:5000/api/tasks/unique/client-names', setClientNames);
-      fetchData('http://localhost:5000/api/tasks/unique/client-groups', setClientGroups);
-      fetchData('http://localhost:5000/api/tasks/unique/work-types', setWorkTypes);
+      fetchData('users', setUsers);
+      fetchData('tasks/unique/client-names', setClientNames);
+      fetchData('tasks/unique/client-groups', setClientGroups);
+      fetchData('tasks/unique/work-types', setWorkTypes);
     }
   }, [user]);
 
@@ -154,18 +155,18 @@ const Dashboard = () => {
         setError(null);
         let endpoint = '';
         if (user.role === 'Admin') {
-          endpoint = 'http://localhost:5000/api/tasks/all';
+          endpoint = 'tasks/all';
         } else if (user.role === 'Head') {
-          endpoint = 'http://localhost:5000/api/tasks/all';
+          endpoint = 'tasks/all';
         } else if (user.role === 'Team Head') {
-          endpoint = 'http://localhost:5000/api/tasks/all';
+          endpoint = 'tasks/all';
         } else {
           setError('Unauthorize: dInvalid role');
           setTasks([]);
           setLoading(false);
           return;
         }
-        const response = await fetch(endpoint, {
+        const response = await fetch(`${API_BASE_URL}/api/${endpoint}`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
@@ -195,7 +196,7 @@ const Dashboard = () => {
     // Fetch task hours for all users
     const fetchTaskHours = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/timesheets/task-hours', {
+        const response = await fetch(`${API_BASE_URL}/api/timesheets/task-hours`, {
           headers: { Authorization: `Bearer ${user.token}` },
         });
         if (!response.ok) throw new Error('Failed to fetch task hours');
@@ -362,7 +363,7 @@ const Dashboard = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${user.token}`,
@@ -413,7 +414,7 @@ const Dashboard = () => {
     if (!selectedTask) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${selectedTask._id}/comments`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${selectedTask._id}/comments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -828,7 +829,7 @@ const Dashboard = () => {
 
 export default Dashboard;
 
-<style jsx global>{`
+<style>{`
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     background: #f1f1f1;

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import defaultProfile from '../assets/avatar.jpg';
 import FileUpload from './FileUpload';
 import FileList from './FileList';
+import { API_BASE_URL } from '../apiConfig';
 
 const CreateTask = ({ users = [] }) => {
   const { user: loggedInUser, isAuthenticated } = useAuth();
@@ -49,7 +50,7 @@ const CreateTask = ({ users = [] }) => {
     const fetchData = async () => {
       try {
         // Fetch clients
-        const clientsResponse = await fetch('http://localhost:5000/api/clients', {
+        const clientsResponse = await fetch(`${API_BASE_URL}/api/clients`, {
           headers: {
             Authorization: `Bearer ${loggedInUser.token}`,
           },
@@ -58,7 +59,7 @@ const CreateTask = ({ users = [] }) => {
         setClients(clientsData);
 
         // Fetch client groups
-        const groupsResponse = await fetch('http://localhost:5000/api/clients/groups', {
+        const groupsResponse = await fetch(`${API_BASE_URL}/api/clients/groups`, {
           headers: {
             Authorization: `Bearer ${loggedInUser.token}`,
           },
@@ -67,7 +68,7 @@ const CreateTask = ({ users = [] }) => {
         setClientGroups(groupsData);
 
         // Fetch work types
-        const workTypesResponse = await fetch('http://localhost:5000/api/clients/work-types', {
+        const workTypesResponse = await fetch(`${API_BASE_URL}/api/clients/work-types`, {
           headers: {
             Authorization: `Bearer ${loggedInUser.token}`,
           },
@@ -226,7 +227,7 @@ const CreateTask = ({ users = [] }) => {
       setUploading(true);
       console.log('Creating task with files:', selectedFiles); // Debug log
 
-      const response = await fetch('http://localhost:5000/api/tasks', {
+      const response = await fetch(`${API_BASE_URL}/api/tasks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -304,7 +305,7 @@ const CreateTask = ({ users = [] }) => {
 
       try {
         console.log('Uploading batch:', batch); // Debug log
-        const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/files`, {
+        const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/files`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${loggedInUser.token}`,
@@ -420,7 +421,7 @@ const CreateTask = ({ users = [] }) => {
   const handleWorkTypeSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:5000/api/clients/work-types', {
+      const response = await fetch(`${API_BASE_URL}/api/clients/work-types`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

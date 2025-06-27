@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import { PencilSquareIcon, CheckIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { API_BASE_URL } from '../../apiConfig';
 
 const Cost = () => {
   const { user, token } = useAuth();
@@ -23,7 +24,7 @@ const Cost = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/users/hourly-rates', {
+      const res = await fetch(`${API_BASE_URL}/api/users/hourly-rates`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -37,7 +38,7 @@ const Cost = () => {
   const fetchCosts = async (q = '') => {
     setCostLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/timesheets/task-costs${q ? `?search=${encodeURIComponent(q)}` : ''}`, {
+      const res = await fetch(`${API_BASE_URL}/api/timesheets/task-costs${q ? `?search=${encodeURIComponent(q)}` : ''}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -56,7 +57,7 @@ const Cost = () => {
   const handleSave = async (userId) => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/users/${userId}/hourly-rate`, {
+      const res = await fetch(`${API_BASE_URL}/api/users/${userId}/hourly-rate`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -193,13 +194,6 @@ const Cost = () => {
           </tbody>
         </table>
       </div>
-      <button
-        className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded mb-4"
-        onClick={() => fetchCosts()}
-        type="button"
-      >
-        Debug: Fetch Costs
-      </button>
     </div>
   );
 };

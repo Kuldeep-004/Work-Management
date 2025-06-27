@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { API_BASE_URL } from '../apiConfig';
 
 const BlockedUsers = () => {
   const { user } = useAuth();
@@ -10,7 +11,7 @@ const BlockedUsers = () => {
 
   const fetchBlockedUsers = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/users/blocked', {
+      const response = await fetch(`${API_BASE_URL}/api/users/blocked`, {
         headers: {
           Authorization: `Bearer ${user.token}`,
         },
@@ -38,7 +39,7 @@ const BlockedUsers = () => {
 
   const handleUnblock = async (userId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/users/${userId}/unblock`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${userId}/unblock`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${user.token}`,

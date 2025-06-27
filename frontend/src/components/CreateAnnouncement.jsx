@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { API_BASE_URL } from '../apiConfig';
 
 const CreateAnnouncement = ({ onAnnouncementCreated }) => {
   const { user: loggedInUser, isAuthenticated } = useAuth();
@@ -36,7 +37,7 @@ const CreateAnnouncement = ({ onAnnouncementCreated }) => {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/announcements', {
+      const response = await fetch(`${API_BASE_URL}/api/announcements`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

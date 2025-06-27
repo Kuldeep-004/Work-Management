@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../../apiConfig';
 
 const Clients = () => {
   const { user } = useAuth();
@@ -28,7 +29,7 @@ const Clients = () => {
 
   const fetchClients = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/clients', {
+      const response = await fetch(`${API_BASE_URL}/api/clients`, {
         headers: {
           Authorization: `Bearer ${user.token}`,
         },
@@ -42,7 +43,7 @@ const Clients = () => {
 
   const fetchClientGroups = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/clients/groups', {
+      const response = await fetch(`${API_BASE_URL}/api/clients/groups`, {
         headers: {
           Authorization: `Bearer ${user.token}`,
         },
@@ -56,7 +57,7 @@ const Clients = () => {
 
   const fetchWorkTypes = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/clients/work-types', {
+      const response = await fetch(`${API_BASE_URL}/api/clients/work-types`, {
         headers: {
           Authorization: `Bearer ${user.token}`,
         },
@@ -77,7 +78,7 @@ const Clients = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:5000/api/clients', {
+      const response = await fetch(`${API_BASE_URL}/api/clients`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -107,7 +108,7 @@ const Clients = () => {
   const handleGroupSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:5000/api/clients/groups', {
+      const response = await fetch(`${API_BASE_URL}/api/clients/groups`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -134,7 +135,7 @@ const Clients = () => {
   const handleWorkTypeSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:5000/api/clients/work-types', {
+      const response = await fetch(`${API_BASE_URL}/api/clients/work-types`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -164,7 +165,7 @@ const Clients = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/clients/${clientId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/clients/${clientId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${user.token}`,

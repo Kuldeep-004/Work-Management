@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import defaultProfile from '../../assets/avatar.jpg';
+import { API_BASE_URL } from '../../apiConfig';
 
 const rolesList = ['Admin', 'Head', 'Team Head', 'Fresher'];
 const role2List = ['None', 'TimeSheet Verifier'];
@@ -17,12 +18,12 @@ const AllUsers = () => {
     const fetchData = async () => {
       try {
         const [usersRes, teamsRes] = await Promise.all([
-          fetch('http://localhost:5000/api/users', {
+          fetch(`${API_BASE_URL}/api/users`, {
             headers: {
               Authorization: `Bearer ${user.token}`,
             },
           }),
-          fetch('http://localhost:5000/api/teams', {
+          fetch(`${API_BASE_URL}/api/teams`, {
             headers: {
               Authorization: `Bearer ${user.token}`,
             },
@@ -63,7 +64,7 @@ const AllUsers = () => {
         })
       };
 
-      const res = await fetch(`http://localhost:5000/api/users/${userId}/approval`, {
+      const res = await fetch(`${API_BASE_URL}/api/users/${userId}/approval`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -93,7 +94,7 @@ const AllUsers = () => {
 
   const handleRoleChange = async (userId, newRole) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/users/${userId}/update-fields`, {
+      const res = await fetch(`${API_BASE_URL}/api/users/${userId}/update-fields`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -134,7 +135,7 @@ const AllUsers = () => {
       // If "Select Team" is chosen (empty string), set team to null
       const teamValue = newTeamId === '' ? null : newTeamId;
 
-      const res = await fetch(`http://localhost:5000/api/users/${userId}/update-fields`, {
+      const res = await fetch(`${API_BASE_URL}/api/users/${userId}/update-fields`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -161,7 +162,7 @@ const AllUsers = () => {
 
   const handleRole2Change = async (userId, newRole2) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/users/${userId}/update-fields`, {
+      const res = await fetch(`${API_BASE_URL}/api/users/${userId}/update-fields`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -193,7 +194,7 @@ const AllUsers = () => {
     }
 
     try {
-      const res = await fetch(`http://localhost:5000/api/users/${userId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${user.token}`,

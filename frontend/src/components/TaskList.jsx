@@ -5,6 +5,7 @@ import defaultProfile from '../assets/avatar.jpg';
 import FileUpload from './FileUpload';
 import FileList from './FileList';
 import TaskComments from './TaskComments';
+import { API_BASE_URL } from '../apiConfig';
 
 // Add this CSS class at the top of the file, after the imports
 const scrollbarHide = {
@@ -119,15 +120,15 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
     try {
       let endpoint;
       if (viewType === 'for-verification') {
-        endpoint = 'http://localhost:5000/api/tasks/for-verification';
+        endpoint = `${API_BASE_URL}/api/tasks/for-verification`;
       } else if (viewType === 'under_verification') {
-        endpoint = 'http://localhost:5000/api/tasks/under-verification';
+        endpoint = `${API_BASE_URL}/api/tasks/under-verification`;
       } else if (viewType === 'received_completed') {
-        endpoint = 'http://localhost:5000/api/tasks/received/completed';
+        endpoint = `${API_BASE_URL}/api/tasks/received/completed`;
       } else {
         const baseEndpoint = viewType === 'assigned' 
-          ? 'http://localhost:5000/api/tasks/assigned'
-          : 'http://localhost:5000/api/tasks/received';
+          ? `${API_BASE_URL}/api/tasks/assigned`
+          : `${API_BASE_URL}/api/tasks/received`;
         endpoint = baseEndpoint;
       }
 
@@ -177,7 +178,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/users', {
+        const response = await fetch(`${API_BASE_URL}/api/users`, {
           headers: {
             Authorization: `Bearer ${loggedInUser.token}`,
           },
@@ -197,7 +198,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
     // Fetch task hours for all users
     const fetchTaskHours = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/timesheets/task-hours', {
+        const response = await fetch(`${API_BASE_URL}/api/timesheets/task-hours`, {
           headers: { Authorization: `Bearer ${loggedInUser.token}` },
         });
         if (!response.ok) throw new Error('Failed to fetch task hours');
@@ -311,7 +312,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${loggedInUser.token}`,
@@ -342,10 +343,10 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
       }
 
       const endpoint = verificationStage === 'first' 
-        ? `/tasks/${taskId}/send-for-first-verification`
-        : `/tasks/${taskId}/send-for-second-verification`;
+        ? `/api/tasks/${taskId}/send-for-first-verification`
+        : `/api/tasks/${taskId}/send-for-second-verification`;
 
-      const response = await fetch(`http://localhost:5000/api${endpoint}`, {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -407,7 +408,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
   const handleVerificationUpdate = async (taskId, status, verifierId = null) => {
     try {
       const body = verifierId ? { verificationStatus: status, verifierId } : { verificationStatus: status };
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/verification`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/verification`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -443,7 +444,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
 
   const handleCompleteTask = async (taskId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -536,7 +537,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/verification`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/verification`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -592,7 +593,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
   // Update the handleStatusChange function to be independent of verification status
   const handleStatusChange = async (taskId, newStatus) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/status`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -983,7 +984,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
       )}
 
       {/* Add custom scrollbar styles */}
-      <style jsx global>{`
+      <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 6px;
           background: #f1f1f1;

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { API_BASE_URL } from '../apiConfig';
 
 const AuthContext = createContext();
 
@@ -39,7 +40,7 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Please enter both email and password');
       }
 
-      const response = await fetch('http://localhost:5000/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -70,7 +71,7 @@ export const AuthProvider = ({ children }) => {
 
   const requestOTP = async (email) => {
     try {
-      const response = await fetch('http://localhost:5000/api/auth/request-otp', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/request-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -101,7 +102,7 @@ export const AuthProvider = ({ children }) => {
 
   const verifyOTPAndRegister = async (email, otp, firstName, lastName, password, group) => {
     try {
-      const response = await fetch('http://localhost:5000/api/auth/verify-otp', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -152,7 +153,7 @@ export const AuthProvider = ({ children }) => {
   const resetPassword = {
     requestOTP: async (email, newPassword) => {
       try {
-        const response = await fetch('http://localhost:5000/api/auth/request-reset-otp', {
+        const response = await fetch(`${API_BASE_URL}/api/auth/request-reset-otp`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -176,7 +177,7 @@ export const AuthProvider = ({ children }) => {
 
     verifyOTP: async (email, newPassword, otp) => {
       try {
-        const response = await fetch('http://localhost:5000/api/auth/verify-reset-otp', {
+        const response = await fetch(`${API_BASE_URL}/api/auth/verify-reset-otp`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

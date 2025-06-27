@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import defaultProfile from '../assets/avatar.jpg';
+import { API_BASE_URL } from '../apiConfig';
 
 const FileList = ({ taskId, files: initialFiles = [], onFileDeleted }) => {
   const { user: loggedInUser } = useAuth();
@@ -10,7 +11,7 @@ const FileList = ({ taskId, files: initialFiles = [], onFileDeleted }) => {
   useEffect(() => {
     const fetchFiles = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/files`, {
+        const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/files`, {
           headers: {
             Authorization: `Bearer ${loggedInUser.token}`,
           },
@@ -35,7 +36,7 @@ const FileList = ({ taskId, files: initialFiles = [], onFileDeleted }) => {
 
   const handleDelete = async (fileId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/files/${fileId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/files/${fileId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${loggedInUser.token}`,
@@ -105,7 +106,7 @@ const FileList = ({ taskId, files: initialFiles = [], onFileDeleted }) => {
               <span className="text-2xl">{getFileIcon(file.originalName)}</span>
               <div>
                 <a
-                  href={`http://localhost:5000/uploads/${file.filename}`}
+                  href={`${API_BASE_URL}/uploads/${file.filename}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-600 hover:text-blue-800 font-medium"

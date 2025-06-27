@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
+import { API_BASE_URL } from '../../apiConfig';
 
 const Timesheets = () => {
   const { user, isAuthenticated } = useAuth();
@@ -17,8 +18,8 @@ const Timesheets = () => {
     setLoading(true);
     try {
       const [timesheetRes, tasksRes] = await Promise.all([
-        fetch('http://localhost:5000/api/timesheets/today', { headers: { Authorization: `Bearer ${user.token}` } }),
-        fetch('http://localhost:5000/api/timesheets/my-tasks', { headers: { Authorization: `Bearer ${user.token}` } })
+        fetch(`${API_BASE_URL}/api/timesheets/today`, { headers: { Authorization: `Bearer ${user.token}` } }),
+        fetch(`${API_BASE_URL}/api/timesheets/my-tasks`, { headers: { Authorization: `Bearer ${user.token}` } })
       ]);
       if (!timesheetRes.ok || !tasksRes.ok) throw new Error('Failed to fetch initial data');
       const timesheetData = await timesheetRes.json();
@@ -109,7 +110,7 @@ const Timesheets = () => {
       let res;
       if (entry._id) {
         // PATCH for existing entry
-        res = await fetch(`http://localhost:5000/api/timesheets/entry/${entry._id}`, {
+        res = await fetch(`${API_BASE_URL}/api/timesheets/entry/${entry._id}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -125,7 +126,7 @@ const Timesheets = () => {
         });
       } else {
         // POST for new entry
-        res = await fetch('http://localhost:5000/api/timesheets/add-entry', {
+        res = await fetch(`${API_BASE_URL}/api/timesheets/add-entry`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -204,7 +205,7 @@ const Timesheets = () => {
   // Add delete handler
   const handleDeleteEntry = async (entryId) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/timesheets/entry/${entryId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/timesheets/entry/${entryId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${user.token}` }
       });
@@ -270,7 +271,7 @@ const Timesheets = () => {
               className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
               onClick={async () => {
                 try {
-                  const res = await fetch('http://localhost:5000/api/timesheets/submit', {
+                  const res = await fetch(`${API_BASE_URL}/api/timesheets/submit`, {
                     method: 'POST',
                     headers: { Authorization: `Bearer ${user.token}` }
                   });

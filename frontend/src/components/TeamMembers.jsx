@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import defaultProfile from '../assets/avatar.jpg';
+import { API_BASE_URL } from '../apiConfig';
 
 const TeamMembers = () => {
   const { user } = useAuth();
@@ -16,12 +17,12 @@ const TeamMembers = () => {
     const fetchData = async () => {
       try {
         const [usersRes, teamsRes] = await Promise.all([
-          fetch('http://localhost:5000/api/users', {
+          fetch(`${API_BASE_URL}/api/users`, {
             headers: {
               Authorization: `Bearer ${user.token}`,
             },
           }),
-          fetch('http://localhost:5000/api/teams', {
+          fetch(`${API_BASE_URL}/api/teams`, {
             headers: {
               Authorization: `Bearer ${user.token}`,
             },
@@ -106,7 +107,7 @@ const TeamMembers = () => {
   const handleAddTeam = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:5000/api/teams', {
+      const response = await fetch(`${API_BASE_URL}/api/teams`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -137,7 +138,7 @@ const TeamMembers = () => {
         toast.error('Team not found');
         return;
       }
-      const response = await fetch(`http://localhost:5000/api/teams/${team._id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/teams/${team._id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${user.token}`,

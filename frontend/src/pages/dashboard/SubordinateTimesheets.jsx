@@ -7,6 +7,7 @@ import {
   ClockIcon, 
   EyeIcon
 } from '@heroicons/react/24/outline';
+import { API_BASE_URL } from '../../apiConfig';
 
 const SubordinateTimesheets = () => {
   const { user, isAuthenticated } = useAuth();
@@ -35,7 +36,7 @@ const SubordinateTimesheets = () => {
 
   const fetchSubordinates = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/timesheets/subordinates-list', {
+      const res = await fetch(`${API_BASE_URL}/api/timesheets/subordinates-list`, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch subordinates');
@@ -49,7 +50,7 @@ const SubordinateTimesheets = () => {
   const fetchTimesheets = async (page = 1) => {
     setLoading(true);
     try {
-      let url = `http://localhost:5000/api/timesheets/subordinates?page=${page}&limit=20`;
+      let url = `${API_BASE_URL}/api/timesheets/subordinates?page=${page}&limit=20`;
       
       if (selectedUser) url += `&userId=${selectedUser}`;
       if (selectedDate) url += `&startDate=${selectedDate}&endDate=${selectedDate}`;
@@ -82,7 +83,7 @@ const SubordinateTimesheets = () => {
 
   const viewTimesheetDetail = async (timesheet) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/timesheets/subordinate/${timesheet.user._id}/${timesheet.date}`, {
+      const res = await fetch(`${API_BASE_URL}/api/timesheets/subordinate/${timesheet.user._id}/${timesheet.date}`, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
       
@@ -149,7 +150,7 @@ const SubordinateTimesheets = () => {
   // Add approve/reject handlers
   const handleApproveEntry = async (entryId) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/timesheets/entry/${entryId}/approve`, {
+      const res = await fetch(`${API_BASE_URL}/api/timesheets/entry/${entryId}/approve`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${user.token}` }
       });
@@ -175,7 +176,7 @@ const SubordinateTimesheets = () => {
   };
   const handleRejectEntry = async (entryId) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/timesheets/entry/${entryId}/reject`, {
+      const res = await fetch(`${API_BASE_URL}/api/timesheets/entry/${entryId}/reject`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${user.token}` }
       });

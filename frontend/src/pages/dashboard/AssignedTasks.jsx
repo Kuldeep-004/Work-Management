@@ -14,6 +14,7 @@ import {
   ChatBubbleLeftIcon,
   AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
+import { API_BASE_URL } from '../../apiConfig';
 
 const ALL_COLUMNS = [
   { id: 'title', label: 'Title' },
@@ -69,7 +70,7 @@ const AssignedTasks = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/users', {
+        const res = await fetch(`${API_BASE_URL}/api/users`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
@@ -97,7 +98,7 @@ const AssignedTasks = () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch('http://localhost:5000/api/tasks/assigned', {
+        const response = await fetch(`${API_BASE_URL}/api/tasks/assigned`, {
           headers: { Authorization: `Bearer ${user.token}` },
         });
         if (!response.ok) {
@@ -122,14 +123,14 @@ const AssignedTasks = () => {
     const fetchTaskCounts = async () => {
       try {
         // Fetch assigned tasks count (execution)
-        const assignedResponse = await fetch('http://localhost:5000/api/tasks/assigned', {
+        const assignedResponse = await fetch(`${API_BASE_URL}/api/tasks/assigned`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
         });
         
         // Fetch verification tasks count
-        const verificationResponse = await fetch('http://localhost:5000/api/tasks/under-verification', {
+        const verificationResponse = await fetch(`${API_BASE_URL}/api/tasks/under-verification`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
@@ -207,9 +208,9 @@ const AssignedTasks = () => {
       }
     };
     if (user && user.token) {
-      fetchData('http://localhost:5000/api/tasks/unique/client-names', setClientNames);
-      fetchData('http://localhost:5000/api/tasks/unique/client-groups', setClientGroups);
-      fetchData('http://localhost:5000/api/tasks/unique/work-types', setWorkTypes);
+      fetchData(`${API_BASE_URL}/api/tasks/unique/client-names`, setClientNames);
+      fetchData(`${API_BASE_URL}/api/tasks/unique/client-groups`, setClientGroups);
+      fetchData(`${API_BASE_URL}/api/tasks/unique/work-types`, setWorkTypes);
     }
   }, [user]);
 

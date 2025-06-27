@@ -2,6 +2,7 @@ import defaultProfile from '../assets/avatar.jpg';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { API_BASE_URL } from '../apiConfig';
 
 const Settings = () => {
   const { user, updateUser } = useAuth();
@@ -20,10 +21,10 @@ const Settings = () => {
     const fetchStats = async () => {
       try {
         const [tasksRes, todosRes] = await Promise.all([
-          fetch('http://localhost:5000/api/tasks?type=received', {
+          fetch(`${API_BASE_URL}/api/tasks?type=received`, {
             headers: { Authorization: `Bearer ${user.token}` },
           }),
-          fetch('http://localhost:5000/api/todos', {
+          fetch(`${API_BASE_URL}/api/todos`, {
             headers: { Authorization: `Bearer ${user.token}` },
           }),
         ]);
@@ -68,7 +69,7 @@ const Settings = () => {
 
     setUploading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/users/profile', {
+      const response = await fetch(`${API_BASE_URL}/api/users/profile`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${user.token}`,
@@ -95,7 +96,7 @@ const Settings = () => {
     e.preventDefault();
 
     try {
-      const response = await fetch('http://localhost:5000/api/users/profile', {
+      const response = await fetch(`${API_BASE_URL}/api/users/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

@@ -14,6 +14,7 @@ import {
   ChatBubbleLeftIcon,
   AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
+import { API_BASE_URL } from '../../apiConfig';
 
 const ALL_COLUMNS = [
   { id: 'title', label: 'Title' },
@@ -73,7 +74,7 @@ const ReceivedTasks = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/users', {
+        const res = await fetch(`${API_BASE_URL}/api/users`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
@@ -99,7 +100,7 @@ const ReceivedTasks = () => {
   useEffect(() => {
     const fetchTasks = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/tasks/received', {
+        const response = await fetch(`${API_BASE_URL}/api/tasks/received`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
@@ -129,14 +130,14 @@ const ReceivedTasks = () => {
     const fetchTaskCounts = async () => {
       try {
         // Fetch execution tasks count
-        const executionResponse = await fetch('http://localhost:5000/api/tasks/received', {
+        const executionResponse = await fetch(`${API_BASE_URL}/api/tasks/received`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
         });
         
         // Fetch verification tasks count
-        const verificationResponse = await fetch('http://localhost:5000/api/tasks/for-verification', {
+        const verificationResponse = await fetch(`${API_BASE_URL}/api/tasks/for-verification`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
@@ -215,9 +216,9 @@ const ReceivedTasks = () => {
       }
     };
     if (user && user.token) {
-      fetchData('http://localhost:5000/api/tasks/unique/client-names', setClientNames);
-      fetchData('http://localhost:5000/api/tasks/unique/client-groups', setClientGroups);
-      fetchData('http://localhost:5000/api/tasks/unique/work-types', setWorkTypes);
+      fetchData(`${API_BASE_URL}/api/tasks/unique/client-names`, setClientNames);
+      fetchData(`${API_BASE_URL}/api/tasks/unique/client-groups`, setClientGroups);
+      fetchData(`${API_BASE_URL}/api/tasks/unique/work-types`, setWorkTypes);
     }
   }, [user]);
 
@@ -335,7 +336,7 @@ const ReceivedTasks = () => {
     try {
       console.log('Starting status update for task:', taskId, 'new status:', newStatus);
       
-      response = await fetch(`http://localhost:5000/api/tasks/${taskId}/status`, {
+      response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -397,7 +398,7 @@ const ReceivedTasks = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${user.token}`,

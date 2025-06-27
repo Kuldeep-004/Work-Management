@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import defaultProfile from '../assets/avatar.jpg';
+import { API_BASE_URL } from '../apiConfig';
 
 const TaskComments = ({ taskId }) => {
   const { user, token, isAuthenticated } = useAuth();
@@ -25,7 +26,7 @@ const TaskComments = ({ taskId }) => {
       for (const comment of comments) {
         if (comment.type === 'audio' && comment.audioUrl && !newAudioSrcs[comment._id]) {
           try {
-            const response = await fetch(`http://localhost:5000/api/tasks/audio/${comment.audioUrl}`);
+            const response = await fetch(`${API_BASE_URL}/api/tasks/audio/${comment.audioUrl}`);
             if (response.ok) {
               const blob = await response.blob();
               newAudioSrcs[comment._id] = URL.createObjectURL(blob);
@@ -58,7 +59,7 @@ const TaskComments = ({ taskId }) => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/comments`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/comments`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -91,7 +92,7 @@ const TaskComments = ({ taskId }) => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/comments`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/comments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -169,7 +170,7 @@ const TaskComments = ({ taskId }) => {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
 
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/comments/audio`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/comments/audio`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`
@@ -204,7 +205,7 @@ const TaskComments = ({ taskId }) => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/comments/${commentId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/comments/${commentId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { API_BASE_URL } from '../apiConfig';
 
 const UserApprovals = () => {
   const { user } = useAuth();
@@ -17,12 +18,12 @@ const UserApprovals = () => {
     const fetchData = async () => {
       try {
         const [usersRes, teamsRes] = await Promise.all([
-          fetch('http://localhost:5000/api/users/pending-approvals', {
+          fetch(`${API_BASE_URL}/api/users/pending-approvals`, {
             headers: {
               Authorization: `Bearer ${user.token}`,
             },
           }),
-          fetch('http://localhost:5000/api/teams', {
+          fetch(`${API_BASE_URL}/api/teams`, {
             headers: {
               Authorization: `Bearer ${user.token}`,
             },
@@ -95,7 +96,7 @@ const UserApprovals = () => {
         }
       }
 
-      const response = await fetch(`http://localhost:5000/api/users/${userId}/approval`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${userId}/approval`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
