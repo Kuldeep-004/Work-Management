@@ -37,8 +37,13 @@ if (!process.env.JWT_SECRET) {
 
 const app = express();
 
-// Middleware
-app.use(cors());
+const allowedOrigins = ['https://haacaswork.vercel.app', 'http://localhost:3000'];
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
+
 app.use(express.json());
 
 // Serve static files from uploads directory with proper headers
