@@ -37,7 +37,7 @@ if (!process.env.JWT_SECRET) {
 
 const app = express();
 
-const allowedOrigins = ['https://haacaswork.vercel.app', 'http://localhost:5173'];
+const allowedOrigins = ['https://haacaswork.vercel.app','https://works.haacas.com', 'http://localhost:5173'];
 
 app.use(cors({
   origin: allowedOrigins,
