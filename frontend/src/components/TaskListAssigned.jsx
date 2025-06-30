@@ -12,6 +12,20 @@ function formatDate(date) {
   return isNaN(d) ? 'NA' : d.toLocaleDateString();
 }
 
+function formatDateTime(date) {
+  if (!date) return 'NA';
+  const d = new Date(date);
+  if (isNaN(d)) return 'NA';
+  return d.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
 const TaskListAssigned = ({ viewType = 'assigned' }) => {
   // ... (copy the entire body of TaskList, but replace TaskList with TaskListAssigned)
   // You may want to default viewType to 'assigned' if not provided
@@ -215,7 +229,7 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
                 </span>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {new Date(task.inwardEntryDate).toLocaleDateString()}
+                {formatDateTime(task.inwardEntryDate)}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {formatDate(task.dueDate)}

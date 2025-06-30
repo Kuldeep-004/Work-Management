@@ -42,7 +42,7 @@ const taskSchema = new mongoose.Schema({
   },
   priority: {
     type: String,
-    enum: ['today', 'lessThan3Days', 'thisWeek', 'thisMonth', 'regular', 'filed', 'dailyWorksOffice', 'monthlyWorks'],
+    enum: ['urgent', 'today', 'lessThan3Days', 'thisWeek', 'thisMonth', 'regular', 'filed', 'dailyWorksOffice', 'monthlyWorks'],
     default: 'regular'
   },
   inwardEntryDate: {
@@ -84,6 +84,9 @@ const taskSchema = new mongoose.Schema({
     path: {
       type: String,
       required: true
+    },
+    cloudUrl: {
+      type: String
     },
     uploadedBy: {
       type: mongoose.Schema.Types.ObjectId,

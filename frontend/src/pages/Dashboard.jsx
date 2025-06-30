@@ -26,6 +26,7 @@ const Dashboard = () => {
       <DashboardLayout>
         <Routes>
           <Route path="/" element={<AdminDashboard />} />
+          <Route path="received-tasks" element={<ReceivedTasks />} />
           <Route path="assigned-tasks" element={<AssignedTasks />} />
           <Route path="todos" element={<TodoList />} />
           <Route path="team" element={<TeamMembers />} />

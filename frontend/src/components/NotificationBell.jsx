@@ -159,9 +159,6 @@ const NotificationBell = () => {
                         <span className="text-sm text-gray-900 font-semibold">
                           {notification.message}
                         </span>
-                        {!notification.isRead && (
-                          <span className="ml-1 w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
-                        )}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
                         from <span className="font-medium text-indigo-600">{notification.assigner?.firstName} {notification.assigner?.lastName}</span>

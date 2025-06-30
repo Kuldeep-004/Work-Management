@@ -41,6 +41,20 @@ function formatDate(date) {
   return isNaN(d) ? 'NA' : d.toLocaleDateString();
 }
 
+function formatDateTime(date) {
+  if (!date) return 'NA';
+  const d = new Date(date);
+  if (isNaN(d)) return 'NA';
+  return d.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
 // Define ALL_COLUMNS at the top, similar to AdminDashboard
 const ALL_COLUMNS = [
   { id: 'title', label: 'Title' },
@@ -62,7 +76,7 @@ const ALL_COLUMNS = [
   { id: 'comments', label: 'Comments' },
 ];
 
-const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchTerm: externalSearchTerm, setSearchTerm: setExternalSearchTerm, visibleColumns: externalVisibleColumns, setVisibleColumns: setExternalVisibleColumns }) => {
+const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = true, searchTerm: externalSearchTerm, setSearchTerm: setExternalSearchTerm, visibleColumns: externalVisibleColumns, setVisibleColumns: setExternalVisibleColumns }) => {
   const { user: loggedInUser, isAuthenticated } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -107,8 +121,45 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
   const columnsDropdownRef = useRef(null);
 
   // Helper function to filter users based on role-based permissions
-  const getFilteredUsers = () => {
-    return users;
+  const getFilteredUsers = (task = null) => {
+    if (!task) {
+      return users;
+    }
+    
+    // Get all user IDs associated with the task that should be excluded
+    const excludedUserIds = new Set();
+    
+    // Add current user
+    excludedUserIds.add(loggedInUser._id);
+    
+    // Add assigned by user
+    if (task.assignedBy && task.assignedBy._id) {
+      excludedUserIds.add(task.assignedBy._id);
+    }
+    
+    // Add assigned to user(s)
+    if (task.assignedTo) {
+      if (Array.isArray(task.assignedTo)) {
+        task.assignedTo.forEach(user => {
+          if (user._id) excludedUserIds.add(user._id);
+        });
+      } else if (task.assignedTo._id) {
+        excludedUserIds.add(task.assignedTo._id);
+      }
+    }
+    
+    // Add first verifier
+    if (task.verificationAssignedTo && task.verificationAssignedTo._id) {
+      excludedUserIds.add(task.verificationAssignedTo._id);
+    }
+    
+    // Add second verifier
+    if (task.secondVerificationAssignedTo && task.secondVerificationAssignedTo._id) {
+      excludedUserIds.add(task.secondVerificationAssignedTo._id);
+    }
+    
+    // Filter out excluded users
+    return users.filter(user => !excludedUserIds.has(user._id));
   };
 
   const fetchTasks = async () => {
@@ -139,41 +190,45 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch tasks');
+        throw new Error('Failed to fetch tasks');
       }
 
       const data = await response.json();
-      if (!Array.isArray(data)) {
-        throw new Error('Invalid response format');
-      }
-      
-      const tasksWithHours = data.map(task => ({
-        ...task,
-        totalHours: (task.timeTracking || []).reduce((acc, tt) => acc + tt.hours, 0)
-      }));
-
-      setTasks(tasksWithHours);
+      setTasks(data);
       setError(null);
     } catch (error) {
       console.error('Error fetching tasks:', error);
       setError(error.message);
-      setTasks([]);
-      toast.error('Failed to fetch tasks');
     } finally {
       setLoading(false);
     }
   };
 
+  // Use external tasks if provided, otherwise use internal tasks
+  const displayTasks = externalTasks || tasks;
+
+  // Helper function to update tasks (works for both external and internal tasks)
+  const updateTaskInState = (taskId, updater) => {
+    if (externalTasks) {
+      // If using external tasks, we need to notify the parent component
+      // For now, we'll just update the internal state as a fallback
+      setTasks(prevTasks => updater(prevTasks));
+    } else {
+      // Update internal state
+      setTasks(prevTasks => updater(prevTasks));
+    }
+  };
+
   useEffect(() => {
     if (externalTasks) {
-      setTasks(externalTasks);
+      // If external tasks are provided, use them directly
       setLoading(false);
       setError(null);
     } else {
+      // Otherwise fetch tasks internally
       fetchTasks();
     }
-  }, [loggedInUser, viewType, isAuthenticated, externalTasks]);
+  }, [externalTasks, viewType, loggedInUser]);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -220,11 +275,12 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
   }, [visibleColumns, loggedInUser]);
 
   const getSortedTasks = () => {
-    if (!Array.isArray(tasks)) return [];
+    if (!Array.isArray(displayTasks)) return [];
 
-    let filteredTasks = [...tasks];
-    // Apply search filter if searchTerm is present
-    if (searchTerm) {
+    let filteredTasks = [...displayTasks];
+    
+    // Only apply internal search filter if no external search term is provided
+    if (searchTerm && !externalSearchTerm) {
       const lowercasedTerm = searchTerm.toLowerCase();
       filteredTasks = filteredTasks.filter(task => (
         (task.title && task.title.toLowerCase().includes(lowercasedTerm)) ||
@@ -241,9 +297,13 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
       ));
     }
 
-    let sortedTasks = [...filteredTasks];
+    // If external tasks are provided, return them as-is (already sorted by parent)
+    if (externalTasks) {
+      return filteredTasks;
+    }
 
-    return sortedTasks.sort((a, b) => {
+    // Only apply internal sorting if no external tasks are provided
+    return filteredTasks.sort((a, b) => {
       let aValue = a[sortBy];
       let bValue = b[sortBy];
 
@@ -277,15 +337,25 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
   const getPriorityColor = (priority) => {
     switch (priority) {
       case 'urgent':
-        return 'bg-red-100 text-red-800';
-      case 'inOneWeek':
-        return 'bg-orange-100 text-orange-800';
-      case 'inFifteenDays':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'inOneMonth':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-red-100 text-red-800 border border-red-200'; // Red - Highest importance
+      case 'today':
+        return 'bg-orange-100 text-orange-800 border border-orange-200'; // Orange - Very high importance
+      case 'lessThan3Days':
+        return 'bg-yellow-100 text-yellow-800 border border-yellow-200'; // Yellow - High importance
+      case 'thisWeek':
+        return 'bg-blue-100 text-blue-800 border border-blue-200'; // Blue - Medium-high importance
+      case 'thisMonth':
+        return 'bg-indigo-100 text-indigo-800 border border-indigo-200'; // Indigo - Medium importance
+      case 'regular':
+        return 'bg-gray-100 text-gray-800 border border-gray-200'; // Gray - Normal importance
+      case 'filed':
+        return 'bg-purple-100 text-purple-800 border border-purple-200'; // Purple - Low importance
+      case 'dailyWorksOffice':
+        return 'bg-teal-100 text-teal-800 border border-teal-200'; // Teal - Very low importance
+      case 'monthlyWorks':
+        return 'bg-slate-100 text-slate-600 border border-slate-200'; // Slate - Lowest importance
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-gray-800 border border-gray-200';
     }
   };
 
@@ -300,10 +370,14 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
 
   const priorityOrder = {
     urgent: 1,
-    inOneWeek: 2,
-    inFifteenDays: 3,
-    inOneMonth: 4,
-    regular: 5,
+    today: 2,
+    lessThan3Days: 3,
+    thisWeek: 4,
+    thisMonth: 5,
+    regular: 6,
+    filed: 7,
+    dailyWorksOffice: 8,
+    monthlyWorks: 9
   };
 
   const handleDeleteTask = async (taskId) => {
@@ -327,7 +401,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
         throw new Error(errorData.message || 'Failed to delete task');
       }
 
-      setTasks(prevTasks => prevTasks.filter(task => task._id !== taskId));
+      updateTaskInState(taskId, prevTasks => prevTasks.filter(task => task._id !== taskId));
       toast.success('Task deleted successfully');
     } catch (error) {
       console.error('Error deleting task:', error);
@@ -364,7 +438,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
 
       const updatedTask = await response.json();
       
-      setTasks(prevTasks => {
+      updateTaskInState(taskId, prevTasks => {
         const taskIndex = prevTasks.findIndex(task => task._id === taskId);
         if (taskIndex === -1) return prevTasks;
         
@@ -388,12 +462,12 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
   const handleVerificationStatusChange = async (taskId, newStatus) => {
     if (newStatus === 'executed') {
       // Show verifier selection modal for first verification
-      const task = tasks.find(t => t._id === taskId);
+      const task = displayTasks.find(t => t._id === taskId);
       setSelectedTaskForVerifier(task);
       setShowVerifierModal(true);
     } else if (newStatus === 'first_verified') {
       // Show verifier selection modal for second verification
-      const task = tasks.find(t => t._id === taskId);
+      const task = displayTasks.find(t => t._id === taskId);
       setSelectedTaskForVerifier(task);
       setShowSecondVerifierModal(true);
     } else if (newStatus === 'completed') {
@@ -425,13 +499,13 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
       if (status === 'completed') {
         // Only update the verificationStatus to 'completed', do not delete the task
         const updatedTask = await response.json();
-        setTasks(prevTasks => prevTasks.map(task =>
+        updateTaskInState(taskId, prevTasks => prevTasks.map(task =>
           task._id === taskId ? updatedTask : task
         ));
         toast.success('Verification status updated to completed');
       } else {
         const updatedTask = await response.json();
-        setTasks(prevTasks => prevTasks.map(task =>
+        updateTaskInState(taskId, prevTasks => prevTasks.map(task =>
           task._id === taskId ? updatedTask : task
         ));
         toast.success('Verification status updated successfully');
@@ -459,7 +533,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
       }
 
       const updatedTask = await response.json();
-      setTasks(prevTasks => prevTasks.map(task =>
+      updateTaskInState(taskId, prevTasks => prevTasks.map(task =>
         task._id === taskId ? updatedTask : task
       ));
       setShowCompleteModal(false);
@@ -473,7 +547,23 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
 
   // Add a new function to check if actions should be disabled
   const shouldDisableActions = (task) => {
-    return viewType === 'under-verification' || viewType === 'assigned';
+    // Disable actions for assigned tasks view
+    if (viewType === 'under-verification' || viewType === 'assigned') {
+      return true;
+    }
+    
+    // Disable actions for received tasks in verification and completed tabs
+    if (viewType === 'received' && (taskType === 'verification' || taskType === 'completed')) {
+      return true;
+    }
+    
+    return false;
+  };
+
+  // Add a new function to check if file/comment actions should be disabled
+  const shouldDisableFileActions = (task) => {
+    // Always allow file uploads and comments - never disable these
+    return false;
   };
 
   const handleTaskClick = (task) => {
@@ -482,7 +572,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
   };
 
   const handleFileUploaded = (uploadedFiles) => {
-    setTasks(prevTasks =>
+    updateTaskInState(selectedTask._id, prevTasks =>
       prevTasks.map(t =>
         t._id === selectedTask._id
           ? { ...t, files: [...(t.files || []), ...uploadedFiles] }
@@ -498,7 +588,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
 
   const handleFileDeleted = (fileId) => {
     // Update the task in the list after file deletion
-    setTasks(prevTasks => 
+    updateTaskInState(selectedTask._id, prevTasks => 
       prevTasks.map(t => 
         t._id === selectedTask._id 
           ? { ...t, files: (t.files || []).filter(f => f._id !== fileId) }
@@ -556,7 +646,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
 
       const updatedTask = await response.json();
       // Remove the task from the current user's view
-      setTasks(prevTasks => prevTasks.filter(t => t._id !== taskId));
+      updateTaskInState(taskId, prevTasks => prevTasks.filter(t => t._id !== taskId));
       setShowVerifierModal(false);
       setShowSecondVerifierModal(false);
       setSelectedTaskForVerifier(null);
@@ -577,7 +667,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
     if (isAssignee) {
       statuses = ['pending', 'executed'];
     } else if (isFirstVerifier) {
-      statuses = ['pending', 'rejected', 'first_verified'];
+      statuses = ['rejected', 'first_verified', 'completed'];
     } else if (isSecondVerifier) {
       statuses = ['pending', 'rejected', 'completed'];
     } else {
@@ -608,7 +698,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
       }
 
       const updatedTask = await response.json();
-      setTasks(prevTasks => prevTasks.map(task =>
+      updateTaskInState(taskId, prevTasks => prevTasks.map(task =>
         task._id === taskId ? updatedTask : task
       ));
       toast.success('Task status updated successfully');
@@ -688,13 +778,13 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
                     case 'workType':
                       return <td key={col.id} className="px-4 py-4 sm:px-6"><div className="flex overflow-x-auto whitespace-nowrap gap-1 no-scrollbar">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></td>;
                     case 'status':
-                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{task.assignedTo._id === loggedInUser._id ? (<select value={task.status || 'pending'} onChange={(e) => handleStatusChange(task._id, e.target.value)} className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}><option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="completed">Completed</option></select>) : (<span className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}>{task.status ? task.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Pending'}</span>)}</div></td>;
+                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{task.assignedTo._id === loggedInUser._id && !shouldDisableActions(task) ? (<select value={task.status || 'pending'} onChange={(e) => handleStatusChange(task._id, e.target.value)} className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}><option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="completed">Completed</option></select>) : (<span className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}>{task.status ? task.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Pending'}</span>)}</div></td>;
                     case 'verificationStatus':
-                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{(task.assignedTo._id === loggedInUser._id || task.verificationAssignedTo?._id === loggedInUser._id || task.secondVerificationAssignedTo?._id === loggedInUser._id) ? (<select value={task.verificationStatus} onChange={(e) => handleVerificationStatusChange(task._id, e.target.value)} className={`px-2 py-1 rounded text-sm ${task.verificationStatus === 'completed' ? 'bg-green-100 text-green-800' : task.verificationStatus === 'rejected' ? 'bg-red-100 text-red-800' : task.verificationStatus === 'first_verified' ? 'bg-blue-100 text-blue-800' : task.verificationStatus === 'executed' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{getAllowedVerificationStatuses(task, loggedInUser).map(status => (<option key={status} value={status}>{status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</option>))}</select>) : (<span className={`px-2 py-1 rounded text-sm ${task.verificationStatus === 'completed' ? 'bg-green-100 text-green-800' : task.verificationStatus === 'rejected' ? 'bg-red-100 text-red-800' : task.verificationStatus === 'first_verified' ? 'bg-blue-100 text-blue-800' : task.verificationStatus === 'executed' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{task.verificationStatus ? task.verificationStatus.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Pending'}</span>)}</div></td>;
+                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{(task.assignedTo._id === loggedInUser._id || task.verificationAssignedTo?._id === loggedInUser._id || task.secondVerificationAssignedTo?._id === loggedInUser._id) && !shouldDisableActions(task) ? (<select value={task.verificationStatus} onChange={(e) => handleVerificationStatusChange(task._id, e.target.value)} className={`px-2 py-1 rounded text-sm ${task.verificationStatus === 'completed' ? 'bg-green-100 text-green-800' : task.verificationStatus === 'rejected' ? 'bg-red-100 text-red-800' : task.verificationStatus === 'first_verified' ? 'bg-blue-100 text-blue-800' : task.verificationStatus === 'executed' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{getAllowedVerificationStatuses(task, loggedInUser).map(status => (<option key={status} value={status}>{status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</option>))}</select>) : (<span className={`px-2 py-1 rounded text-sm ${task.verificationStatus === 'completed' ? 'bg-green-100 text-green-800' : task.verificationStatus === 'rejected' ? 'bg-red-100 text-red-800' : task.verificationStatus === 'first_verified' ? 'bg-blue-100 text-blue-800' : task.verificationStatus === 'executed' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{task.verificationStatus ? task.verificationStatus.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Pending'}</span>)}</div></td>;
                     case 'priority':
-                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${task.priority === 'high' ? 'bg-red-100 text-red-800' : task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{task.priority}</span></td>;
+                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(task.priority)}`}>{task.priority}</span></td>;
                     case 'inwardEntryDate':
-                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500">{formatDate(task.inwardEntryDate)}</td>;
+                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500">{formatDateTime(task.inwardEntryDate)}</td>;
                     case 'dueDate':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500">{formatDate(task.dueDate)}</td>;
                     case 'targetDate':
@@ -708,7 +798,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
                     case 'secondVerificationAssignedTo':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{task.secondVerificationAssignedTo ? (<><img src={task.secondVerificationAssignedTo.photo?.url || defaultProfile} alt={`${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`} className="h-8 w-8 rounded-full object-cover" onError={(e) => {e.target.onerror = null;e.target.src = defaultProfile;}} /><span>{`${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`}{getUserTaskHours(task._id, task.secondVerificationAssignedTo._id) > 0 && (<span> ({getUserTaskHours(task._id, task.secondVerificationAssignedTo._id)}h)</span>)}</span></>) : (<span>N/A</span>)}</div></td>;
                     case 'files':
-                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap"><div className="flex items-center">{task.files && task.files.length > 0 ? (<div className="flex items-center space-x-2"><span className="text-blue-600">{task.files.length}</span><span className="text-gray-500">files</span><button onClick={() => { setSelectedTask(task); setShowFileUpload(true); setShowComments(false); }} className="text-blue-600 hover:text-blue-800 text-sm">View</button></div>) : (<div className="flex items-center"><span className="text-gray-400 text-sm italic">No files</span><button onClick={() => { setSelectedTask(task); setShowFileUpload(true); setShowComments(false); }} className="ml-2 text-blue-600 hover:text-blue-800 text-sm">Upload</button></div>)}</div></td>;
+                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap"><div className="flex items-center">{task.files && task.files.length > 0 ? (<div className="flex items-center space-x-2"><span className="text-blue-600">{task.files.length}</span><span className="text-gray-500">files</span><button onClick={() => { setSelectedTask(task); setShowFileUpload(true); setShowComments(false); }} className="text-blue-600 hover:text-blue-800 text-sm">View</button></div>) : (<div className="flex items-center"><span className="text-gray-400 text-sm italic">No files</span>{!shouldDisableFileActions(task) && <button onClick={() => { setSelectedTask(task); setShowFileUpload(true); setShowComments(false); }} className="ml-2 text-blue-600 hover:text-blue-800 text-sm">Upload</button>}</div>)}</div></td>;
                     case 'comments':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap"><div className="flex items-center"><span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.comments ? task.comments.length : 0} comments</span><button onClick={() => { setSelectedTask(task); setShowComments(true); setShowFileUpload(false); }} className="ml-2 text-blue-600 hover:text-blue-800 text-xs">View</button></div></td>;
                     default:
@@ -745,7 +835,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
                 required
               >
                 <option value="">Select Verifier</option>
-                {getFilteredUsers().map((user) => (
+                {getFilteredUsers(selectedTaskForVerification).map((user) => (
                   <option key={user._id} value={user._id}>
                     {user.firstName} {user.lastName}
                   </option>
@@ -853,11 +943,13 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
                   {/* File upload section */}
                   <div className="border-t pt-4">
                     <h3 className="text-lg font-medium mb-4">Files</h3>
-                    <FileUpload
-                      taskId={selectedTask._id}
-                      onFileUploaded={handleFileUploaded}
-                      onFileDeleted={handleFileDeleted}
-                    />
+                    {!shouldDisableFileActions(selectedTask) && (
+                      <FileUpload
+                        taskId={selectedTask._id}
+                        onFileUploaded={handleFileUploaded}
+                        onFileDeleted={handleFileDeleted}
+                      />
+                    )}
                     {selectedTask.files && selectedTask.files.length > 0 && (
                       <div className="mt-4">
                         <FileList
@@ -901,7 +993,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
                 required
               >
                 <option value="">Select Verifier</option>
-                {getFilteredUsers().map((user) => (
+                {getFilteredUsers(selectedTaskForVerifier).map((user) => (
                   <option key={user._id} value={user._id}>
                     {user.firstName} {user.lastName}
                   </option>
@@ -951,7 +1043,7 @@ const TaskList = ({ viewType, tasks: externalTasks, showControls = true, searchT
                 required
               >
                 <option value="">Select Second Verifier</option>
-                {getFilteredUsers().map((user) => (
+                {getFilteredUsers(selectedTaskForVerifier).map((user) => (
                   <option key={user._id} value={user._id}>
                     {user.firstName} {user.lastName}
                   </option>

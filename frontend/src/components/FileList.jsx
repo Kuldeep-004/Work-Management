@@ -106,7 +106,7 @@ const FileList = ({ taskId, files: initialFiles = [], onFileDeleted }) => {
               <span className="text-2xl">{getFileIcon(file.originalName)}</span>
               <div>
                 <a
-                  href={`${API_BASE_URL}/uploads/${file.filename}`}
+                  href={file.cloudUrl || `${API_BASE_URL}/uploads/${file.filename}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-600 hover:text-blue-800 font-medium"

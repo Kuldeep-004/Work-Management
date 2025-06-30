@@ -20,6 +20,7 @@ const TodoList = () => {
 
   // Allowed priorities and statuses for robust enum handling
   const PRIORITIES = [
+    { value: 'urgent', label: 'Urgent' },
     { value: 'today', label: 'Today' },
     { value: 'lessThan3Days', label: '< 3 days' },
     { value: 'thisWeek', label: 'This week' },
@@ -28,7 +29,6 @@ const TodoList = () => {
     { value: 'filed', label: 'Filed' },
     { value: 'dailyWorksOffice', label: 'Daily works office' },
     { value: 'monthlyWorks', label: 'Monthly works' },
-    { value: 'urgent', label: 'Urgent' },
   ];
   const STATUSES = [
     { value: 'pending', label: 'Pending' },

@@ -15,13 +15,29 @@ import FileList from './FileList';
 import TaskComments from './TaskComments';
 import defaultProfile from '../assets/avatar.jpg';
 import FilterPopup from './FilterPopup';
-import * as XLSX from 'xlsx';
+import PDFColumnSelector from './PDFColumnSelector';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { API_BASE_URL } from '../apiConfig';
 
 function formatDate(date) {
   if (!date) return 'NA';
   const d = new Date(date);
   return isNaN(d) ? 'NA' : d.toLocaleDateString();
+}
+
+function formatDateTime(date) {
+  if (!date) return 'NA';
+  const d = new Date(date);
+  if (isNaN(d)) return 'NA';
+  return d.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
 }
 
 const ALL_COLUMNS = [
@@ -76,6 +92,9 @@ const Dashboard = () => {
   });
 
   const columnsDropdownRef = useRef(null);
+
+  // State for PDF column selector
+  const [showPDFColumnSelector, setShowPDFColumnSelector] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -214,6 +233,19 @@ const Dashboard = () => {
   const getFilteredAndSortedTasks = () => {
     if (!Array.isArray(tasks)) return [];
 
+    // Priority order mapping for sorting
+    const priorityOrder = {
+      'urgent': 1,
+      'today': 2,
+      'lessThan3Days': 3,
+      'thisWeek': 4,
+      'thisMonth': 5,
+      'regular': 6,
+      'filed': 7,
+      'dailyWorksOffice': 8,
+      'monthlyWorks': 9
+    };
+
     let filteredTasks = tasks.filter(task => {
       // Apply search filter
       if (searchTerm) {
@@ -307,6 +339,15 @@ const Dashboard = () => {
       if (sortBy === 'createdAt') {
         aValue = new Date(aValue);
         bValue = new Date(bValue);
+      } else if (sortBy === 'priority') {
+        // Use priority order mapping for priority sorting
+        aValue = priorityOrder[aValue] || 999;
+        bValue = priorityOrder[bValue] || 999;
+        // For priority, descending should show highest priority first (urgent=1, today=2, etc.)
+        // So we swap the logic for priority sorting
+        if (aValue < bValue) return sortOrder === 'desc' ? -1 : 1;
+        if (aValue > bValue) return sortOrder === 'desc' ? 1 : -1;
+        return 0;
       }
 
       if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
@@ -331,15 +372,25 @@ const Dashboard = () => {
   const getPriorityColor = (priority) => {
     switch (priority) {
       case 'urgent':
-        return 'bg-red-100 text-red-800';
-      case 'inOneWeek':
-        return 'bg-orange-100 text-orange-800';
-      case 'inFifteenDays':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'inOneMonth':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-red-100 text-red-800 border border-red-200'; // Red - Highest importance
+      case 'today':
+        return 'bg-orange-100 text-orange-800 border border-orange-200'; // Orange - Very high importance
+      case 'lessThan3Days':
+        return 'bg-yellow-100 text-yellow-800 border border-yellow-200'; // Yellow - High importance
+      case 'thisWeek':
+        return 'bg-blue-100 text-blue-800 border border-blue-200'; // Blue - Medium-high importance
+      case 'thisMonth':
+        return 'bg-indigo-100 text-indigo-800 border border-indigo-200'; // Indigo - Medium importance
+      case 'regular':
+        return 'bg-gray-100 text-gray-800 border border-gray-200'; // Gray - Normal importance
+      case 'filed':
+        return 'bg-purple-100 text-purple-800 border border-purple-200'; // Purple - Low importance
+      case 'dailyWorksOffice':
+        return 'bg-teal-100 text-teal-800 border border-teal-200'; // Teal - Very low importance
+      case 'monthlyWorks':
+        return 'bg-slate-100 text-slate-600 border border-slate-200'; // Slate - Lowest importance
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-gray-800 border border-gray-200';
     }
   };
 
@@ -446,55 +497,144 @@ const Dashboard = () => {
 
   const filteredAndSortedTasks = getFilteredAndSortedTasks();
 
-  // Excel export handler
-  const handleDownloadExcel = () => {
+  // PDF export handler
+  const handleDownloadPDF = (selectedColumns) => {
     const filteredTasks = getFilteredAndSortedTasks();
-    const data = filteredTasks.map(task => ({
-      'Title': task.title,
-      'Description': task.description,
-      'Client Name': task.clientName,
-      'Client Group': task.clientGroup,
-      'Work Type': Array.isArray(task.workType) ? task.workType.join(', ') : task.workType,
-      'Task Status': task.status,
-      'Verification Status': task.verificationStatus,
-      'Priority': task.priority,
-      'Inward Entry Date': task.inwardEntryDate ? new Date(task.inwardEntryDate).toLocaleDateString() : '',
-      'Due Date': task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '',
-      'Target Date': task.targetDate ? new Date(task.targetDate).toLocaleDateString() : '',
-      'Assigned By': task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : '',
-      'Assigned To': Array.isArray(task.assignedTo)
-        ? task.assignedTo.map(u => `${u.firstName} ${u.lastName}`).join(', ')
-        : (task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : ''),
-      'First Verifier': task.verificationAssignedTo ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : '',
-      'Second Verifier': task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : '',
-      'Files': task.files && task.files.length > 0 ? task.files.map(f => f.originalName || f.originalname).join(', ') : '',
-      'Comments': task.comments ? task.comments.length : 0,
-    }));
-    const ws = XLSX.utils.json_to_sheet(data, {header: [
-      'Title','Description','Client Name','Client Group','Work Type','Task Status','Verification Status','Priority','Inward Entry Date','Due Date','Target Date','Assigned By','Assigned To','First Verifier','Second Verifier','Files','Comments']});
-    // Set column widths for better spacing
-    ws['!cols'] = [
-      { wch: 20 }, // Title
-      { wch: 30 }, // Description
-      { wch: 20 }, // Client Name
-      { wch: 20 }, // Client Group
-      { wch: 20 }, // Work Type
-      { wch: 15 }, // Task Status
-      { wch: 20 }, // Verification Status
-      { wch: 10 }, // Priority
-      { wch: 18 }, // Inward Entry Date
-      { wch: 15 }, // Due Date
-      { wch: 15 }, // Target Date
-      { wch: 20 }, // Assigned By
-      { wch: 25 }, // Assigned To
-      { wch: 20 }, // First Verifier
-      { wch: 20 }, // Second Verifier
-      { wch: 30 }, // Files
-      { wch: 10 }, // Comments
-    ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
-    XLSX.writeFile(wb, 'tasks_dashboard.xlsx');
+    
+    // Get the selected column definitions
+    const selectedColumnDefs = ALL_COLUMNS.filter(col => selectedColumns.includes(col.id));
+    
+    // Prepare data based on selected columns
+    const data = filteredTasks.map(task => {
+      const row = {};
+      selectedColumnDefs.forEach(col => {
+        switch (col.id) {
+          case 'title':
+            row[col.label] = task.title;
+            break;
+          case 'description':
+            row[col.label] = task.description;
+            break;
+          case 'clientName':
+            row[col.label] = task.clientName;
+            break;
+          case 'clientGroup':
+            row[col.label] = task.clientGroup;
+            break;
+          case 'workType':
+            row[col.label] = Array.isArray(task.workType) ? task.workType.join(', ') : task.workType;
+            break;
+          case 'status':
+            row[col.label] = task.status;
+            break;
+          case 'verificationStatus':
+            row[col.label] = task.verificationStatus;
+            break;
+          case 'priority':
+            row[col.label] = task.priority;
+            break;
+          case 'inwardEntryDate':
+            row[col.label] = task.inwardEntryDate ? formatDateTime(task.inwardEntryDate) : '';
+            break;
+          case 'dueDate':
+            row[col.label] = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '';
+            break;
+          case 'targetDate':
+            row[col.label] = task.targetDate ? new Date(task.targetDate).toLocaleDateString() : '';
+            break;
+          case 'assignedBy':
+            row[col.label] = task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : '';
+            break;
+          case 'assignedTo':
+            row[col.label] = Array.isArray(task.assignedTo)
+              ? task.assignedTo.map(u => `${u.firstName} ${u.lastName}`).join(', ')
+              : (task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : '');
+            break;
+          case 'verificationAssignedTo':
+            row[col.label] = task.verificationAssignedTo ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : '';
+            break;
+          case 'secondVerificationAssignedTo':
+            row[col.label] = task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : '';
+            break;
+          case 'files':
+            row[col.label] = task.files && task.files.length > 0 ? task.files.map(f => f.originalName || f.originalname).join(', ') : '';
+            break;
+          case 'comments':
+            row[col.label] = task.comments ? task.comments.length : 0;
+            break;
+          default:
+            row[col.label] = '';
+        }
+      });
+      return row;
+    });
+
+    // Create PDF
+    const doc = new jsPDF();
+    
+    // Add title
+    doc.setFontSize(16);
+    doc.text('Tasks Dashboard Report', 14, 20);
+    doc.setFontSize(10);
+    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
+    doc.text(`Total Tasks: ${filteredTasks.length}`, 14, 37);
+
+    // Prepare table data
+    const headers = selectedColumnDefs.map(col => col.label);
+    const tableData = data.map(row => selectedColumnDefs.map(col => row[col.label]));
+
+    // Add table
+    doc.autoTable({
+      head: [headers],
+      body: tableData,
+      startY: 45,
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+      },
+      headStyles: {
+        fillColor: [59, 130, 246], // Blue color
+        textColor: 255,
+        fontStyle: 'bold',
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252], // Light gray
+      },
+      columnStyles: {
+        0: { cellWidth: 30 }, // Title
+        1: { cellWidth: 40 }, // Description
+        2: { cellWidth: 25 }, // Client Name
+        3: { cellWidth: 25 }, // Client Group
+        4: { cellWidth: 25 }, // Work Type
+        5: { cellWidth: 20 }, // Task Status
+        6: { cellWidth: 25 }, // Verification Status
+        7: { cellWidth: 15 }, // Priority
+        8: { cellWidth: 25 }, // Inward Entry Date
+        9: { cellWidth: 20 }, // Due Date
+        10: { cellWidth: 20 }, // Target Date
+        11: { cellWidth: 25 }, // Assigned By
+        12: { cellWidth: 30 }, // Assigned To
+        13: { cellWidth: 25 }, // First Verifier
+        14: { cellWidth: 25 }, // Second Verifier
+        15: { cellWidth: 30 }, // Files
+        16: { cellWidth: 15 }, // Comments
+      },
+      didDrawPage: function (data) {
+        // Add page number
+        doc.setFontSize(8);
+        doc.text(
+          `Page ${doc.internal.getNumberOfPages()}`,
+          data.settings.margin.left,
+          doc.internal.pageSize.height - 10
+        );
+      },
+    });
+
+    doc.save('tasks_dashboard.pdf');
+  };
+
+  const handlePDFButtonClick = () => {
+    setShowPDFColumnSelector(true);
   };
 
   useEffect(() => {
@@ -580,10 +720,10 @@ const Dashboard = () => {
         </div>
         <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
           <div className="flex items-center">
-            <UserGroupIcon className="h-6 w-6 sm:h-8 sm:w-8 text-green-500 mr-2 sm:mr-4" />
+            <ExclamationCircleIcon className="h-6 w-6 sm:h-8 sm:w-8 text-red-600 mr-2 sm:mr-4" />
             <div>
-              <h3 className="text-sm sm:text-lg font-semibold text-gray-800">Users</h3>
-              <p className="text-xl sm:text-3xl font-bold text-green-600">{users.length}</p>
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-800">Urgent Tasks</h3>
+              <p className="text-xl sm:text-3xl font-bold text-red-600">{tasks.filter(t => t.priority === 'urgent').length}</p>
             </div>
           </div>
         </div>
@@ -660,13 +800,14 @@ const Dashboard = () => {
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <select
-            className="px-4 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[90px] transition-colors"
+            className="px-1 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[80px] transition-colors"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
           >
             <option value="createdAt">Assigned On</option>
             <option value="priority">Priority</option>
             <option value="status">Status</option>
+            <option value="clientName">Client</option>
           </select>
           <select
             className="px-4 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[90px] transition-colors"
@@ -677,10 +818,10 @@ const Dashboard = () => {
             <option value="desc">Desc</option>
           </select>
           <button
-            onClick={handleDownloadExcel}
+            onClick={handlePDFButtonClick}
             className="w-full px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 text-sm"
           >
-            Download Excel
+            Download
           </button>
         </div>
       </div>
@@ -718,9 +859,9 @@ const Dashboard = () => {
                     case 'verificationStatus':
                       return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${task.verificationStatus === 'completed' ? 'bg-green-100 text-green-800' : task.verificationStatus === 'rejected' ? 'bg-red-100 text-red-800' : task.verificationStatus === 'first_verified' ? 'bg-blue-100 text-blue-800' : task.verificationStatus === 'executed' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{task.verificationStatus ? task.verificationStatus.replace(/_/g, ' ') : 'Pending'}</span></td>;
                     case 'priority':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${task.priority === 'urgent' ? 'bg-red-100 text-red-800' : task.priority === 'inOneWeek' ? 'bg-orange-100 text-orange-800' : task.priority === 'inFifteenDays' ? 'bg-yellow-100 text-yellow-800' : task.priority === 'inOneMonth' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>{task.priority.replace(/([A-Z])/g, ' $1').trim()}</span></td>;
+                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(task.priority)}`}>{task.priority.replace(/([A-Z])/g, ' $1').trim()}</span></td>;
                     case 'inwardEntryDate':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500">{task.inwardEntryDate ? new Date(task.inwardEntryDate).toLocaleDateString() : 'N/A'}</td>;
+                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500">{formatDateTime(task.inwardEntryDate)}</td>;
                     case 'dueDate':
                       return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500">{formatDate(task.dueDate)}</td>;
                     case 'targetDate':
@@ -823,6 +964,14 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+
+      {/* PDF Column Selector */}
+      <PDFColumnSelector
+        isOpen={showPDFColumnSelector}
+        onClose={() => setShowPDFColumnSelector(false)}
+        onDownload={handleDownloadPDF}
+        availableColumns={ALL_COLUMNS}
+      />
     </div>
   );
 };

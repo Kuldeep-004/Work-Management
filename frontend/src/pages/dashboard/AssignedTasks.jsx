@@ -45,7 +45,8 @@ const AssignedTasks = () => {
   const [error, setError] = useState(null);
   const [taskCounts, setTaskCounts] = useState({
     execution: 0,
-    verification: 0
+    verification: 0,
+    completed: 0
   });
   const [filters, setFilters] = useState([]);
   const [sortBy, setSortBy] = useState('createdAt');
@@ -98,7 +99,7 @@ const AssignedTasks = () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(`${API_BASE_URL}/api/tasks/assigned`, {
+        const response = await fetch(`${API_BASE_URL}/api/tasks/assigned?tab=${activeTab}`, {
           headers: { Authorization: `Bearer ${user.token}` },
         });
         if (!response.ok) {
@@ -116,37 +117,21 @@ const AssignedTasks = () => {
     if (user && user.token) {
       fetchAssignedTasks();
     }
-  }, [user]);
+  }, [user, activeTab]);
 
   // Fetch task counts for each tab
   useEffect(() => {
     const fetchTaskCounts = async () => {
       try {
-        // Fetch assigned tasks count (execution)
-        const assignedResponse = await fetch(`${API_BASE_URL}/api/tasks/assigned`, {
-          headers: {
-            Authorization: `Bearer ${user.token}`,
-          },
-        });
-        
-        // Fetch verification tasks count
-        const verificationResponse = await fetch(`${API_BASE_URL}/api/tasks/under-verification`, {
+        const response = await fetch(`${API_BASE_URL}/api/tasks/assigned/counts`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
         });
 
-        if (assignedResponse.ok && verificationResponse.ok) {
-          const assignedData = await assignedResponse.json();
-          const verificationData = await verificationResponse.json();
-          
-          const executionCount = assignedData.length;
-          const verificationCount = verificationData.length;
-          
-          setTaskCounts({
-            execution: executionCount,
-            verification: verificationCount
-          });
+        if (response.ok) {
+          const data = await response.json();
+          setTaskCounts(data);
         }
       } catch (error) {
         console.error('Error fetching task counts:', error);
@@ -233,6 +218,19 @@ const AssignedTasks = () => {
 
   const getFilteredAndSortedTasks = (tasks) => {
     if (!Array.isArray(tasks)) return [];
+
+    // Priority order mapping for sorting
+    const priorityOrder = {
+      'urgent': 1,
+      'today': 2,
+      'lessThan3Days': 3,
+      'thisWeek': 4,
+      'thisMonth': 5,
+      'regular': 6,
+      'filed': 7,
+      'dailyWorksOffice': 8,
+      'monthlyWorks': 9
+    };
 
     let filteredTasks = tasks.filter(task => {
       // Filter by search term
@@ -336,6 +334,15 @@ const AssignedTasks = () => {
       if (sortBy === 'createdAt') {
         aValue = new Date(aValue);
         bValue = new Date(bValue);
+      } else if (sortBy === 'priority') {
+        // Use priority order mapping for priority sorting
+        aValue = priorityOrder[aValue] || 999;
+        bValue = priorityOrder[bValue] || 999;
+        // For priority, descending should show highest priority first (urgent=1, today=2, etc.)
+        // So we swap the logic for priority sorting
+        if (aValue < bValue) return sortOrder === 'desc' ? -1 : 1;
+        if (aValue > bValue) return sortOrder === 'desc' ? 1 : -1;
+        return 0;
       }
       if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
@@ -375,7 +382,7 @@ const AssignedTasks = () => {
 
       <div className="mb-6">
         <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-1 sm:space-x-6" aria-label="Tabs">
+          <nav className="-mb-px flex space-x-1 sm:space-x-6 overflow-x-auto scrollbar-hide" aria-label="Tabs">
             <button
               onClick={() => setActiveTab('execution')}
               className={`whitespace-nowrap py-3 px-0 border-b-2 font-medium text-sm ${
@@ -400,6 +407,19 @@ const AssignedTasks = () => {
               Tasks Under Verification
               <span className="bg-gray-200 text-gray-800 rounded-full px-2 py-0.5 ml-2 text-xs">
                 {taskCounts.verification}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('completed')}
+              className={`whitespace-nowrap py-3 px-0 border-b-2 font-medium text-sm ${
+                activeTab === 'completed'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Completed
+              <span className="bg-gray-200 text-gray-800 rounded-full px-2 py-0.5 ml-2 text-xs">
+                {taskCounts.completed}
               </span>
             </button>
           </nav>
@@ -480,6 +500,7 @@ const AssignedTasks = () => {
             <option value="createdAt">Assigned On</option>
             <option value="priority">Priority</option>
             <option value="status">Status</option>
+            <option value="clientName">Client</option>
           </select>
           <select
             className="px-3 py-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
@@ -492,11 +513,16 @@ const AssignedTasks = () => {
         </div>
       </div>
       <ErrorBoundary>
-        {activeTab === 'verification' ? (
-          <TaskList taskType="verification" viewType="under_verification" showControls={false} searchTerm={searchTerm} setSearchTerm={setSearchTerm} visibleColumns={visibleColumns} setVisibleColumns={setVisibleColumns} />
-        ) : (
-          <TaskList taskType={activeTab} viewType="assigned" tasks={getFilteredAndSortedTasks(tasks)} showControls={false} searchTerm={searchTerm} setSearchTerm={setSearchTerm} visibleColumns={visibleColumns} setVisibleColumns={setVisibleColumns} />
-        )}
+        <TaskList 
+          taskType={activeTab} 
+          viewType="assigned" 
+          tasks={getFilteredAndSortedTasks(tasks)} 
+          showControls={false} 
+          searchTerm={searchTerm} 
+          setSearchTerm={setSearchTerm} 
+          visibleColumns={visibleColumns} 
+          setVisibleColumns={setVisibleColumns} 
+        />
       </ErrorBoundary>
     </div>
   );

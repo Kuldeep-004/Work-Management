@@ -2,23 +2,27 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import { API_BASE_URL } from '../../apiConfig';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 const Timesheets = () => {
   const { user, isAuthenticated } = useAuth();
   const [timesheet, setTimesheet] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [entryTimeParts, setEntryTimeParts] = useState({});
+  const [showCalendar, setShowCalendar] = useState(false);
 
   const debounceTimeout = useRef(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (date = new Date()) => {
     if (!isAuthenticated() || !user) return;
     setLoading(true);
     try {
+      const dateStr = date.toISOString().split('T')[0];
       const [timesheetRes, tasksRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/timesheets/today`, { headers: { Authorization: `Bearer ${user.token}` } }),
+        fetch(`${API_BASE_URL}/api/timesheets/date/${dateStr}`, { headers: { Authorization: `Bearer ${user.token}` } }),
         fetch(`${API_BASE_URL}/api/timesheets/my-tasks`, { headers: { Authorization: `Bearer ${user.token}` } })
       ]);
       if (!timesheetRes.ok || !tasksRes.ok) throw new Error('Failed to fetch initial data');
@@ -34,8 +38,22 @@ const Timesheets = () => {
   }, [user, isAuthenticated]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchData(selectedDate);
+  }, [fetchData, selectedDate]);
+
+  // Handle clicking outside calendar to close it
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showCalendar && !event.target.closest('.calendar-container')) {
+        setShowCalendar(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCalendar]);
 
   useEffect(() => {
     if (timesheet && timesheet.entries) {
@@ -183,6 +201,38 @@ const Timesheets = () => {
     return options;
   };
 
+  // Helper functions for date checking
+  const isToday = (date) => {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  };
+
+  const isEditable = (timesheet) => {
+    if (!timesheet) return false;
+    // If timesheet is completed, it's not editable
+    if (timesheet.isCompleted) return false;
+    // If it's today, it's editable
+    if (isToday(selectedDate)) return true;
+    // For previous days, only editable if not completed
+    return !timesheet.isCompleted;
+  };
+
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+    setShowCalendar(false);
+  };
+
+  // Helper function to calculate minutes between two times
+  const getMinutesBetween = (startTime, endTime) => {
+    if (!startTime || !endTime) return 0;
+    const [sh, sm] = startTime.split(':').map(Number);
+    const [eh, em] = endTime.split(':').map(Number);
+    let start = sh * 60 + sm;
+    let end = eh * 60 + em;
+    if (end < start) end += 24 * 60; // handle overnight
+    return end - start;
+  };
+
   if (loading) return <div className="p-8 text-center">Loading...</div>;
 
   const handleEntryTimePartChange = (entryId, type, part, value) => {
@@ -243,11 +293,33 @@ const Timesheets = () => {
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <div >
+        <div>
           <h1 className="text-2xl font-bold text-gray-800">My Timesheets</h1>
           <p className="text-sm text-gray-600 mt-1">
             Track and manage your daily work logs.
           </p>
+        </div>
+        <div className="relative">
+          <button
+            onClick={() => setShowCalendar(!showCalendar)}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {isToday(selectedDate) ? 'Today' : selectedDate.toLocaleDateString()}
+          </button>
+          {showCalendar && (
+            <div className="absolute right-0 top-full mt-2 z-10 calendar-container">
+              <DatePicker
+                selected={selectedDate}
+                onChange={handleDateChange}
+                inline
+                maxDate={new Date()}
+                dateFormat="yyyy-MM-dd"
+              />
+            </div>
+          )}
         </div>
       </div>
       <div className="space-y-6">
@@ -256,7 +328,14 @@ const Timesheets = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold text-gray-800">{formatDate(timesheet?.date)}</h3>
-              <p className="text-gray-600 mt-1">Today's timesheet</p>
+              <p className="text-gray-600 mt-1">
+                {isToday(selectedDate) 
+                  ? 'Today\'s timesheet' 
+                  : timesheet?.isCompleted 
+                    ? 'Previous timesheet (Submitted)' 
+                    : 'Previous timesheet (Not submitted)'
+                }
+              </p>
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-600">Total Time</p>
@@ -271,9 +350,14 @@ const Timesheets = () => {
               className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
               onClick={async () => {
                 try {
+                  const dateStr = selectedDate.toISOString().split('T')[0];
                   const res = await fetch(`${API_BASE_URL}/api/timesheets/submit`, {
                     method: 'POST',
-                    headers: { Authorization: `Bearer ${user.token}` }
+                    headers: { 
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${user.token}` 
+                    },
+                    body: JSON.stringify({ date: dateStr })
                   });
                   const data = await res.json();
                   if (!res.ok) throw new Error(data.message || 'Failed to submit timesheet');
@@ -289,7 +373,7 @@ const Timesheets = () => {
           </div>
         )}
         {/* Add Timeslot Button */}
-        {timesheet && !timesheet.isCompleted && (
+        {timesheet && isEditable(timesheet) && (
           <div>
             <button
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
@@ -300,7 +384,7 @@ const Timesheets = () => {
           </div>
         )}
         {/* Timeslot Entries */}
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-x-auto scrollbar-hide">
           {[...(timesheet?.entries || [])].slice().reverse().map((entry) => {
             let taskValue = '';
             if (entry?.task) {
@@ -313,12 +397,12 @@ const Timesheets = () => {
             const startParts = (entryTimeParts[key] && entryTimeParts[key].start) || split24Hour(entry.startTime);
             const endParts = (entryTimeParts[key] && entryTimeParts[key].end) || split24Hour(entry.endTime);
             const isSaving = !entry._id;
-            const isLocked = timesheet && timesheet.isCompleted;
+            const isLocked = !isEditable(timesheet);
             return (
               <div key={key || Math.random()} className="bg-white rounded-lg shadow border-2 border-gray-200">
-                <div className="p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <div className="flex gap-4 items-center">
+                <div className="p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2 sm:gap-4">
+                    <div className="flex flex-wrap gap-2 items-center justify-center w-full sm:w-auto">
                       {/* Editable Start Time */}
                       <div className="flex gap-1 items-center">
                         <select
@@ -333,10 +417,10 @@ const Timesheets = () => {
                         <select
                           value={startParts.minute}
                           onChange={e => !isSaving && !isLocked && handleEntryTimePartChange(key, 'start', 'minute', e.target.value)}
-                          className="border border-gray-300 rounded px-2 py-2"
+                          className="border border-gray-300 rounded px-2 py-2 max-h-32 overflow-y-auto"
                           disabled={isSaving || isLocked}
                         >
-                          {['00', '15', '30', '45'].map(m => <option key={m} value={m}>{m}</option>)}
+                          {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map(m => <option key={m} value={m}>{m}</option>)}
                         </select>
                         <select
                           value={startParts.ampm}
@@ -363,10 +447,10 @@ const Timesheets = () => {
                         <select
                           value={endParts.minute}
                           onChange={e => !isSaving && !isLocked && handleEntryTimePartChange(key, 'end', 'minute', e.target.value)}
-                          className="border border-gray-300 rounded px-2 py-2"
+                          className="border border-gray-300 rounded px-2 py-2 max-h-32 overflow-y-auto"
                           disabled={isSaving || isLocked}
                         >
-                          {['00', '15', '30', '45'].map(m => <option key={m} value={m}>{m}</option>)}
+                          {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map(m => <option key={m} value={m}>{m}</option>)}
                         </select>
                         <select
                           value={endParts.ampm}
@@ -381,7 +465,7 @@ const Timesheets = () => {
                     </div>
                     {!isLocked && (
                       <button
-                        className="ml-4 bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
+                        className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 mt-2 sm:mt-0 sm:ml-4"
                         onClick={() => handleDeleteEntry(entry._id)}
                         disabled={isSaving}
                       >
@@ -390,7 +474,7 @@ const Timesheets = () => {
                     )}
                   </div>
                   {isSaving && <div className="text-blue-500 text-sm">Saving...</div>}
-                  <div className={`grid ${showManualTaskName ? 'grid-cols-4' : 'grid-cols-3'} gap-4`}>
+                  <div className={`grid grid-cols-1 ${showManualTaskName ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-4`}>
                     {/* Task Selection */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -436,10 +520,19 @@ const Timesheets = () => {
                         type="text"
                         value={entry?.workDescription || ''}
                         onChange={(e) => !isSaving && !isLocked && handleEntryChange(key, 'workDescription', e.target.value)}
-                        placeholder="Work description"
+                        placeholder="Enter work description"
                         className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         disabled={isSaving || isLocked}
                       />
+                    </div>
+                    {/* Time Spent */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Time Spent
+                      </label>
+                      <div className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded">
+                        {entry.startTime && entry.endTime ? formatTime(getMinutesBetween(entry.startTime, entry.endTime)) : 'N/A'}
+                      </div>
                     </div>
                   </div>
                 </div>

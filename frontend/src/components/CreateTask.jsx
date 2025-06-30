@@ -23,6 +23,7 @@ const CreateTask = ({ users = [] }) => {
     assignedTo: [],
     priority: 'regular',
     inwardEntryDate: '',
+    inwardEntryTime: '',
     dueDate: '',
     targetDate: ''
   });
@@ -44,6 +45,48 @@ const CreateTask = ({ users = [] }) => {
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
   const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
   const MAX_FILES = 10;
+
+  // Function to get current date and time in required format
+  const getCurrentDateTime = () => {
+    const now = new Date();
+    
+    // Format date as YYYY-MM-DD
+    const date = now.toISOString().split('T')[0];
+    
+    // Format time as HH:MM in 12-hour format
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    const time = `${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+    
+    return { date, time };
+  };
+
+  // Function to convert 12-hour time to 24-hour format for backend
+  const convertTo24Hour = (time12h) => {
+    const [time, modifier] = time12h.split(' ');
+    let [hours, minutes] = time.split(':');
+    
+    hours = parseInt(hours, 10);
+    
+    if (hours === 12) {
+      hours = modifier === 'PM' ? 12 : 0;
+    } else if (modifier === 'PM') {
+      hours = hours + 12;
+    }
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes}`;
+  };
+
+  // Function to convert 24-hour time to 12-hour format for display
+  const convertTo12Hour = (time24h) => {
+    const [hours, minutes] = time24h.split(':');
+    const hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+  };
 
   // Fetch clients, client groups, and work types
   useEffect(() => {
@@ -213,6 +256,11 @@ const CreateTask = ({ users = [] }) => {
       return;
     }
 
+    if (!formData.inwardEntryTime) {
+      toast.error('Inward Entry Time is required');
+      return;
+    }
+
     if (formData.assignedTo.length === 0) {
       toast.error('Please select at least one user to assign the task to');
       return;
@@ -227,13 +275,19 @@ const CreateTask = ({ users = [] }) => {
       setUploading(true);
       console.log('Creating task with files:', selectedFiles); // Debug log
 
+      // Convert 12-hour time to 24-hour format for backend
+      const taskData = {
+        ...formData,
+        inwardEntryTime: convertTo24Hour(formData.inwardEntryTime)
+      };
+
       const response = await fetch(`${API_BASE_URL}/api/tasks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${loggedInUser.token}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(taskData),
       });
 
       if (!response.ok) {
@@ -448,6 +502,24 @@ const CreateTask = ({ users = [] }) => {
     setTaskFiles(prev => prev.filter(f => f._id !== fileId));
   };
 
+  const handleOpenModal = () => {
+    const { date, time } = getCurrentDateTime();
+    setFormData({
+      title: '',
+      description: '',
+      clientName: '',
+      clientGroup: '',
+      workType: [],
+      assignedTo: [],
+      priority: 'regular',
+      inwardEntryDate: date,
+      inwardEntryTime: time,
+      dueDate: '',
+      targetDate: ''
+    });
+    setIsModalOpen(true);
+  };
+
   const handleClose = () => {
     setIsModalOpen(false);
     setFormData({
@@ -459,6 +531,7 @@ const CreateTask = ({ users = [] }) => {
       assignedTo: [],
       priority: 'regular',
       inwardEntryDate: '',
+      inwardEntryTime: '',
       dueDate: '',
       targetDate: ''
     });
@@ -495,7 +568,7 @@ const CreateTask = ({ users = [] }) => {
   return (
     <>
       <button
-        onClick={() => setIsModalOpen(true)}
+        onClick={handleOpenModal}
         className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
       >
         Create Task
@@ -598,6 +671,7 @@ const CreateTask = ({ users = [] }) => {
                     }
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
+                    <option value="urgent">Urgent</option>
                     <option value="today">Today</option>
                     <option value="lessThan3Days">&lt; 3 days</option>
                     <option value="thisWeek">This week</option>
@@ -613,14 +687,66 @@ const CreateTask = ({ users = [] }) => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Inward Entry Date <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="date"
-                    value={formData.inwardEntryDate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, inwardEntryDate: e.target.value })
-                    }
-                    className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="date"
+                      value={formData.inwardEntryDate}
+                      onChange={(e) =>
+                        setFormData({ ...formData, inwardEntryDate: e.target.value })
+                      }
+                      className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <div className="flex items-center space-x-2">
+                      <select
+                        value={formData.inwardEntryTime.split(' ')[0]?.split(':')[0] || '12'}
+                        onChange={(e) => {
+                          const timeParts = formData.inwardEntryTime.split(' ');
+                          const [_, minutes] = (timeParts[0] || '12:00').split(':');
+                          const ampm = timeParts[1] || 'AM';
+                          const newTime = `${e.target.value}:${minutes} ${ampm}`;
+                          setFormData({ ...formData, inwardEntryTime: newTime });
+                        }}
+                        className="w-1/3 border rounded-md px-2 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => (
+                          <option key={hour} value={hour.toString().padStart(2, '0')}>
+                            {hour}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-gray-500">:</span>
+                      <select
+                        value={formData.inwardEntryTime.split(' ')[0]?.split(':')[1] || '00'}
+                        onChange={(e) => {
+                          const timeParts = formData.inwardEntryTime.split(' ');
+                          const [hours] = (timeParts[0] || '12:00').split(':');
+                          const ampm = timeParts[1] || 'AM';
+                          const newTime = `${hours}:${e.target.value} ${ampm}`;
+                          setFormData({ ...formData, inwardEntryTime: newTime });
+                        }}
+                        className="w-1/3 border rounded-md px-2 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {Array.from({ length: 60 }, (_, i) => i).map(minute => (
+                          <option key={minute} value={minute.toString().padStart(2, '0')}>
+                            {minute.toString().padStart(2, '0')}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={formData.inwardEntryTime.split(' ')[1] || 'AM'}
+                        onChange={(e) => {
+                          const timeParts = formData.inwardEntryTime.split(' ');
+                          const time = timeParts[0] || '12:00';
+                          const newTime = `${time} ${e.target.value}`;
+                          setFormData({ ...formData, inwardEntryTime: newTime });
+                        }}
+                        className="w-1/3 border rounded-md px-1 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
                 <div>

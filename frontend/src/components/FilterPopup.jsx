@@ -22,7 +22,7 @@ const FilterPopup = ({
     { value: 'clientName', label: 'Client Name', options: clientNames },
     { value: 'clientGroup', label: 'Client Group', options: clientGroups },
     { value: 'workType', label: 'Work Type', options: workTypes },
-    { value: 'verificationStatus', label: 'Verification Status', options: ['pending','executed', 'first_verified','completed'] },
+    { value: 'verificationStatus', label: 'Verification Status', options: ['pending','executed', 'first_verified','completed', 'rejected'] },
   ];
 
   const operators = [

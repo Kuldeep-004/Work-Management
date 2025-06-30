@@ -26,12 +26,19 @@ const TaskComments = ({ taskId }) => {
       for (const comment of comments) {
         if (comment.type === 'audio' && comment.audioUrl && !newAudioSrcs[comment._id]) {
           try {
-            const response = await fetch(`${API_BASE_URL}/api/tasks/audio/${comment.audioUrl}`);
-            if (response.ok) {
-              const blob = await response.blob();
-              newAudioSrcs[comment._id] = URL.createObjectURL(blob);
+            // Check if it's a cloud URL (starts with http)
+            if (comment.audioUrl.startsWith('http')) {
+              // Use cloud URL directly
+              newAudioSrcs[comment._id] = comment.audioUrl;
             } else {
-              console.error(`Failed to fetch audio for comment ${comment._id}`);
+              // Fetch from backend for local files
+              const response = await fetch(`${API_BASE_URL}/api/tasks/audio/${comment.audioUrl}`);
+              if (response.ok) {
+                const blob = await response.blob();
+                newAudioSrcs[comment._id] = URL.createObjectURL(blob);
+              } else {
+                console.error(`Failed to fetch audio for comment ${comment._id}`);
+              }
             }
           } catch (error) {
             console.error(`Error fetching audio for comment ${comment._id}:`, error);

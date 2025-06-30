@@ -13,6 +13,8 @@ import Client from '../models/Client.js';
 import ClientGroup from '../models/ClientGroup.js';
 import WorkType from '../models/WorkType.js';
 import Notification from '../models/Notification.js';
+import { uploadFile, deleteImage } from '../utils/cloudinary.js';
+import { promisify } from 'util';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,6 +55,8 @@ const uploadAudio = multer({
     fileSize: 10 * 1024 * 1024 // 10MB limit
   }
 });
+
+const unlinkAsync = promisify(fs.unlink);
 
 // Middleware to check if user can assign task to target user
 const canAssignTask = async (req, res, next) => {
@@ -116,6 +120,71 @@ const canAssignTask = async (req, res, next) => {
     res.status(500).json({ message: 'Error checking task assignment permissions' });
   }
 };
+
+// Get task counts for assigned tasks
+router.get('/assigned/counts', protect, async (req, res) => {
+  try {
+    const executionCount = await Task.countDocuments({
+      assignedBy: req.user._id,
+      verificationStatus: { $in: ['pending'] }
+    });
+    
+    const verificationCount = await Task.countDocuments({
+      assignedBy: req.user._id,
+      verificationStatus: { $in: ['executed', 'first_verified'] }
+    });
+    
+    const completedCount = await Task.countDocuments({
+      assignedBy: req.user._id,
+      verificationStatus: { $in: ['completed'] }
+    });
+    
+    res.json({
+      execution: executionCount,
+      verification: verificationCount,
+      completed: completedCount
+    });
+  } catch (error) {
+    console.error('Error fetching assigned task counts:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get task counts for received tasks
+router.get('/received/counts', protect, async (req, res) => {
+  try {
+    console.log(`[RECEIVED COUNTS] User: ${req.user._id}`);
+    
+    const executionCount = await Task.countDocuments({
+      $or: [
+        { assignedTo: req.user._id, verificationStatus: 'pending' },
+        { verificationAssignedTo: req.user._id, verificationStatus: 'executed' },
+        { secondVerificationAssignedTo: req.user._id, verificationStatus: 'first_verified' }
+      ]
+    });
+    
+    const verificationCount = await Task.countDocuments({
+      assignedTo: req.user._id,
+      verificationStatus: { $in: ['executed', 'first_verified'] }
+    });
+    
+    const completedCount = await Task.countDocuments({
+      assignedTo: req.user._id,
+      verificationStatus: 'completed'
+    });
+    
+    console.log(`[RECEIVED COUNTS] Execution: ${executionCount}, Verification: ${verificationCount}, Completed: ${completedCount}`);
+    
+    res.json({
+      execution: executionCount,
+      verification: verificationCount,
+      completed: completedCount
+    });
+  } catch (error) {
+    console.error('Error fetching received task counts:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
 
 // Get all tasks for the user (dashboard)
 router.get('/', protect, async (req, res) => {
@@ -294,7 +363,30 @@ router.get('/type/:type', protect, async (req, res) => {
 // Get assigned tasks (tasks created by the user)
 router.get('/assigned', protect, async (req, res) => {
   try {
-    const tasks = await Task.find({ assignedBy: req.user._id })
+    const { tab = 'execution' } = req.query;
+    
+    let query = { assignedBy: req.user._id };
+    
+    // Filter based on tab
+    switch (tab) {
+      case 'execution':
+        // Tasks for execution: tasks that are still being worked on
+        query.verificationStatus = { $in: ['pending'] };
+        break;
+      case 'verification':
+        // Tasks under verification: tasks that are being verified
+        query.verificationStatus = { $in: ['executed', 'first_verified'] };
+        break;
+      case 'completed':
+        // Completed tasks: tasks that have been fully completed
+        query.verificationStatus = { $in: ['completed'] };
+        break;
+      default:
+        // Default to execution tab
+        query.verificationStatus = { $in: ['pending'] };
+    }
+    
+    const tasks = await Task.find(query)
       .populate('assignedTo', 'firstName lastName photo')
       .populate('assignedBy', 'firstName lastName photo')
       .populate('verificationAssignedTo', 'firstName lastName photo')
@@ -313,10 +405,54 @@ router.get('/assigned', protect, async (req, res) => {
 // Get received tasks (tasks assigned to the user)
 router.get('/received', protect, async (req, res) => {
   try {
-    const query = { 
-      assignedTo: req.user._id,
-      verificationStatus: { $ne: 'executed' } // Exclude tasks in executed verification status
-    };
+    const { tab = 'execution' } = req.query;
+    
+    console.log(`[RECEIVED TASKS] User: ${req.user._id}, Tab: ${tab}`);
+    
+    let query = {};
+    
+    // Filter based on tab
+    switch (tab) {
+      case 'execution':
+        // Tasks for execution: tasks that the user is currently working on
+        // For assignedTo users: verificationStatus = 'pending'
+        // For verifiers: verificationStatus = 'executed' (for first verifier) or 'first_verified' (for second verifier)
+        query = {
+          $or: [
+            { assignedTo: req.user._id, verificationStatus: 'pending' },
+            { verificationAssignedTo: req.user._id, verificationStatus: 'executed' },
+            { secondVerificationAssignedTo: req.user._id, verificationStatus: 'first_verified' }
+          ]
+        };
+        break;
+      case 'verification':
+        // Tasks under verification: tasks that are being verified by someone else
+        // Only show for assignedTo users when task is being verified by others
+        query = {
+          assignedTo: req.user._id,
+          verificationStatus: { $in: ['executed', 'first_verified'] }
+        };
+        break;
+      case 'completed':
+        // Completed tasks: only show for assignedTo user
+        query = {
+          assignedTo: req.user._id,
+          verificationStatus: 'completed'
+        };
+        break;
+      default:
+        // Default to execution tab
+        query = {
+          $or: [
+            { assignedTo: req.user._id, verificationStatus: 'pending' },
+            { verificationAssignedTo: req.user._id, verificationStatus: 'executed' },
+            { secondVerificationAssignedTo: req.user._id, verificationStatus: 'first_verified' }
+          ]
+        };
+    }
+    
+    console.log(`[RECEIVED TASKS] Query:`, JSON.stringify(query, null, 2));
+    
     const tasks = await Task.find(query)
       .populate('assignedTo', 'firstName lastName photo')
       .populate('assignedBy', 'firstName lastName photo')
@@ -324,8 +460,20 @@ router.get('/received', protect, async (req, res) => {
       .populate('secondVerificationAssignedTo', 'firstName lastName photo')
       .select('title description clientName clientGroup workType status priority inwardEntryDate dueDate targetDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments')
       .sort({ createdAt: -1 });
+    
+    console.log(`[RECEIVED TASKS] Found ${tasks.length} tasks`);
+    console.log(`[RECEIVED TASKS] Tasks:`, tasks.map(t => ({
+      id: t._id,
+      title: t.title,
+      assignedTo: t.assignedTo?._id,
+      verificationAssignedTo: t.verificationAssignedTo?._id,
+      secondVerificationAssignedTo: t.secondVerificationAssignedTo?._id,
+      verificationStatus: t.verificationStatus
+    })));
+    
     res.json(tasks);
   } catch (error) {
+    console.error('[RECEIVED TASKS] Error:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -361,6 +509,7 @@ router.post('/', protect, canAssignTask, async (req, res) => {
       assignedTo,
       priority,
       inwardEntryDate,
+      inwardEntryTime,
       dueDate,
       targetDate,
       verificationAssignedTo
@@ -370,6 +519,17 @@ router.post('/', protect, canAssignTask, async (req, res) => {
 
     // Fetch assigner details for notification message
     const assigner = await User.findById(req.user._id).select('firstName lastName');
+
+    // Combine date and time for inwardEntryDate
+    let combinedInwardEntryDate = null;
+    if (inwardEntryDate && inwardEntryTime) {
+      const [year, month, day] = inwardEntryDate.split('-');
+      const [hours, minutes] = inwardEntryTime.split(':');
+      combinedInwardEntryDate = new Date(year, month - 1, day, hours, minutes);
+    } else if (inwardEntryDate) {
+      // If only date is provided, set time to current time
+      combinedInwardEntryDate = new Date(inwardEntryDate);
+    }
 
     for (const userId of assignedTo) {
       const task = new Task({
@@ -381,7 +541,7 @@ router.post('/', protect, canAssignTask, async (req, res) => {
         assignedTo: userId,
         assignedBy: req.user._id,
         priority,
-        inwardEntryDate,
+        inwardEntryDate: combinedInwardEntryDate,
         dueDate,
         targetDate,
         verificationAssignedTo
@@ -536,8 +696,8 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
         break;
 
       case 'completed':
-        if (!isSecondVerifier) {
-          return res.status(403).json({ message: 'Only second verifier can complete the task' });
+        if (!isFirstVerifier && !isSecondVerifier) {
+          return res.status(403).json({ message: 'Only verifiers can complete the task' });
         }
         // Mark the task as verified/completed instead of deleting
         task.verificationStatus = 'completed';
@@ -610,12 +770,41 @@ router.post('/:taskId/files', protect, uploadTaskFilesMiddleware, async (req, re
     }
 
     // Add uploaded files to task
-    const uploadedFiles = req.files.map(file => ({
-      filename: file.filename,
-      originalName: file.originalname,
-      path: file.path,
-      uploadedBy: req.user._id
-    }));
+    const uploadedFiles = [];
+    
+    for (const file of req.files) {
+      try {
+        // Upload to Cloudinary
+        const cloudResult = await uploadFile(file.path, 'task_files');
+        
+        // Delete local file after cloud upload
+        try {
+          await unlinkAsync(file.path);
+        } catch (unlinkError) {
+          // Ignore errors if file doesn't exist
+          if (unlinkError.code !== 'ENOENT') {
+            console.error('Error deleting local file:', unlinkError);
+          }
+        }
+        
+        uploadedFiles.push({
+          filename: file.filename,
+          originalName: file.originalname,
+          path: file.filename,
+          cloudUrl: cloudResult.url,
+          uploadedBy: req.user._id
+        });
+      } catch (cloudError) {
+        console.error('Error uploading to Cloudinary:', cloudError);
+        // Fallback to local storage if cloud upload fails
+        uploadedFiles.push({
+          filename: file.filename,
+          originalName: file.originalname,
+          path: file.filename,
+          uploadedBy: req.user._id
+        });
+      }
+    }
 
     task.files.push(...uploadedFiles);
     await task.save();
@@ -657,10 +846,15 @@ router.delete('/:taskId/files/:fileId', protect, async (req, res) => {
     const removedFile = task.files.splice(fileIndex, 1)[0];
 
     // Delete file from filesystem
-    const filePath = path.join(__dirname, '../uploads', removedFile.path);
-    fs.unlink(filePath, (err) => {
-      if (err) console.error('Error deleting file:', err);
-    });
+    const filePath = path.join(__dirname, '../uploads', removedFile.filename);
+    try {
+      await unlinkAsync(filePath);
+    } catch (unlinkError) {
+      // Ignore errors if file doesn't exist
+      if (unlinkError.code !== 'ENOENT') {
+        console.error('Error deleting file:', unlinkError);
+      }
+    }
 
     await task.save();
     res.json({ message: 'File deleted successfully' });
@@ -850,11 +1044,32 @@ router.post('/:taskId/comments/audio', protect, uploadAudio.single('audio'), asy
       return res.status(400).json({ message: 'Audio file is required' });
     }
 
-    // Store just the filename, not the full path
+    let audioUrl = req.file.filename; // Default to local filename
+    
+    try {
+      // Upload to Cloudinary
+      const cloudResult = await uploadFile(req.file.path, 'audio_comments');
+      audioUrl = cloudResult.url;
+      
+      // Delete local file after cloud upload
+      try {
+        await unlinkAsync(req.file.path);
+      } catch (unlinkError) {
+        // Ignore errors if file doesn't exist
+        if (unlinkError.code !== 'ENOENT') {
+          console.error('Error deleting local audio file:', unlinkError);
+        }
+      }
+    } catch (cloudError) {
+      console.error('Error uploading audio to Cloudinary:', cloudError);
+      // Keep local file if cloud upload fails
+    }
+
+    // Store just the filename or cloud URL
     task.comments.push({
       type: 'audio',
       content: 'Audio comment',
-      audioUrl: req.file.filename, // Store just the filename
+      audioUrl: audioUrl, // Store cloud URL or local filename
       createdBy: req.user._id
     });
 
@@ -950,6 +1165,14 @@ router.delete('/:taskId/comments/:commentId', protect, async (req, res) => {
 // Serve audio files
 router.get('/audio/:filename', (req, res) => {
   const filename = req.params.filename;
+  
+  // Check if it's a cloud URL (starts with http)
+  if (filename.startsWith('http')) {
+    // Redirect to cloud URL
+    return res.redirect(filename);
+  }
+  
+  // Otherwise serve local file
   const filePath = path.join(__dirname, '../uploads/audio', filename);
   
   // Check if file exists

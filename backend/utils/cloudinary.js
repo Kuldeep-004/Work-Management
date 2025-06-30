@@ -50,6 +50,38 @@ export const uploadImage = async (filePath) => {
   }
 };
 
+// Upload any file to cloudinary
+export const uploadFile = async (filePath, folder = 'documents') => {
+  try {
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File not found at path: ${filePath}`);
+    }
+
+    // Upload the file with current timestamp
+    const timestamp = Math.floor(Date.now() / 1000);
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder: folder,
+      resource_type: "auto",
+      timestamp: timestamp,
+      use_filename: true,
+      unique_filename: true
+    });
+
+    return {
+      public_id: result.public_id,
+      url: result.secure_url
+    };
+  } catch (error) {
+    console.error('Cloudinary upload error:', error);
+    // Check for specific error types
+    if (error.message?.includes('Stale request')) {
+      throw new Error('Upload failed due to time synchronization issue. Please try again.');
+    }
+    throw new Error(error.message || 'Error uploading file to Cloudinary');
+  }
+};
+
 // Delete image from cloudinary
 export const deleteImage = async (public_id) => {
   try {

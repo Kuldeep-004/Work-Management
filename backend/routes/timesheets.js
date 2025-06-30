@@ -83,6 +83,38 @@ router.get('/today', protect, async (req, res) => {
   }
 });
 
+// Get timesheet for a specific date
+router.get('/date/:date', protect, async (req, res) => {
+  try {
+    const { date } = req.params;
+    const targetDate = new Date(date);
+    targetDate.setUTCHours(0, 0, 0, 0);
+    
+    const nextDate = new Date(targetDate);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    
+    let timesheet = await Timesheet.findOne({
+      user: req.user._id,
+      date: {
+        $gte: targetDate,
+        $lt: nextDate
+      }
+    }).populate('entries.task', 'title description clientName clientGroup workType');
+    
+    if (!timesheet) {
+      timesheet = new Timesheet({
+        user: req.user._id,
+        date: targetDate,
+        entries: []
+      });
+    }
+    
+    res.json(timesheet);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Add entry to today's timesheet
 router.post('/add-entry', protect, async (req, res) => {
   try {
@@ -325,8 +357,8 @@ function getMinutesBetween(start, end) {
 // Aggregate total hours each user worked on each task
 router.get('/task-hours', protect, async (req, res) => {
   try {
-    // Get all timesheet entries with a valid task
-    const timesheets = await Timesheet.find({ 'entries.task': { $ne: null } })
+    // Get all timesheet entries (both with tasks and manual tasks)
+    const timesheets = await Timesheet.find({})
       .populate('user', 'firstName lastName')
       .populate('entries.task', 'title');
 
@@ -337,6 +369,7 @@ router.get('/task-hours', protect, async (req, res) => {
       const user = ts.user;
       ts.entries.forEach(entry => {
         if (entry.task) {
+          // Regular task
           const taskId = entry.task._id.toString();
           const userId = user._id.toString();
           const userName = `${user.firstName} ${user.lastName}`;
@@ -345,11 +378,21 @@ router.get('/task-hours', protect, async (req, res) => {
             taskUserHours[taskId][userId] = { userId, userName, totalMinutes: 0 };
           }
           taskUserHours[taskId][userId].totalMinutes += getMinutesBetween(entry.startTime, entry.endTime);
+        } else if (entry.manualTaskName) {
+          // Manual task - create a special key for manual tasks
+          const manualTaskKey = `manual_${entry.manualTaskName}_${user._id}`;
+          const userId = user._id.toString();
+          const userName = `${user.firstName} ${user.lastName}`;
+          if (!taskUserHours[manualTaskKey]) taskUserHours[manualTaskKey] = {};
+          if (!taskUserHours[manualTaskKey][userId]) {
+            taskUserHours[manualTaskKey][userId] = { userId, userName, totalMinutes: 0, isManualTask: true, manualTaskName: entry.manualTaskName };
+          }
+          taskUserHours[manualTaskKey][userId].totalMinutes += getMinutesBetween(entry.startTime, entry.endTime);
         }
       });
     });
 
-    // Flatten to array: [{ taskId, userId, userName, totalHours }]
+    // Flatten to array: [{ taskId, userId, userName, totalHours, isManualTask?, manualTaskName? }]
     const result = [];
     Object.entries(taskUserHours).forEach(([taskId, users]) => {
       Object.values(users).forEach(userObj => {
@@ -357,7 +400,9 @@ router.get('/task-hours', protect, async (req, res) => {
           taskId,
           userId: userObj.userId,
           userName: userObj.userName,
-          totalHours: Math.round((userObj.totalMinutes || 0) / 60 * 100) / 100 // 2 decimals
+          totalHours: Math.round((userObj.totalMinutes || 0) / 60 * 100) / 100, // 2 decimals
+          isManualTask: userObj.isManualTask || false,
+          manualTaskName: userObj.manualTaskName || null
         });
       });
     });
@@ -365,6 +410,59 @@ router.get('/task-hours', protect, async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error aggregating task hours:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get total hours for each user (including manual tasks)
+router.get('/user-hours', protect, async (req, res) => {
+  try {
+    // Get all timesheet entries
+    const timesheets = await Timesheet.find({})
+      .populate('user', 'firstName lastName');
+
+    // Map: { userId: { userName, totalMinutes, manualTaskMinutes } }
+    const userHours = {};
+
+    timesheets.forEach(ts => {
+      const user = ts.user;
+      const userId = user._id.toString();
+      const userName = `${user.firstName} ${user.lastName}`;
+      
+      if (!userHours[userId]) {
+        userHours[userId] = { 
+          userId, 
+          userName, 
+          totalMinutes: 0, 
+          manualTaskMinutes: 0,
+          regularTaskMinutes: 0
+        };
+      }
+
+      ts.entries.forEach(entry => {
+        const minutes = getMinutesBetween(entry.startTime, entry.endTime);
+        userHours[userId].totalMinutes += minutes;
+        
+        if (entry.task) {
+          userHours[userId].regularTaskMinutes += minutes;
+        } else if (entry.manualTaskName) {
+          userHours[userId].manualTaskMinutes += minutes;
+        }
+      });
+    });
+
+    // Convert to array format
+    const result = Object.values(userHours).map(user => ({
+      userId: user.userId,
+      userName: user.userName,
+      totalHours: Math.round((user.totalMinutes || 0) / 60 * 100) / 100,
+      manualTaskHours: Math.round((user.manualTaskMinutes || 0) / 60 * 100) / 100,
+      regularTaskHours: Math.round((user.regularTaskMinutes || 0) / 60 * 100) / 100
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error aggregating user hours:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -379,14 +477,15 @@ router.get('/task-costs', protect, async (req, res) => {
     const { search } = req.query;
     // Get all tasks
     const tasks = await Task.find().populate('assignedTo verificationAssignedTo secondVerificationAssignedTo', 'firstName lastName hourlyRate');
-    // Get all timesheets with entries linked to tasks
-    const timesheets = await Timesheet.find({ 'entries.task': { $ne: null } }).populate('user', 'firstName lastName hourlyRate').populate('entries.task', 'title');
+    // Get all timesheets with entries (both regular tasks and manual tasks)
+    const timesheets = await Timesheet.find({}).populate('user', 'firstName lastName hourlyRate').populate('entries.task', 'title');
     // Map: { taskId: { userId: { totalMinutes } } }
     const taskUserMinutes = {};
     timesheets.forEach(ts => {
       const user = ts.user;
       ts.entries.forEach(entry => {
         if (entry.task) {
+          // Regular task
           const taskId = entry.task._id.toString();
           const userId = user._id.toString();
           if (!taskUserMinutes[taskId]) taskUserMinutes[taskId] = {};
@@ -398,6 +497,19 @@ router.get('/task-costs', protect, async (req, res) => {
           let endM = eh * 60 + em;
           if (endM < startM) endM += 24 * 60;
           taskUserMinutes[taskId][userId] += (endM - startM);
+        } else if (entry.manualTaskName) {
+          // Manual task - create a special key for manual tasks
+          const manualTaskKey = `manual_${entry.manualTaskName}_${user._id}`;
+          const userId = user._id.toString();
+          if (!taskUserMinutes[manualTaskKey]) taskUserMinutes[manualTaskKey] = {};
+          if (!taskUserMinutes[manualTaskKey][userId]) taskUserMinutes[manualTaskKey][userId] = 0;
+          // Calculate minutes
+          const [sh, sm] = entry.startTime.split(':').map(Number);
+          const [eh, em] = entry.endTime.split(':').map(Number);
+          let startM = sh * 60 + sm;
+          let endM = eh * 60 + em;
+          if (endM < startM) endM += 24 * 60;
+          taskUserMinutes[manualTaskKey][userId] += (endM - startM);
         }
       });
     });
@@ -484,28 +596,46 @@ router.patch('/entry/:entryId', protect, async (req, res) => {
   }
 });
 
-// Submit today's timesheet (lock it)
+// Submit timesheet (lock it)
 router.post('/submit', protect, async (req, res) => {
   try {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const { date } = req.body;
+    let targetDate;
+    
+    if (date) {
+      // Submit for specific date
+      targetDate = new Date(date);
+      targetDate.setUTCHours(0, 0, 0, 0);
+    } else {
+      // Default to today
+      targetDate = new Date();
+      targetDate.setUTCHours(0, 0, 0, 0);
+    }
+    
+    const nextDate = new Date(targetDate);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    
     let timesheet = await Timesheet.findOne({
       user: req.user._id,
       date: {
-        $gte: today,
-        $lt: tomorrow
+        $gte: targetDate,
+        $lt: nextDate
       }
     });
+    
     if (!timesheet) {
-      return res.status(404).json({ message: 'No timesheet found for today.' });
+      return res.status(404).json({ message: 'No timesheet found for the specified date.' });
     }
+    
     if (timesheet.isCompleted) {
       return res.status(400).json({ message: 'Timesheet already submitted.' });
     }
+    
     timesheet.isCompleted = true;
     await timesheet.save();
+    
+    await timesheet.populate('entries.task', 'title description clientName clientGroup workType');
+    
     res.json({ message: 'Timesheet submitted successfully.', timesheet });
   } catch (error) {
     res.status(500).json({ message: error.message });

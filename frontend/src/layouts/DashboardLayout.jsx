@@ -29,6 +29,7 @@ const DashboardLayout = ({ children }) => {
       case 'Admin':
         menuItems.push(
           { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon, path: '/dashboard' },
+          { id: 'received-tasks', label: 'Received Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
           { id: 'assigned-tasks', label: 'Assigned Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' },
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'subordinate-timesheets', label: 'Subordinate Timesheets', icon: ClipboardDocumentListIcon, path: '/dashboard/subordinate-timesheets' },
@@ -132,8 +133,8 @@ const DashboardLayout = ({ children }) => {
             md:static md:translate-x-0 md:w-72 md:flex-shrink-0
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
         >
-          <nav className="h-full flex flex-col">
-            <div className="flex-1 py-4">
+          <nav className="h-full flex flex-col overflow-y-auto scrollbar-hide">
+            <div className="flex-1">
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = getCurrentPath() === item.id;
@@ -146,6 +147,7 @@ const DashboardLayout = ({ children }) => {
                         ? 'bg-[#6690f4] text-white'
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
+                    style={{marginTop: 0, marginBottom: 0}}
                   >
                     <Icon className={`flex-shrink-0 w-5 h-5 ${isActive ? 'text-white' : 'text-gray-600 group-hover:text-gray-900'}`} />
                     <span className="ml-3 truncate">{item.label}</span>
