@@ -107,8 +107,7 @@ const FileList = ({ taskId, files: initialFiles = [], onFileDeleted }) => {
               <div>
                 <a
                   href={file.cloudUrl || `${API_BASE_URL}/uploads/${file.filename}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  download={file.originalName}
                   className="text-blue-600 hover:text-blue-800 font-medium"
                 >
                   {file.originalName}
