@@ -21,7 +21,6 @@ const createTestNotification = async () => {
     const users = await User.find().limit(2);
     
     if (users.length < 2) {
-      console.log('Need at least 2 users in the database to test notifications');
       return;
     }
 
@@ -44,7 +43,6 @@ const createTestNotification = async () => {
     });
 
     const savedTask = await task.save();
-    console.log('Test task created:', savedTask._id);
 
     // Create notification
     const notification = new Notification({
@@ -55,14 +53,11 @@ const createTestNotification = async () => {
     });
 
     const savedNotification = await notification.save();
-    console.log('Test notification created:', savedNotification._id);
 
     // Test fetching notifications
     const notifications = await Notification.find({ recipient: recipient._id })
       .populate('task', 'title')
       .populate('assigner', 'firstName lastName');
-
-    console.log('Notifications for recipient:', notifications);
 
     // Test unread count
     const unreadCount = await Notification.countDocuments({
@@ -70,8 +65,6 @@ const createTestNotification = async () => {
       isRead: false,
       isDeleted: false
     });
-
-    console.log('Unread count:', unreadCount);
 
   } catch (error) {
     console.error('Error creating test notification:', error);

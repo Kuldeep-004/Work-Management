@@ -89,8 +89,6 @@ export const AuthProvider = ({ children }) => {
         throw new Error(data.message);
       }
 
-      // Log OTP to console for development
-      console.log('OTP for development:', data.otp);
       
       toast.success('OTP sent to your email!');
       return data;

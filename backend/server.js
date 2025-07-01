@@ -76,5 +76,4 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/haacas13'
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
-  console.log('JWT_SECRET is configured:', process.env.JWT_SECRET ? 'Yes' : 'No');
 }); 
