@@ -1,98 +1,58 @@
-import { v2 as cloudinary } from 'cloudinary';
+import ImageKit from 'imagekit';
 import fs from 'fs';
+import path from 'path';
 
-// Check if environment variables are set
-const requiredEnvVars = ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'];
-requiredEnvVars.forEach(varName => {
-  if (!process.env[varName]) {
-    console.error(`Missing required environment variable: ${varName}`);
-  }
+
+const imagekit = new ImageKit({
+  publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+  privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
 });
 
-// Configure cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
+// Helper to get file extension
+const getFileExtension = (filePath) => path.extname(filePath).slice(1);
 
-// Upload image to cloudinary
+// Upload image or file to ImageKit
 export const uploadImage = async (filePath) => {
-  try {
-    // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`File not found at path: ${filePath}`);
-    }
-
-    // Upload the file with current timestamp
-    const timestamp = Math.floor(Date.now() / 1000);
-    const result = await cloudinary.uploader.upload(filePath, {
-      folder: 'profile_pictures',
-      width: 300,
-      crop: "scale",
-      resource_type: "auto",
-      timestamp: timestamp,
-      use_filename: true,
-      unique_filename: true
-    });
-
-    return {
-      public_id: result.public_id,
-      url: result.secure_url
-    };
-  } catch (error) {
-    console.error('Cloudinary upload error:', error);
-    // Check for specific error types
-    if (error.message?.includes('Stale request')) {
-      throw new Error('Upload failed due to time synchronization issue. Please try again.');
-    }
-    throw new Error(error.message || 'Error uploading image to Cloudinary');
-  }
+  return uploadFile(filePath, 'profile_pictures');
 };
 
-// Upload any file to cloudinary
-export const uploadFile = async (filePath, folder = 'documents') => {
+export const uploadFile = async (filePath, folder = 'documents', mimetype = null) => {
   try {
-    // Check if file exists
     if (!fs.existsSync(filePath)) {
       throw new Error(`File not found at path: ${filePath}`);
     }
-
-    // Upload the file with current timestamp
-    const timestamp = Math.floor(Date.now() / 1000);
-    const result = await cloudinary.uploader.upload(filePath, {
+    const fileName = path.basename(filePath);
+    const fileBuffer = fs.readFileSync(filePath);
+    const uploadOptions = {
+      file: fileBuffer,
+      fileName: fileName,
       folder: folder,
-      resource_type: "auto",
-      timestamp: timestamp,
-      use_filename: true,
-      unique_filename: true
-    });
-
+      useUniqueFileName: true,
+    };
+    if (mimetype) {
+      uploadOptions.mime = mimetype;
+    }
+    const result = await imagekit.upload(uploadOptions);
     return {
-      public_id: result.public_id,
-      url: result.secure_url
+      public_id: result.fileId,
+      url: result.url
     };
   } catch (error) {
-    console.error('Cloudinary upload error:', error);
-    // Check for specific error types
-    if (error.message?.includes('Stale request')) {
-      throw new Error('Upload failed due to time synchronization issue. Please try again.');
-    }
-    throw new Error(error.message || 'Error uploading file to Cloudinary');
+    throw new Error(error.message || 'Error uploading file to ImageKit');
   }
 };
 
-// Delete image from cloudinary
+// Delete file from ImageKit
 export const deleteImage = async (public_id) => {
   try {
     if (public_id) {
-      const result = await cloudinary.uploader.destroy(public_id);
-      if (result.result !== 'ok') {
-        throw new Error(`Failed to delete image: ${result.result}`);
+      const result = await imagekit.deleteFile(public_id);
+      if (!result || result.error) {
+        throw new Error(`Failed to delete image: ${result.error?.message || 'Unknown error'}`);
       }
     }
   } catch (error) {
-    console.error('Cloudinary delete error:', error);
-    throw new Error(error.message || 'Error deleting image from Cloudinary');
+    throw new Error(error.message || 'Error deleting image from ImageKit');
   }
 }; 

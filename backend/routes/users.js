@@ -26,6 +26,10 @@ router.get('/', protect, async (req, res) => {
     else if (includeRejected !== 'true') {
       query.status = { $ne: 'rejected' };
     }
+    // Always filter only verified users unless explicitly overridden
+    if (typeof query.isEmailVerified === 'undefined') {
+      query.isEmailVerified = true;
+    }
     
     const users = await User.find(query).select('-password');
     res.json(users);
@@ -62,47 +66,24 @@ router.put('/profile', protect, uploadMiddleware, async (req, res) => {
     // Handle profile picture upload
     if (req.file) {
       try {
-        // Delete old image from cloudinary if exists
-        if (user.photo && user.photo.public_id) {
+        // Only attempt to delete if the old photo is from ImageKit
+        if (user.photo && user.photo.public_id && user.photo.url && user.photo.url.includes('imagekit.io')) {
           await deleteImage(user.photo.public_id);
         }
-
-        // Upload new image to cloudinary
+        // Upload new image to ImageKit
         const result = await uploadImage(req.file.path);
         user.photo = {
           public_id: result.public_id,
           url: result.url
         };
-
-        // Delete the local file
         try {
           await unlinkAsync(req.file.path);
-        } catch (unlinkError) {
-          console.error('Error deleting local file:', unlinkError);
-          // Continue execution even if file deletion fails
-        }
+        } catch (unlinkError) {}
       } catch (error) {
-        // Clean up the uploaded file
         if (req.file && req.file.path) {
-          try {
-            await unlinkAsync(req.file.path);
-          } catch (unlinkError) {
-            console.error('Error deleting local file:', unlinkError);
-          }
+          try { await unlinkAsync(req.file.path); } catch (e) {}
         }
-
-        // Handle specific errors
-        if (error.message?.includes('time synchronization')) {
-          return res.status(400).json({ 
-            message: 'Upload failed due to server time mismatch. Please try again.',
-            error: 'TIME_SYNC_ERROR'
-          });
-        }
-
-        console.error('Error handling photo upload:', error);
-        return res.status(500).json({ 
-          message: error.message || 'Error uploading image to cloud storage'
-        });
+        return res.status(500).json({ message: error.message || 'Error uploading image to ImageKit' });
       }
     }
 

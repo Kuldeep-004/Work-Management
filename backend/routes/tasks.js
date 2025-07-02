@@ -13,8 +13,9 @@ import Client from '../models/Client.js';
 import ClientGroup from '../models/ClientGroup.js';
 import WorkType from '../models/WorkType.js';
 import Notification from '../models/Notification.js';
-import { uploadFile, deleteImage } from '../utils/cloudinary.js';
+import { uploadFile, deleteImage } from '../utils/cloudinary.js'; // Now uses ImageKit
 import { promisify } from 'util';
+import ffmpeg from 'fluent-ffmpeg';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -153,8 +154,6 @@ router.get('/assigned/counts', protect, async (req, res) => {
 // Get task counts for received tasks
 router.get('/received/counts', protect, async (req, res) => {
   try {
-    console.log(`[RECEIVED COUNTS] User: ${req.user._id}`);
-    
     const executionCount = await Task.countDocuments({
       $or: [
         { assignedTo: req.user._id, verificationStatus: 'pending' },
@@ -172,8 +171,6 @@ router.get('/received/counts', protect, async (req, res) => {
       assignedTo: req.user._id,
       verificationStatus: 'completed'
     });
-    
-    console.log(`[RECEIVED COUNTS] Execution: ${executionCount}, Verification: ${verificationCount}, Completed: ${completedCount}`);
     
     res.json({
       execution: executionCount,
@@ -225,7 +222,7 @@ router.get('/all', protect, async (req, res) => {
         .sort({ createdAt: -1 });
     } else if (req.user.role === 'Head') {
       // Head: all except tasks involving Admins or other Heads (including completed verification)
-      const users = await User.find({ role: { $nin: ['Admin', 'Head'] } }).select('_id');
+      const users = await User.find({ role: { $nin: ['Admin', 'Head'] }, isEmailVerified: true }).select('_id');
       const userIds = users.map(u => u._id.toString());
       userIds.push(req.user._id.toString());
       tasks = await Task.find({
@@ -247,7 +244,7 @@ router.get('/all', protect, async (req, res) => {
       if (!req.user.team) {
         return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
       }
-      const teamUsers = await User.find({ team: req.user.team }).select('_id');
+      const teamUsers = await User.find({ team: req.user.team, isEmailVerified: true }).select('_id');
       const teamUserIds = teamUsers.map(u => u._id.toString());
       teamUserIds.push(req.user._id.toString());
       tasks = await Task.find({
@@ -407,8 +404,6 @@ router.get('/received', protect, async (req, res) => {
   try {
     const { tab = 'execution' } = req.query;
     
-    console.log(`[RECEIVED TASKS] User: ${req.user._id}, Tab: ${tab}`);
-    
     let query = {};
     
     // Filter based on tab
@@ -451,8 +446,6 @@ router.get('/received', protect, async (req, res) => {
         };
     }
     
-    console.log(`[RECEIVED TASKS] Query:`, JSON.stringify(query, null, 2));
-    
     const tasks = await Task.find(query)
       .populate('assignedTo', 'firstName lastName photo')
       .populate('assignedBy', 'firstName lastName photo')
@@ -461,19 +454,9 @@ router.get('/received', protect, async (req, res) => {
       .select('title description clientName clientGroup workType status priority inwardEntryDate dueDate targetDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments')
       .sort({ createdAt: -1 });
     
-    console.log(`[RECEIVED TASKS] Found ${tasks.length} tasks`);
-    console.log(`[RECEIVED TASKS] Tasks:`, tasks.map(t => ({
-      id: t._id,
-      title: t.title,
-      assignedTo: t.assignedTo?._id,
-      verificationAssignedTo: t.verificationAssignedTo?._id,
-      secondVerificationAssignedTo: t.secondVerificationAssignedTo?._id,
-      verificationStatus: t.verificationStatus
-    })));
-    
     res.json(tasks);
   } catch (error) {
-    console.error('[RECEIVED TASKS] Error:', error);
+    console.error('Error fetching received tasks:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -1044,25 +1027,56 @@ router.post('/:taskId/comments/audio', protect, uploadAudio.single('audio'), asy
       return res.status(400).json({ message: 'Audio file is required' });
     }
 
-    let audioUrl = req.file.filename; // Default to local filename
-    
+    // Debug logging
     try {
-      // Upload to Cloudinary
-      const cloudResult = await uploadFile(req.file.path, 'audio_comments');
+      const stats = fs.statSync(req.file.path);
+      console.log('Audio file path:', req.file.path);
+      console.log('Audio file size:', stats.size);
+      console.log('Audio file mimetype:', req.file.mimetype);
+    } catch (err) {
+      console.error('Error getting audio file stats:', err);
+    }
+
+    let audioUrl;
+    let tempMp3Path = null;
+    try {
+      let uploadPath = req.file.path;
+      let uploadMimetype = req.file.mimetype;
+      // If the file is .webm, convert to .mp3
+      if (req.file.mimetype === 'audio/webm' || req.file.originalname.endsWith('.webm')) {
+        tempMp3Path = req.file.path.replace(/\.webm$/, '.mp3');
+        await new Promise((resolve, reject) => {
+          ffmpeg(req.file.path)
+            .toFormat('mp3')
+            .on('end', resolve)
+            .on('error', reject)
+            .save(tempMp3Path);
+        });
+        uploadPath = tempMp3Path;
+        uploadMimetype = 'audio/mpeg';
+        console.log('Converted .webm to .mp3:', tempMp3Path);
+      }
+      // Upload to ImageKit
+      const cloudResult = await uploadFile(uploadPath, '/audio_comments', uploadMimetype);
+      console.log('ImageKit upload result:', cloudResult);
       audioUrl = cloudResult.url;
-      
-      // Delete local file after cloud upload
+      // Delete local files after cloud upload
       try {
         await unlinkAsync(req.file.path);
+        if (tempMp3Path) await unlinkAsync(tempMp3Path);
       } catch (unlinkError) {
-        // Ignore errors if file doesn't exist
         if (unlinkError.code !== 'ENOENT') {
           console.error('Error deleting local audio file:', unlinkError);
         }
       }
     } catch (cloudError) {
-      console.error('Error uploading audio to Cloudinary:', cloudError);
-      // Keep local file if cloud upload fails
+      console.error('Error uploading audio to ImageKit:', cloudError);
+      // Clean up temp files if conversion/upload fails
+      try {
+        if (req.file && req.file.path) await unlinkAsync(req.file.path);
+        if (tempMp3Path) await unlinkAsync(tempMp3Path);
+      } catch (e) {}
+      return res.status(500).json({ message: 'Error uploading audio to ImageKit' });
     }
 
     // Store just the filename or cloud URL
@@ -1162,64 +1176,6 @@ router.delete('/:taskId/comments/:commentId', protect, async (req, res) => {
   }
 });
 
-// Serve audio files
-router.get('/audio/:filename', (req, res) => {
-  const filename = req.params.filename;
-  
-  // Check if it's a cloud URL (starts with http)
-  if (filename.startsWith('http')) {
-    // Redirect to cloud URL
-    return res.redirect(filename);
-  }
-  
-  // Otherwise serve local file
-  const filePath = path.join(__dirname, '../uploads/audio', filename);
-  
-  // Check if file exists
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ message: 'Audio file not found' });
-  }
-
-  // Determine content type based on file extension
-  const ext = path.extname(filename).toLowerCase();
-  let contentType = 'audio/mpeg'; // default
-  switch (ext) {
-    case '.webm':
-      contentType = 'audio/webm';
-      break;
-    case '.wav':
-      contentType = 'audio/wav';
-      break;
-    case '.ogg':
-      contentType = 'audio/ogg';
-      break;
-    case '.mp3':
-      contentType = 'audio/mpeg';
-      break;
-    case '.m4a':
-      contentType = 'audio/mp4';
-      break;
-  }
-
-  // Set appropriate headers for audio streaming
-  res.setHeader('Content-Type', contentType);
-  res.setHeader('Content-Disposition', 'inline');
-  res.setHeader('Accept-Ranges', 'bytes');
-  
-  // Stream the file
-  const fileStream = fs.createReadStream(filePath);
-  
-  // Handle errors
-  fileStream.on('error', (error) => {
-    console.error('Error streaming audio file:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ message: 'Error streaming audio file' });
-    }
-  });
-
-  fileStream.pipe(res);
-});
-
 // Add a new route to get completed/verified tasks assigned to the user
 router.get('/received/completed', protect, async (req, res) => {
   try {
@@ -1275,7 +1231,6 @@ router.get('/head-dashboard', protect, async (req, res) => {
 // Get dashboard tasks for Team Head (see all tasks for their team members and self)
 router.get('/team-head-dashboard', protect, async (req, res) => {
   try {
-    console.error('[TEAM-HEAD-DASHBOARD] req.user:', req.user);
     if (req.user.role !== 'Team Head') {
       return res.status(403).json({ message: 'Only Team Heads can access this endpoint' });
     }
@@ -1283,7 +1238,7 @@ router.get('/team-head-dashboard', protect, async (req, res) => {
       return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
     }
     // Find all users in the same team
-    const teamUsers = await User.find({ team: req.user.team }).select('_id');
+    const teamUsers = await User.find({ team: req.user.team, isEmailVerified: true }).select('_id');
     const teamUserIds = teamUsers.map(u => u._id.toString());
     // Include self
     teamUserIds.push(req.user._id.toString());
