@@ -25,6 +25,10 @@ const taskSchema = new mongoose.Schema({
     required: true,
     trim: true
   }],
+  billed: {
+    type: Boolean,
+    default: true
+  },
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -65,7 +69,7 @@ const taskSchema = new mongoose.Schema({
   },
   verificationStatus: {
     type: String,
-    enum: ['pending','executed', 'first_verified','completed', 'rejected'],
+    enum: ['pending','completed'],
     default: 'pending'
   },
   originalAssignee: {
@@ -120,6 +124,14 @@ const taskSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     }
+  }],
+  selfVerification: {
+    type: Boolean,
+    default: false
+  },
+  guides: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   }]
 }, {
   timestamps: true

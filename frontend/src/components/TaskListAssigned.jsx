@@ -29,19 +29,50 @@ function formatDateTime(date) {
 const TaskListAssigned = ({ viewType = 'assigned' }) => {
   // ... (copy the entire body of TaskList, but replace TaskList with TaskListAssigned)
   // You may want to default viewType to 'assigned' if not provided
+  const [editingDescriptionTaskId, setEditingDescriptionTaskId] = useState(null);
+  const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
   const handleFileUploaded = (uploadedFiles) => {
     setTasks(prevTasks =>
       prevTasks.map(t =>
         t._id === selectedTask._id
-          ? { ...t, files: [...(t.files || []), ...uploadedFiles] }
+          ? { ...t, files: [
+              ...(t.files || []),
+              ...uploadedFiles.filter(uf => !(t.files || []).some(f => f._id === uf._id))
+            ] }
           : t
       )
     );
     setSelectedTask(prev =>
       prev && prev._id === selectedTask._id
-        ? { ...prev, files: [...(prev.files || []), ...uploadedFiles] }
+        ? { ...prev, files: [
+            ...(prev.files || []),
+            ...uploadedFiles.filter(uf => !(prev.files || []).some(f => f._id === uf._id))
+          ] }
         : prev
     );
+  };
+  const handleDescriptionEditSave = async (task) => {
+    if (editingDescriptionValue === task.description) {
+      setEditingDescriptionTaskId(null);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/tasks/${task._id}/description`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ description: editingDescriptionValue }),
+      });
+      if (!response.ok) throw new Error('Failed to update description');
+      const updatedTask = await response.json();
+      setTasks(prevTasks => prevTasks.map(t => t._id === task._id ? {...t, description: updatedTask.description} : t));
+      toast.success('Status updated');
+    } catch (error) {
+      toast.error(error.message || 'Failed to update status');
+    }
+    setEditingDescriptionTaskId(null);
   };
   return (
      <div className="space-y-4">
@@ -90,7 +121,7 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
               Title
             </th>
             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Description
+              Status
             </th>
             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Client Name
@@ -100,6 +131,9 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
             </th>
             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Work Type
+            </th>
+            <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Billed
             </th>
             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Task Status
@@ -144,8 +178,35 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-sm font-medium text-gray-900">{task.title}</div>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-500">{task.description}</div>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 border border-gray-300 bg-white w-[180px] min-w-[180px]" style={{verticalAlign: 'middle'}}>
+                {editingDescriptionTaskId === task._id ? (
+                  <input
+                    type="text"
+                    value={editingDescriptionValue}
+                    autoFocus
+                    onChange={e => setEditingDescriptionValue(e.target.value)}
+                    onBlur={() => handleDescriptionEditSave(task)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        handleDescriptionEditSave(task);
+                      }
+                    }}
+                    className="border border-gray-300 focus:border-blue-400 px-1 py-1 rounded w-full min-w-[140px] bg-white text-sm transition-colors"
+                    style={{fontSize: '1rem', height: '32px'}}
+                  />
+                ) : (
+                  <span
+                    className="cursor-pointer w-full block px-1 hover:border-gray-400 rounded border border-transparent"
+                    style={{minWidth: '140px', display: 'block'}}
+                    onClick={() => {
+                      setEditingDescriptionTaskId(task._id);
+                      setEditingDescriptionValue(task.description || '');
+                    }}
+                    title="Click to edit"
+                  >
+                    {task.description}
+                  </span>
+                )}
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-sm font-medium text-gray-900">{task.clientName}</div>
@@ -164,6 +225,9 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
                     </span>
                   ))}
                 </div>
+              </td>
+              <td className="px-6 py-4 text-center text-lg">
+                {task.billed ? '✔' : '✖'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 <div className="flex items-center space-x-2">

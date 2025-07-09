@@ -13,9 +13,8 @@ import Client from '../models/Client.js';
 import ClientGroup from '../models/ClientGroup.js';
 import WorkType from '../models/WorkType.js';
 import Notification from '../models/Notification.js';
-import { uploadFile, deleteImage } from '../utils/cloudinary.js'; // Now uses ImageKit
+import { uploadFile, deleteFile } from '../utils/cloudinary.js';
 import { promisify } from 'util';
-import ffmpeg from 'fluent-ffmpeg';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,58 +62,17 @@ const unlinkAsync = promisify(fs.unlink);
 const canAssignTask = async (req, res, next) => {
   try {
     const { assignedTo } = req.body;
-    const assigner = await User.findById(req.user._id);
-    
     // Check if assignedTo is an array and not empty
     if (!Array.isArray(assignedTo) || assignedTo.length === 0) {
       return res.status(400).json({ message: 'assignedTo must be a non-empty array of user IDs' });
     }
-
-    // Fresher cannot create tasks
-    if (assigner.role === 'Fresher') {
-      return res.status(403).json({ message: 'Freshers cannot create tasks' });
-    }
-
-    // Check each assignee's permissions
+    // Check each assignee exists
     for (const assigneeId of assignedTo) {
       const assignee = await User.findById(assigneeId);
       if (!assignee) {
         return res.status(404).json({ message: `Assignee with ID ${assigneeId} not found` });
       }
-
-      // Admin can assign to anyone (including themselves)
-      if (assigner.role === 'Admin') {
-        // No restrictions - Admin can assign to anyone
-        continue;
-      }
-
-      // Head can assign to any Team Head and Fresher (including themselves)
-      if (assigner.role === 'Head') {
-        if (assignee.role === 'Admin') {
-          return res.status(403).json({ message: 'Heads cannot assign tasks to Admins' });
-        }
-        // Head can assign to Team Head, Fresher, and themselves
-        continue;
-      }
-
-      // Team Head can assign to any Fresher from their team (including themselves)
-      if (assigner.role === 'Team Head') {
-        // Team Head can always assign to themselves
-        if (assigneeId === req.user._id.toString()) {
-          continue;
-        }
-        
-        // Check if assignee is in the same team and is a Fresher
-        if (assignee.team?.toString() !== assigner.team?.toString()) {
-          return res.status(403).json({ message: 'Team Heads can only assign tasks to members of their team' });
-        }
-        
-        if (assignee.role !== 'Fresher') {
-          return res.status(403).json({ message: 'Team Heads can only assign tasks to Freshers in their team' });
-        }
-      }
     }
-
     next();
   } catch (error) {
     console.error('Error in canAssignTask middleware:', error);
@@ -125,21 +83,29 @@ const canAssignTask = async (req, res, next) => {
 // Get task counts for assigned tasks
 router.get('/assigned/counts', protect, async (req, res) => {
   try {
+    // Execution: status not completed and no first verifier
     const executionCount = await Task.countDocuments({
       assignedBy: req.user._id,
-      verificationStatus: { $in: ['pending'] }
+      status: { $ne: 'completed' },
+      verificationAssignedTo: { $exists: false }
     });
-    
+
+    // Verification: status not completed and has first or second verifier
     const verificationCount = await Task.countDocuments({
       assignedBy: req.user._id,
-      verificationStatus: { $in: ['executed', 'first_verified'] }
+      status: { $ne: 'completed' },
+      $or: [
+        { verificationAssignedTo: { $exists: true, $ne: null } },
+        { secondVerificationAssignedTo: { $exists: true, $ne: null } }
+      ]
     });
-    
+
+    // Completed: status completed
     const completedCount = await Task.countDocuments({
       assignedBy: req.user._id,
-      verificationStatus: { $in: ['completed'] }
+      status: 'completed'
     });
-    
+
     res.json({
       execution: executionCount,
       verification: verificationCount,
@@ -154,28 +120,44 @@ router.get('/assigned/counts', protect, async (req, res) => {
 // Get task counts for received tasks
 router.get('/received/counts', protect, async (req, res) => {
   try {
+    // Execution: not completed, no verifiers, assigned to current user
     const executionCount = await Task.countDocuments({
+      status: { $ne: 'completed' },
+      assignedTo: req.user._id,
+      verificationAssignedTo: { $exists: false },
+      secondVerificationAssignedTo: { $exists: false }
+    });
+    // Received for verification: not completed, first verifier is current user, second verifier is empty
+    const receivedVerificationCount = await Task.countDocuments({
+      status: { $ne: 'completed' },
+      verificationAssignedTo: req.user._id,
       $or: [
-        { assignedTo: req.user._id, verificationStatus: 'pending' },
-        { verificationAssignedTo: req.user._id, verificationStatus: 'executed' },
-        { secondVerificationAssignedTo: req.user._id, verificationStatus: 'first_verified' }
+        { secondVerificationAssignedTo: { $exists: false } },
+        { secondVerificationAssignedTo: null }
       ]
     });
-    
-    const verificationCount = await Task.countDocuments({
+    // Issued for verification: not completed, first verifier is set, assigned to current user
+    const issuedVerificationCount = await Task.countDocuments({
+      status: { $ne: 'completed' },
       assignedTo: req.user._id,
-      verificationStatus: { $in: ['executed', 'first_verified'] }
+      verificationAssignedTo: { $exists: true, $ne: null }
     });
-    
+    // Completed: status is completed and assignedTo is current user
     const completedCount = await Task.countDocuments({
-      assignedTo: req.user._id,
-      verificationStatus: 'completed'
+      status: 'completed',
+      assignedTo: req.user._id
     });
-    
+    // Guidance: tasks where current user is a guide and status is not completed
+    const guidanceCount = await Task.countDocuments({
+      guides: req.user._id,
+      status: { $ne: 'completed' }
+    });
     res.json({
       execution: executionCount,
-      verification: verificationCount,
-      completed: completedCount
+      receivedVerification: receivedVerificationCount,
+      issuedVerification: issuedVerificationCount,
+      completed: completedCount,
+      guidance: guidanceCount
     });
   } catch (error) {
     console.error('Error fetching received task counts:', error);
@@ -186,17 +168,24 @@ router.get('/received/counts', protect, async (req, res) => {
 // Get all tasks for the user (dashboard)
 router.get('/', protect, async (req, res) => {
   try {
+    // Always exclude tasks with verificationStatus 'pending'
     const tasks = await Task.find({
-      $or: [
-        { assignedTo: req.user._id },
-        { assignedBy: req.user._id }
+      $and: [
+        {
+          $or: [
+            { assignedTo: req.user._id },
+            { assignedBy: req.user._id }
+          ]
+        },
+        { verificationStatus: { $ne: 'pending' } }
       ]
     })
       .populate('assignedTo', 'firstName lastName photo')
       .populate('assignedBy', 'firstName lastName photo')
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy createdAt updatedAt files comments')
+      .populate('guides', 'firstName lastName photo')
+      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -211,14 +200,15 @@ router.get('/all', protect, async (req, res) => {
     let tasks;
     if (req.user.role === 'Admin') {
       // Admin: all tasks (including completed verification)
-      tasks = await Task.find({})
+      tasks = await Task.find({ verificationStatus: { $ne: 'pending' } })
         .populate('assignedTo', 'firstName lastName photo group')
         .populate('assignedBy', 'firstName lastName photo group')
         .populate('verificationAssignedTo', 'firstName lastName photo')
         .populate('secondVerificationAssignedTo', 'firstName lastName photo')
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
-        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments')
+        .populate('guides', 'firstName lastName photo')
+        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
         .sort({ createdAt: -1 });
     } else if (req.user.role === 'Head') {
       // Head: all except tasks involving Admins or other Heads (including completed verification)
@@ -226,9 +216,14 @@ router.get('/all', protect, async (req, res) => {
       const userIds = users.map(u => u._id.toString());
       userIds.push(req.user._id.toString());
       tasks = await Task.find({
-        $or: [
-          { assignedTo: { $in: userIds } },
-          { assignedBy: { $in: userIds } }
+        $and: [
+          {
+            $or: [
+              { assignedTo: { $in: userIds } },
+              { assignedBy: { $in: userIds } }
+            ]
+          },
+          { verificationStatus: { $ne: 'pending' } }
         ]
       })
         .populate('assignedTo', 'firstName lastName photo')
@@ -237,10 +232,9 @@ router.get('/all', protect, async (req, res) => {
         .populate('secondVerificationAssignedTo', 'firstName lastName photo')
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
-        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments')
+        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
         .sort({ createdAt: -1 });
     } else if (req.user.role === 'Team Head') {
-      // Team Head: all tasks for their team members and self (including completed verification)
       if (!req.user.team) {
         return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
       }
@@ -248,11 +242,16 @@ router.get('/all', protect, async (req, res) => {
       const teamUserIds = teamUsers.map(u => u._id.toString());
       teamUserIds.push(req.user._id.toString());
       tasks = await Task.find({
-        $or: [
-          { assignedTo: { $in: teamUserIds } },
-          { assignedBy: { $in: teamUserIds } },
-          { verificationAssignedTo: req.user._id },
-          { secondVerificationAssignedTo: req.user._id }
+        $and: [
+          {
+            $or: [
+              { assignedTo: { $in: teamUserIds } },
+              { assignedBy: { $in: teamUserIds } },
+              { verificationAssignedTo: req.user._id },
+              { secondVerificationAssignedTo: req.user._id }
+            ]
+          },
+          { verificationStatus: { $ne: 'pending' } }
         ]
       })
         .populate('assignedTo', 'firstName lastName photo')
@@ -261,7 +260,7 @@ router.get('/all', protect, async (req, res) => {
         .populate('secondVerificationAssignedTo', 'firstName lastName photo')
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
-        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments')
+        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
         .sort({ createdAt: -1 });
     } else {
       return res.status(403).json({ message: 'You are not authorized to access all tasks' });
@@ -276,7 +275,25 @@ router.get('/all', protect, async (req, res) => {
 // Get tasks for verification (tasks assigned to user for verification)
 router.get('/for-verification', protect, async (req, res) => {
   try {
-    const tasks = await Task.find({
+    let tasks;
+    if (req.user.role === 'Admin' || req.user.role2 === 'Task Verifier') {
+      // Admins and Task Verifiers see all pending tasks
+      tasks = await Task.find({
+        verificationStatus: 'pending'
+      })
+        .populate('assignedTo', 'firstName lastName photo')
+        .populate('assignedBy', 'firstName lastName photo')
+        .populate('verificationAssignedTo', 'firstName lastName photo')
+        .populate('secondVerificationAssignedTo', 'firstName lastName photo')
+        .populate('originalAssignee', 'firstName lastName photo')
+        .populate('comments.createdBy', 'firstName lastName photo')
+        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
+        .sort({ createdAt: -1 });
+      res.json(tasks);
+      return;
+    }
+    // Default: only show tasks assigned to this user for verification
+    tasks = await Task.find({
       $or: [
         { verificationAssignedTo: req.user._id },
         { secondVerificationAssignedTo: req.user._id }
@@ -289,8 +306,8 @@ router.get('/for-verification', protect, async (req, res) => {
       .populate('secondVerificationAssignedTo', 'firstName lastName photo')
       .populate('originalAssignee', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
+      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
-
     // Filter: if user is first verifier, exclude tasks with status 'first_verified'
     const filteredTasks = tasks.filter(task => {
       if (task.verificationAssignedTo && task.verificationAssignedTo._id.toString() === req.user._id.toString()) {
@@ -298,7 +315,6 @@ router.get('/for-verification', protect, async (req, res) => {
       }
       return true;
     });
-
     res.json(filteredTasks);
   } catch (error) {
     console.error('Error fetching tasks for verification:', error);
@@ -319,7 +335,7 @@ router.get('/under-verification', protect, async (req, res) => {
       .populate('originalAssignee', 'firstName lastName photo')
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments')
+      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -348,7 +364,7 @@ router.get('/type/:type', protect, async (req, res) => {
       .populate('verificationAssignedTo', 'firstName lastName photo')
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments')
+      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -361,28 +377,26 @@ router.get('/type/:type', protect, async (req, res) => {
 router.get('/assigned', protect, async (req, res) => {
   try {
     const { tab = 'execution' } = req.query;
-    
     let query = { assignedBy: req.user._id };
-    
-    // Filter based on tab
     switch (tab) {
       case 'execution':
-        // Tasks for execution: tasks that are still being worked on
-        query.verificationStatus = { $in: ['pending'] };
+        query.status = { $ne: 'completed' };
+        query.verificationAssignedTo = { $exists: false };
         break;
       case 'verification':
-        // Tasks under verification: tasks that are being verified
-        query.verificationStatus = { $in: ['executed', 'first_verified'] };
+        query.status = { $ne: 'completed' };
+        query.$or = [
+          { verificationAssignedTo: { $exists: true, $ne: null } },
+          { secondVerificationAssignedTo: { $exists: true, $ne: null } }
+        ];
         break;
       case 'completed':
-        // Completed tasks: tasks that have been fully completed
-        query.verificationStatus = { $in: ['completed'] };
+        query.status = 'completed';
         break;
       default:
-        // Default to execution tab
-        query.verificationStatus = { $in: ['pending'] };
+        query.status = { $ne: 'completed' };
+        query.verificationAssignedTo = { $exists: false };
     }
-    
     const tasks = await Task.find(query)
       .populate('assignedTo', 'firstName lastName photo')
       .populate('assignedBy', 'firstName lastName photo')
@@ -390,7 +404,8 @@ router.get('/assigned', protect, async (req, res) => {
       .populate('secondVerificationAssignedTo', 'firstName lastName photo')
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments')
+      .populate('guides', 'firstName lastName photo')
+      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -403,60 +418,87 @@ router.get('/assigned', protect, async (req, res) => {
 router.get('/received', protect, async (req, res) => {
   try {
     const { tab = 'execution' } = req.query;
-    
     let query = {};
-    
-    // Filter based on tab
     switch (tab) {
       case 'execution':
-        // Tasks for execution: tasks that the user is currently working on
-        // For assignedTo users: verificationStatus = 'pending'
-        // For verifiers: verificationStatus = 'executed' (for first verifier) or 'first_verified' (for second verifier)
+        // Tasks for execution: not completed, no verifiers, assigned to current user
         query = {
+          status: { $ne: 'completed' },
+          assignedTo: req.user._id,
+          verificationAssignedTo: { $exists: false },
+          secondVerificationAssignedTo: { $exists: false }
+        };
+        break;
+      case 'receivedVerification':
+        // Tasks received for verification: not completed, first verifier is current user, second verifier is empty
+        query = {
+          status: { $ne: 'completed' },
+          verificationAssignedTo: req.user._id,
           $or: [
-            { assignedTo: req.user._id, verificationStatus: 'pending' },
-            { verificationAssignedTo: req.user._id, verificationStatus: 'executed' },
-            { secondVerificationAssignedTo: req.user._id, verificationStatus: 'first_verified' }
+            { secondVerificationAssignedTo: { $exists: false } },
+            { secondVerificationAssignedTo: null }
           ]
         };
         break;
-      case 'verification':
-        // Tasks under verification: tasks that are being verified by someone else
-        // Only show for assignedTo users when task is being verified by others
+      case 'issuedVerification':
+        // Tasks issued for verification: not completed, first verifier is set, assigned to current user
         query = {
+          status: { $ne: 'completed' },
           assignedTo: req.user._id,
-          verificationStatus: { $in: ['executed', 'first_verified'] }
+          verificationAssignedTo: { $exists: true, $ne: null }
         };
         break;
       case 'completed':
-        // Completed tasks: only show for assignedTo user
+        // Completed tasks: status is completed
         query = {
-          assignedTo: req.user._id,
-          verificationStatus: 'completed'
+          status: 'completed',
+          $or: [
+            { assignedTo: req.user._id },
+            { verificationAssignedTo: req.user._id },
+            { secondVerificationAssignedTo: req.user._id }
+          ]
         };
         break;
       default:
         // Default to execution tab
         query = {
-          $or: [
-            { assignedTo: req.user._id, verificationStatus: 'pending' },
-            { verificationAssignedTo: req.user._id, verificationStatus: 'executed' },
-            { secondVerificationAssignedTo: req.user._id, verificationStatus: 'first_verified' }
-          ]
+          status: { $ne: 'completed' },
+          assignedTo: req.user._id,
+          verificationAssignedTo: { $exists: false },
+          secondVerificationAssignedTo: { $exists: false }
         };
     }
-    
     const tasks = await Task.find(query)
       .populate('assignedTo', 'firstName lastName photo')
       .populate('assignedBy', 'firstName lastName photo')
       .populate('verificationAssignedTo', 'firstName lastName photo')
       .populate('secondVerificationAssignedTo', 'firstName lastName photo')
-      .select('title description clientName clientGroup workType status priority inwardEntryDate dueDate targetDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments')
+      .populate('guides', 'firstName lastName photo')
+      .select('title description clientName clientGroup workType status priority inwardEntryDate dueDate targetDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
       .sort({ createdAt: -1 });
-    
     res.json(tasks);
   } catch (error) {
     console.error('Error fetching received tasks:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get tasks for guidance (where current user is a guide)
+router.get('/received/guidance', protect, async (req, res) => {
+  try {
+    const tasks = await Task.find({
+      guides: req.user._id
+    })
+      .populate('assignedTo', 'firstName lastName photo')
+      .populate('assignedBy', 'firstName lastName photo')
+      .populate('verificationAssignedTo', 'firstName lastName photo')
+      .populate('secondVerificationAssignedTo', 'firstName lastName photo')
+      .populate('guides', 'firstName lastName photo')
+      .select('title description clientName clientGroup workType status priority inwardEntryDate dueDate targetDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+      .sort({ createdAt: -1 });
+    res.json(tasks);
+  } catch (error) {
+    console.error('Error fetching guidance tasks:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -469,7 +511,8 @@ router.get('/:id', protect, async (req, res) => {
     }
     const task = await Task.findById(req.params.id)
       .populate('assignedTo', 'firstName lastName photo group')
-      .populate('assignedBy', 'firstName lastName photo group');
+      .populate('assignedBy', 'firstName lastName photo group')
+      .populate('guides', 'firstName lastName photo');
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
     }
@@ -495,7 +538,8 @@ router.post('/', protect, canAssignTask, async (req, res) => {
       inwardEntryTime,
       dueDate,
       targetDate,
-      verificationAssignedTo
+      verificationAssignedTo,
+      billed
     } = req.body;
 
     const createdTasks = [];
@@ -515,6 +559,12 @@ router.post('/', protect, canAssignTask, async (req, res) => {
     }
 
     for (const userId of assignedTo) {
+      // Determine verification status based on assigner role
+      const assignerUser = await User.findById(req.user._id);
+      let verificationStatus = 'completed';
+      if (assignerUser.role === 'Fresher') {
+        verificationStatus = 'pending';
+      }
       const task = new Task({
         title,
         description,
@@ -527,7 +577,10 @@ router.post('/', protect, canAssignTask, async (req, res) => {
         inwardEntryDate: combinedInwardEntryDate,
         dueDate,
         targetDate,
-        verificationAssignedTo
+        verificationAssignedTo,
+        billed: billed !== undefined ? billed : true,
+        selfVerification: req.body.selfVerification ?? false,
+        verificationStatus
       });
       const savedTask = await task.save();
       createdTasks.push(savedTask);
@@ -583,14 +636,24 @@ router.patch('/:taskId/status', protect, async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // Only the assignee can update the task status
-    if (task.assignedTo._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized to update task status' });
+    const { status } = req.body;
+    // Handle reject as a special case
+    if (status === 'reject') {
+      task.verificationAssignedTo = undefined;
+      task.secondVerificationAssignedTo = undefined;
+      task.status = 'pending';
+      await task.save();
+      const updatedTask = await Task.findById(task._id)
+        .populate('assignedTo', 'firstName lastName photo')
+        .populate('assignedBy', 'firstName lastName photo')
+        .populate('verificationAssignedTo', 'firstName lastName photo')
+        .populate('files.uploadedBy', 'firstName lastName photo');
+      return res.json(updatedTask);
     }
 
-    const { status } = req.body;
-    if (!['pending', 'in_progress', 'completed'].includes(status)) {
-      return res.status(400).json({ message: 'Invalid status value' });
+    // Enforce selfVerification check before allowing completion
+    if (status === 'completed' && !task.selfVerification) {
+      return res.status(400).json({ message: 'Self verification must be completed before marking this task as completed.' });
     }
 
     // Update status
@@ -709,6 +772,96 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
   }
 });
 
+// Controller for updating task description
+async function updateTaskDescription(req, res) {
+  try {
+    const { description } = req.body;
+    if (typeof description !== 'string') {
+      return res.status(400).json({ message: 'Description is required.' });
+    }
+    const task = await Task.findByIdAndUpdate(
+      req.params.taskId,
+      { description },
+      { new: true }
+    )
+      .populate('assignedTo', 'firstName lastName photo')
+      .populate('assignedBy', 'firstName lastName photo')
+      .populate('verificationAssignedTo', 'firstName lastName photo')
+      .populate('secondVerificationAssignedTo', 'firstName lastName photo')
+      .populate('files.uploadedBy', 'firstName lastName photo')
+      .populate('comments.createdBy', 'firstName lastName photo');
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found.' });
+    }
+    res.json(task);
+  } catch (error) {
+    console.error('Error updating description:', error);
+    res.status(500).json({ message: 'Failed to update description.' });
+  }
+}
+
+// PATCH /:taskId/description
+router.patch('/:taskId/description', protect, updateTaskDescription);
+
+// PATCH /:taskId/priority
+router.patch('/:taskId/priority', protect, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.taskId)
+      .populate('assignedTo', 'firstName lastName photo')
+      .populate('assignedBy', 'firstName lastName photo')
+      .populate('verificationAssignedTo', 'firstName lastName photo')
+      .populate('files.uploadedBy', 'firstName lastName photo');
+
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Only the assignee can update the task priority
+    if (task.assignedTo._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to update task priority' });
+    }
+
+    const { priority } = req.body;
+    const allowedPriorities = [
+      'urgent',
+      'today',
+      'lessThan3Days',
+      'thisWeek',
+      'thisMonth',
+      'regular',
+      'filed',
+      'dailyWorksOffice',
+      'monthlyWorks'
+    ];
+    if (!allowedPriorities.includes(priority)) {
+      return res.status(400).json({ message: 'Invalid priority value' });
+    }
+
+    // Update priority
+    task.priority = priority;
+    await task.save();
+
+    // Fetch the updated task with all populated fields
+    const updatedTask = await Task.findById(task._id)
+      .populate('assignedTo', 'firstName lastName photo')
+      .populate('assignedBy', 'firstName lastName photo')
+      .populate('verificationAssignedTo', 'firstName lastName photo')
+      .populate('files.uploadedBy', 'firstName lastName photo');
+
+    if (!updatedTask) {
+      throw new Error('Failed to fetch updated task');
+    }
+
+    res.json(updatedTask);
+  } catch (error) {
+    console.error('Error updating task priority:', error);
+    res.status(500).json({ 
+      message: 'Error updating task priority',
+      error: error.message 
+    });
+  }
+});
+
 // Delete task
 router.delete('/:id', protect, async (req, res) => {
   try {
@@ -743,23 +896,13 @@ router.post('/:taskId/files', protect, uploadTaskFilesMiddleware, async (req, re
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // Check if user is authorized (either assignee or creator)
-    const isAssignee = task.assignedTo.toString() === req.user._id.toString();
-    const isCreator = task.assignedBy.toString() === req.user._id.toString();
-    const isVerifier = task.verificationAssignedTo?.toString() === req.user._id.toString();
-
-    if (!isAssignee && !isCreator && !isVerifier) {
-      return res.status(403).json({ message: 'Not authorized to upload files to this task' });
-    }
-
     // Add uploaded files to task
     const uploadedFiles = [];
     
     for (const file of req.files) {
       try {
-        // Upload to Cloudinary
-        const cloudResult = await uploadFile(file.path, 'task_files');
-        
+        // Upload to pCloud
+        const cloudResult = await uploadFile(file.path, 'Documents/Files');
         // Delete local file after cloud upload
         try {
           await unlinkAsync(file.path);
@@ -769,7 +912,6 @@ router.post('/:taskId/files', protect, uploadTaskFilesMiddleware, async (req, re
             console.error('Error deleting local file:', unlinkError);
           }
         }
-        
         uploadedFiles.push({
           filename: file.filename,
           originalName: file.originalname,
@@ -778,14 +920,8 @@ router.post('/:taskId/files', protect, uploadTaskFilesMiddleware, async (req, re
           uploadedBy: req.user._id
         });
       } catch (cloudError) {
-        console.error('Error uploading to Cloudinary:', cloudError);
-        // Fallback to local storage if cloud upload fails
-        uploadedFiles.push({
-          filename: file.filename,
-          originalName: file.originalname,
-          path: file.filename,
-          uploadedBy: req.user._id
-        });
+        console.error('Error uploading to pCloud:', cloudError);
+        // Do not push to uploadedFiles if upload fails
       }
     }
 
@@ -808,15 +944,6 @@ router.delete('/:taskId/files/:fileId', protect, async (req, res) => {
     const task = await Task.findById(req.params.taskId);
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
-    }
-
-    // Check if user is authorized (either assignee or creator)
-    const isAssignee = task.assignedTo.toString() === req.user._id.toString();
-    const isCreator = task.assignedBy.toString() === req.user._id.toString();
-    const isVerifier = task.verificationAssignedTo?.toString() === req.user._id.toString();
-
-    if (!isAssignee && !isCreator && !isVerifier) {
-      return res.status(403).json({ message: 'Not authorized to delete files from this task' });
     }
 
     // Find the file
@@ -880,6 +1007,11 @@ router.post('/:taskId/complete', protect, async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to complete this task' });
     }
 
+    // Enforce selfVerification check before allowing completion
+    if (!task.selfVerification) {
+      return res.status(400).json({ message: 'Self verification must be completed before marking this task as completed.' });
+    }
+
     // Update task
     task.status = 'completed';
     await task.save();
@@ -908,47 +1040,26 @@ router.post('/:taskId/verify', protect, async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // Check if user is the verifier (either first or second)
+    // Allow Admins and Task Verifiers to approve/reject any pending task
+    const isAdminOrTaskVerifier = req.user.role === 'Admin' || req.user.role2 === 'Task Verifier';
     const isFirstVerifier = task.verificationAssignedTo && task.verificationAssignedTo.toString() === req.user._id.toString();
     const isSecondVerifier = task.secondVerificationAssignedTo && task.secondVerificationAssignedTo.toString() === req.user._id.toString();
 
-    if (!isFirstVerifier && !isSecondVerifier) {
+    if (!isFirstVerifier && !isSecondVerifier && !isAdminOrTaskVerifier) {
       return res.status(403).json({ message: 'Not authorized to verify this task' });
     }
 
     if (action === 'approve') {
-      // If second verifier, mark as completed
-      if (isSecondVerifier) {
-        task.status = 'completed';
-        task.verificationStatus = 'completed';
-        task.verificationComments = comments;
-        task.verificationAssignedTo = null;
-        task.secondVerificationAssignedTo = null;
-      } else {
-        // Approve the task (first verifier)
-        task.status = 'completed';
-        task.verificationStatus = 'approved';
-        task.verificationComments = comments;
-      }
-    } else if (action === 'reject') {
-      // Reject the task and send back to original assignee
-      task.status = 'rejected';
-      task.verificationStatus = 'rejected';
+      task.verificationStatus = 'completed';
       task.verificationComments = comments;
-      task.assignedTo = task.originalAssignee; // Reassign to original assignee
-      task.verificationAssignedTo = null; // Clear verifier
-      task.secondVerificationAssignedTo = null;
+      await task.save();
+      return res.json(task);
+    } else if (action === 'reject') {
+      await Task.deleteOne({ _id: taskId });
+      return res.json({ message: 'Task rejected and deleted.' });
+    } else {
+      return res.status(400).json({ message: 'Invalid action' });
     }
-
-    await task.save();
-
-    const updatedTask = await Task.findById(taskId)
-      .populate('assignedTo', 'firstName lastName photo')
-      .populate('assignedBy', 'firstName lastName photo')
-      .populate('verificationAssignedTo', 'firstName lastName photo')
-      .populate('originalAssignee', 'firstName lastName photo');
-
-    res.json(updatedTask);
   } catch (error) {
     console.error('Error verifying task:', error);
     res.status(500).json({ message: error.message });
@@ -1038,45 +1149,26 @@ router.post('/:taskId/comments/audio', protect, uploadAudio.single('audio'), asy
     }
 
     let audioUrl;
-    let tempMp3Path = null;
     try {
-      let uploadPath = req.file.path;
-      let uploadMimetype = req.file.mimetype;
-      // If the file is .webm, convert to .mp3
-      if (req.file.mimetype === 'audio/webm' || req.file.originalname.endsWith('.webm')) {
-        tempMp3Path = req.file.path.replace(/\.webm$/, '.mp3');
-        await new Promise((resolve, reject) => {
-          ffmpeg(req.file.path)
-            .toFormat('mp3')
-            .on('end', resolve)
-            .on('error', reject)
-            .save(tempMp3Path);
-        });
-        uploadPath = tempMp3Path;
-        uploadMimetype = 'audio/mpeg';
-        console.log('Converted .webm to .mp3:', tempMp3Path);
-      }
-      // Upload to ImageKit
-      const cloudResult = await uploadFile(uploadPath, '/audio_comments', uploadMimetype);
-      console.log('ImageKit upload result:', cloudResult);
+      // Upload to pCloud
+      const cloudResult = await uploadFile(req.file.path, 'Documents/Files');
+      console.log('pCloud upload result:', cloudResult);
       audioUrl = cloudResult.url;
-      // Delete local files after cloud upload
+      // Delete local file after cloud upload
       try {
         await unlinkAsync(req.file.path);
-        if (tempMp3Path) await unlinkAsync(tempMp3Path);
       } catch (unlinkError) {
         if (unlinkError.code !== 'ENOENT') {
           console.error('Error deleting local audio file:', unlinkError);
         }
       }
     } catch (cloudError) {
-      console.error('Error uploading audio to ImageKit:', cloudError);
-      // Clean up temp files if conversion/upload fails
+      console.error('Error uploading audio to pCloud:', cloudError);
+      // Clean up temp file if upload fails
       try {
         if (req.file && req.file.path) await unlinkAsync(req.file.path);
-        if (tempMp3Path) await unlinkAsync(tempMp3Path);
       } catch (e) {}
-      return res.status(500).json({ message: 'Error uploading audio to ImageKit' });
+      return res.status(500).json({ message: 'Error uploading audio to pCloud' });
     }
 
     // Store just the filename or cloud URL
@@ -1189,7 +1281,7 @@ router.get('/received/completed', protect, async (req, res) => {
       .populate('assignedBy', 'firstName lastName photo')
       .populate('verificationAssignedTo', 'firstName lastName photo')
       .populate('secondVerificationAssignedTo', 'firstName lastName photo')
-      .select('title description clientName clientGroup workType status priority inwardEntryDate dueDate targetDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments')
+      .select('title description clientName clientGroup workType status priority inwardEntryDate dueDate targetDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -1219,7 +1311,8 @@ router.get('/head-dashboard', protect, async (req, res) => {
       .populate('assignedBy', 'firstName lastName photo')
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy createdAt updatedAt files comments')
+      .populate('guides', 'firstName lastName photo')
+      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -1253,7 +1346,8 @@ router.get('/team-head-dashboard', protect, async (req, res) => {
       .populate('assignedBy', 'firstName lastName photo')
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy createdAt updatedAt files comments')
+      .populate('guides', 'firstName lastName photo')
+      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -1289,6 +1383,58 @@ router.get('/unique/work-types', protect, async (req, res) => {
   } catch (error) {
     console.error('Error fetching unique work types:', error);
     res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// PATCH /:taskId/verifier - update the first or second verifier for a task
+router.patch('/:taskId/verifier', protect, async (req, res) => {
+  try {
+    const { verificationAssignedTo, secondVerificationAssignedTo } = req.body;
+    if (!verificationAssignedTo && !secondVerificationAssignedTo) {
+      return res.status(400).json({ message: 'verificationAssignedTo or secondVerificationAssignedTo is required' });
+    }
+    const task = await Task.findById(req.params.taskId);
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    // Allow any authenticated user to update either verifier
+    if (verificationAssignedTo) {
+      task.verificationAssignedTo = verificationAssignedTo;
+    }
+    if (secondVerificationAssignedTo) {
+      task.secondVerificationAssignedTo = secondVerificationAssignedTo;
+    }
+    await task.save();
+    const updatedTask = await Task.findById(task._id)
+      .populate('assignedTo', 'firstName lastName photo')
+      .populate('assignedBy', 'firstName lastName photo')
+      .populate('verificationAssignedTo', 'firstName lastName photo')
+      .populate('secondVerificationAssignedTo', 'firstName lastName photo');
+    res.json(updatedTask);
+  } catch (error) {
+    console.error('Error updating verifier:', error);
+    res.status(500).json({ message: 'Failed to update verifier' });
+  }
+});
+
+// Update guides for a task
+router.put('/:id/guides', protect, async (req, res) => {
+  try {
+    const { guides } = req.body;
+    if (!Array.isArray(guides)) {
+      return res.status(400).json({ message: 'Guides must be an array of user IDs' });
+    }
+    const task = await Task.findByIdAndUpdate(
+      req.params.id,
+      { guides },
+      { new: true }
+    ).populate('guides', 'firstName lastName photo');
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    res.json(task);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 

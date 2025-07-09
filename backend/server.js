@@ -8,7 +8,6 @@ import fs from 'fs';
 import authRoutes from './routes/auth.js';
 import taskRoutes from './routes/tasks.js';
 import userRoutes from './routes/users.js';
-import todoRoutes from './routes/todos.js';
 import teamRoutes from './routes/teams.js';
 import announcementRoutes from './routes/announcements.js';
 import clientRoutes from './routes/clients.js';
@@ -59,7 +58,6 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tasks', taskRoutes);
-app.use('/api/todos', todoRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/clients', clientRoutes);

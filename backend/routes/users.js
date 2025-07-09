@@ -5,7 +5,7 @@ import { protect } from '../middleware/authMiddleware.js';
 import jwt from 'jsonwebtoken';
 import Team from '../models/Team.js';
 import { uploadMiddleware } from '../middleware/uploadMiddleware.js';
-import { uploadImage, deleteImage } from '../utils/cloudinary.js';
+import { uploadImage, deleteFile } from '../utils/cloudinary.js';
 import fs from 'fs';
 import { promisify } from 'util';
 
@@ -66,11 +66,11 @@ router.put('/profile', protect, uploadMiddleware, async (req, res) => {
     // Handle profile picture upload
     if (req.file) {
       try {
-        // Only attempt to delete if the old photo is from ImageKit
-        if (user.photo && user.photo.public_id && user.photo.url && user.photo.url.includes('imagekit.io')) {
-          await deleteImage(user.photo.public_id);
+        // Delete old photo if exists
+        if (user.photo && user.photo.public_id) {
+          await deleteFile(user.photo.public_id);
         }
-        // Upload new image to ImageKit
+        // Upload new image to pCloud
         const result = await uploadImage(req.file.path);
         user.photo = {
           public_id: result.public_id,
@@ -83,7 +83,7 @@ router.put('/profile', protect, uploadMiddleware, async (req, res) => {
         if (req.file && req.file.path) {
           try { await unlinkAsync(req.file.path); } catch (e) {}
         }
-        return res.status(500).json({ message: error.message || 'Error uploading image to ImageKit' });
+        return res.status(500).json({ message: error.message || 'Error uploading image to pCloud' });
       }
     }
 
@@ -396,6 +396,16 @@ router.put('/:userId/hourly-rate', protect, async (req, res) => {
     user.hourlyRate = hourlyRate;
     await user.save();
     res.json({ message: 'Hourly rate updated', userId: user._id, hourlyRate: user.hourlyRate });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get all users except the current user
+router.get('/except-me', protect, async (req, res) => {
+  try {
+    const users = await User.find({ _id: { $ne: req.user._id }, isEmailVerified: true, status: { $ne: 'rejected' } }).select('-password');
+    res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

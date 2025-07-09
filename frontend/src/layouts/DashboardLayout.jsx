@@ -11,6 +11,7 @@ import {
   MegaphoneIcon,
   BuildingOfficeIcon,
   ClockIcon,
+  ShieldCheckIcon, // <-- Add this import
 } from '@heroicons/react/24/outline';
 import TopBar from '../components/TopBar';
 import { useState } from 'react';
@@ -31,9 +32,12 @@ const DashboardLayout = ({ children }) => {
           { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon, path: '/dashboard' },
           { id: 'received-tasks', label: 'Received Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
           { id: 'assigned-tasks', label: 'Assigned Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' },
+          { id: 'billed-tasks', label: 'Billed Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/billed-tasks' },
+          { id: 'unbilled-tasks', label: 'UnBilled Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/unbilled-tasks' },
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'subordinate-timesheets', label: 'Subordinate Timesheets', icon: ClipboardDocumentListIcon, path: '/dashboard/subordinate-timesheets' },
-          { id: 'todos', label: 'My Todos', icon: CheckCircleIcon, path: '/dashboard/todos' },
+          { id: 'task-verification', label: 'Tasks Pending For Approval', icon: ShieldCheckIcon, path: '/dashboard/task-verification' },
+          { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'team', label: 'Teams', icon: UserGroupIcon, path: '/dashboard/team' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'cost', label: 'Cost', icon: ChartBarIcon, path: '/dashboard/cost' },
@@ -50,7 +54,7 @@ const DashboardLayout = ({ children }) => {
           { id: 'received-tasks', label: 'Received Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
           { id: 'assigned-tasks', label: 'Assigned Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' },
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
-          { id: 'todos', label: 'My Todos', icon: CheckCircleIcon, path: '/dashboard/todos' },
+          { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'clients', label: 'Clients', icon: BuildingOfficeIcon, path: '/dashboard/clients' },
           { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' }
@@ -62,7 +66,7 @@ const DashboardLayout = ({ children }) => {
           { id: 'received-tasks', label: 'Received Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
           { id: 'assigned-tasks', label: 'Assigned Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' },
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
-          { id: 'todos', label: 'My Todos', icon: CheckCircleIcon, path: '/dashboard/todos' },
+          { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
           { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' },
@@ -72,8 +76,9 @@ const DashboardLayout = ({ children }) => {
       case 'Fresher':
         menuItems.push(
           { id: 'received-tasks', label: 'Received Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
+          { id: 'assigned-tasks', label: 'Assigned Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' },
           { id: 'timesheets', label: 'Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
-          { id: 'todos', label: 'My Todos', icon: CheckCircleIcon, path: '/dashboard/todos' },
+          { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
           { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' }
@@ -83,7 +88,7 @@ const DashboardLayout = ({ children }) => {
         menuItems.push(
           { id: 'received-tasks', label: 'Received Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
           { id: 'timesheets', label: 'Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
-          { id: 'todos', label: 'My Todos', icon: CheckCircleIcon, path: '/dashboard/todos' },
+          { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
           { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' },
@@ -98,6 +103,22 @@ const DashboardLayout = ({ children }) => {
         icon: ClipboardDocumentListIcon,
         path: '/dashboard/subordinate-timesheets'
       });
+    }
+    // Add Task Verification link for Task Verifier (if not already admin)
+    if (user.role2 === 'Task Verifier' && user.role !== 'Admin') {
+      // Find index of Notes to insert before it
+      const notesIndex = menuItems.findIndex(item => item.id === 'notes');
+      const taskVerificationItem = {
+        id: 'task-verification',
+        label: 'Tasks Pending For Approval',
+        icon: ShieldCheckIcon,
+        path: '/dashboard/task-verification'
+      };
+      if (notesIndex !== -1) {
+        menuItems.splice(notesIndex, 0, taskVerificationItem);
+      } else {
+        menuItems.push(taskVerificationItem);
+      }
     }
   }
 
@@ -129,8 +150,8 @@ const DashboardLayout = ({ children }) => {
           />
         )}
         <div
-          className={`fixed z-40 inset-y-0 left-0 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out
-            md:static md:translate-x-0 md:w-72 md:flex-shrink-0
+          className={`fixed z-40 inset-y-0 left-0 w-56 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out
+            md:static md:translate-x-0 md:w-[280px] md:flex-shrink-0
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
         >
           <nav className="h-full flex flex-col overflow-y-auto scrollbar-hide">

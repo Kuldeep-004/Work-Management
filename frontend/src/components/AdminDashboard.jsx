@@ -19,6 +19,7 @@ import PDFColumnSelector from './PDFColumnSelector';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { API_BASE_URL } from '../apiConfig';
+import AdvancedTaskTable from './AdvancedTaskTable';
 
 function formatDate(date) {
   if (!date) return 'NA';
@@ -41,23 +42,25 @@ function formatDateTime(date) {
 }
 
 const ALL_COLUMNS = [
-  { id: 'title', label: 'Title' },
-  { id: 'description', label: 'Description' },
-  { id: 'clientName', label: 'Client Name' },
-  { id: 'clientGroup', label: 'Client Group' },
-  { id: 'workType', label: 'Work Type' },
-  { id: 'status', label: 'Task Status' },
-  { id: 'verificationStatus', label: 'Verification Status' },
-  { id: 'priority', label: 'Priority' },
-  { id: 'inwardEntryDate', label: 'Inward Entry Date' },
-  { id: 'dueDate', label: 'Due Date' },
-  { id: 'targetDate', label: 'Target Date' },
-  { id: 'assignedBy', label: 'Assigned By' },
-  { id: 'assignedTo', label: 'Assigned To' },
-  { id: 'verificationAssignedTo', label: 'First Verifier' },
-  { id: 'secondVerificationAssignedTo', label: 'Second Verifier' },
-  { id: 'files', label: 'Files' },
-  { id: 'comments', label: 'Comments' },
+  { id: 'title', label: 'Title', defaultWidth: 256 },
+  { id: 'description', label: 'Status', defaultWidth: 180 },
+  { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
+  { id: 'clientGroup', label: 'Client Group', defaultWidth: 150 },
+  { id: 'workType', label: 'Work Type', defaultWidth: 150 },
+  { id: 'billed', label: 'Billed', defaultWidth: 80 },
+  { id: 'status', label: 'Stages', defaultWidth: 120 },
+  { id: 'priority', label: 'Priority', defaultWidth: 120 },
+  { id: 'selfVerification', label: 'Self Verification', defaultWidth: 120 },
+  { id: 'inwardEntryDate', label: 'Inward Entry Date', defaultWidth: 150 },
+  { id: 'dueDate', label: 'Due Date', defaultWidth: 120 },
+  { id: 'targetDate', label: 'Target Date', defaultWidth: 120 },
+  { id: 'assignedBy', label: 'Assigned By', defaultWidth: 150 },
+  { id: 'assignedTo', label: 'Assigned To', defaultWidth: 150 },
+  { id: 'verificationAssignedTo', label: 'First Verifier', defaultWidth: 150 },
+  { id: 'secondVerificationAssignedTo', label: 'Second Verifier', defaultWidth: 150 },
+  { id: 'guides', label: 'Guide', defaultWidth: 150 },
+  { id: 'files', label: 'Files', defaultWidth: 120 },
+  { id: 'comments', label: 'Comments', defaultWidth: 120 },
 ];
 
 const Dashboard = () => {
@@ -91,10 +94,38 @@ const Dashboard = () => {
     return ALL_COLUMNS.map(col => col.id);
   });
 
+  // Drag and drop state
+  const [columnOrder, setColumnOrder] = useState(() => {
+    const userId = user?._id || 'guest';
+    const key = `admindashboard_column_order_${userId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) return JSON.parse(saved);
+    return ALL_COLUMNS.map(col => col.id);
+  });
+
+  const [columnWidths, setColumnWidths] = useState({});
+
+  const [draggedColumn, setDraggedColumn] = useState(null);
+  const [dragOverColumn, setDragOverColumn] = useState(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizingColumn, setResizingColumn] = useState(null);
+  const [resizeStartX, setResizeStartX] = useState(0);
+  const [resizeStartWidth, setResizeStartWidth] = useState(0);
+
+  // Use refs to track resizing state for event handlers
+  const isResizingRef = useRef(false);
+  const resizingColumnRef = useRef(null);
+  const resizeStartXRef = useRef(0);
+  const resizeStartWidthRef = useRef(0);
+
   const columnsDropdownRef = useRef(null);
+  const tableRef = useRef(null);
 
   // State for PDF column selector
   const [showPDFColumnSelector, setShowPDFColumnSelector] = useState(false);
+
+  const [editingDescriptionTaskId, setEditingDescriptionTaskId] = useState(null);
+  const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -247,6 +278,8 @@ const Dashboard = () => {
     };
 
     let filteredTasks = tasks.filter(task => {
+      // Exclude tasks with verificationStatus 'pending'
+      if (task.verificationStatus === 'pending') return false;
       // Apply search filter
       if (searchTerm) {
         const lowercasedTerm = searchTerm.toLowerCase();
@@ -444,9 +477,20 @@ const Dashboard = () => {
     setTasks(prevTasks => 
       prevTasks.map(t => 
         t._id === selectedTask._id 
-          ? { ...t, files: [...(t.files || []), ...files] }
+          ? { ...t, files: [
+              ...(t.files || []),
+              ...files.filter(uf => !(t.files || []).some(f => f._id === uf._id))
+            ] }
           : t
       )
+    );
+    setSelectedTask(prev =>
+      prev && prev._id === selectedTask._id
+        ? { ...prev, files: [
+            ...(prev.files || []),
+            ...files.filter(uf => !(prev.files || []).some(f => f._id === uf._id))
+          ] }
+        : prev
     );
   };
 
@@ -524,14 +568,17 @@ const Dashboard = () => {
           case 'workType':
             row[col.label] = Array.isArray(task.workType) ? task.workType.join(', ') : task.workType;
             break;
+          case 'billed':
+            row[col.label] = task.billed ? 'Yes' : 'No';
+            break;
           case 'status':
             row[col.label] = task.status;
             break;
-          case 'verificationStatus':
-            row[col.label] = task.verificationStatus;
-            break;
           case 'priority':
             row[col.label] = task.priority;
+            break;
+          case 'selfVerification':
+            row[col.label] = task.selfVerification ? '✔' : '✖';
             break;
           case 'inwardEntryDate':
             row[col.label] = task.inwardEntryDate ? formatDateTime(task.inwardEntryDate) : '';
@@ -555,6 +602,9 @@ const Dashboard = () => {
             break;
           case 'secondVerificationAssignedTo':
             row[col.label] = task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : '';
+            break;
+          case 'guides':
+            row[col.label] = task.guides ? task.guides.map(g => g.name).join(', ') : '';
             break;
           case 'files':
             row[col.label] = task.files && task.files.length > 0 ? task.files.map(f => f.originalName || f.originalname).join(', ') : '';
@@ -606,18 +656,20 @@ const Dashboard = () => {
         2: { cellWidth: 25 }, // Client Name
         3: { cellWidth: 25 }, // Client Group
         4: { cellWidth: 25 }, // Work Type
-        5: { cellWidth: 20 }, // Task Status
-        6: { cellWidth: 25 }, // Verification Status
-        7: { cellWidth: 15 }, // Priority
-        8: { cellWidth: 25 }, // Inward Entry Date
-        9: { cellWidth: 20 }, // Due Date
-        10: { cellWidth: 20 }, // Target Date
-        11: { cellWidth: 25 }, // Assigned By
-        12: { cellWidth: 30 }, // Assigned To
-        13: { cellWidth: 25 }, // First Verifier
-        14: { cellWidth: 25 }, // Second Verifier
-        15: { cellWidth: 30 }, // Files
-        16: { cellWidth: 15 }, // Comments
+        5: { cellWidth: 15 }, // Billed
+        6: { cellWidth: 20 }, // Task Status
+        7: { cellWidth: 25 }, // Priority
+        8: { cellWidth: 15 }, // Self Verification
+        9: { cellWidth: 25 }, // Inward Entry Date
+        10: { cellWidth: 25 }, // Due Date
+        11: { cellWidth: 20 }, // Target Date
+        12: { cellWidth: 25 }, // Assigned By
+        13: { cellWidth: 30 }, // Assigned To
+        14: { cellWidth: 25 }, // First Verifier
+        15: { cellWidth: 25 }, // Second Verifier
+        16: { cellWidth: 30 }, // Guide
+        17: { cellWidth: 30 }, // Files
+        18: { cellWidth: 15 }, // Comments
       },
       didDrawPage: function (data) {
         // Add page number
@@ -653,6 +705,191 @@ const Dashboard = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showColumnDropdown]);
+
+  const handleDescriptionEditSave = async (task) => {
+    if (editingDescriptionValue === task.description) {
+      setEditingDescriptionTaskId(null);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/description`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ description: editingDescriptionValue }),
+      });
+      if (!response.ok) throw new Error('Failed to update description');
+      const updatedTask = await response.json();
+      setTasks(tasks.map(t => t._id === task._id ? {...t, description: updatedTask.description} : t));
+      toast.success('Status updated');
+    } catch (error) {
+      toast.error(error.message || 'Failed to update status');
+    }
+    setEditingDescriptionTaskId(null);
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (e, columnId) => {
+    setDraggedColumn(columnId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', columnId);
+  };
+
+  const handleDragOver = (e, columnId) => {
+    e.preventDefault();
+    if (draggedColumn && draggedColumn !== columnId) {
+      setDragOverColumn(columnId);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverColumn(null);
+  };
+
+  const handleDrop = (e, targetColumnId) => {
+    e.preventDefault();
+    if (draggedColumn && draggedColumn !== targetColumnId) {
+      const newOrder = [...columnOrder];
+      const draggedIndex = newOrder.indexOf(draggedColumn);
+      const targetIndex = newOrder.indexOf(targetColumnId);
+      
+      newOrder.splice(draggedIndex, 1);
+      newOrder.splice(targetIndex, 0, draggedColumn);
+      
+      setColumnOrder(newOrder);
+    }
+    setDraggedColumn(null);
+    setDragOverColumn(null);
+  };
+
+  // Column resize handlers
+  const handleResizeStart = (e, columnId) => {
+    console.log('🖱️ Resize start clicked for column:', columnId);
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Set refs immediately (synchronous)
+    isResizingRef.current = true;
+    resizingColumnRef.current = columnId;
+    resizeStartXRef.current = e.clientX;
+    resizeStartWidthRef.current = columnWidths[columnId] || 150;
+    
+    // Set React state for UI updates
+    setIsResizing(true);
+    setResizingColumn(columnId);
+    setResizeStartX(e.clientX);
+    setResizeStartWidth(columnWidths[columnId] || 150);
+    
+    console.log('📏 Starting width:', columnWidths[columnId] || 150);
+    console.log('📍 Start X:', e.clientX);
+    console.log('🔧 Refs set - isResizing:', isResizingRef.current, 'column:', resizingColumnRef.current);
+    
+    // Add cursor style to body
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    
+    // Add event listeners immediately
+    console.log('🔗 Adding event listeners');
+    window.addEventListener('mousemove', handleResizeMove, { passive: false });
+    window.addEventListener('mouseup', handleResizeEnd, { passive: false });
+  };
+
+  const handleResizeMove = (e) => {
+    console.log('🔄 Mouse move event fired, isResizing:', isResizingRef.current, 'resizingColumn:', resizingColumnRef.current);
+    
+    if (!isResizingRef.current || !resizingColumnRef.current) return;
+    
+    const deltaX = e.clientX - resizeStartXRef.current;
+    const newWidth = Math.max(80, resizeStartWidthRef.current + deltaX); // Minimum width of 80px
+    
+    console.log('🔄 Resizing:', resizingColumnRef.current, 'Delta:', deltaX, 'New width:', newWidth);
+    
+    setColumnWidths(prev => {
+      const updated = {
+        ...prev,
+        [resizingColumnRef.current]: newWidth
+      };
+      console.log('📊 Updated widths:', updated);
+      return updated;
+    });
+    
+    // Prevent text selection during resize
+    e.preventDefault();
+  };
+
+  const handleResizeEnd = () => {
+    console.log('✅ Resize ended');
+    
+    // Reset refs
+    isResizingRef.current = false;
+    resizingColumnRef.current = null;
+    resizeStartXRef.current = 0;
+    resizeStartWidthRef.current = 0;
+    
+    // Reset React state
+    setIsResizing(false);
+    setResizingColumn(null);
+    setResizeStartX(0);
+    setResizeStartWidth(0);
+    
+    // Reset cursor and user select
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    
+    window.removeEventListener('mousemove', handleResizeMove);
+    window.removeEventListener('mouseup', handleResizeEnd);
+  };
+
+  // Get ordered columns based on current order and visibility
+  const getOrderedVisibleColumns = () => {
+    return ALL_COLUMNS.map(col => col.id).filter(colId => visibleColumns.includes(colId));
+  };
+
+  // Replace the useEffect for loading columnWidths with this:
+  useEffect(() => {
+    const userId = user?._id || 'guest';
+    const key = `admindashboard_column_widths_${userId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          setColumnWidths(parsed);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    // If nothing in localStorage, set defaults
+    if (!saved) {
+      const defaultWidths = {};
+      ALL_COLUMNS.forEach(col => {
+        defaultWidths[col.id] = col.defaultWidth;
+      });
+      setColumnWidths(defaultWidths);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?._id]);
+
+  // Save to localStorage on every change
+  useEffect(() => {
+    const userId = user?._id || 'guest';
+    const key = `admindashboard_column_widths_${userId}`;
+    if (columnWidths && Object.keys(columnWidths).length > 0) {
+      localStorage.setItem(key, JSON.stringify(columnWidths));
+    }
+  }, [columnWidths, user]);
+
+  // Persist column order to localStorage whenever it changes
+  useEffect(() => {
+    const userId = user?._id || 'guest';
+    const key = `admindashboard_column_order_${userId}`;
+    if (columnOrder && columnOrder.length > 0) {
+      localStorage.setItem(key, JSON.stringify(columnOrder));
+    }
+  }, [columnOrder, user]);
 
   if (!user) {
     return (
@@ -827,73 +1064,30 @@ const Dashboard = () => {
       </div>
 
       {/* Responsive table wrapper */}
-      <div className="overflow-x-auto w-full">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              {ALL_COLUMNS.filter(col => visibleColumns.includes(col.id)).map(col => (
-                <th key={col.id} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredAndSortedTasks.map((task) => (
-              <tr key={task._id} className="align-middle">
-                {ALL_COLUMNS.filter(col => visibleColumns.includes(col.id)).map(col => {
-                  // Render each cell based on col.id
-                  switch (col.id) {
-                    case 'title':
-                      return <td key={col.id} className="px-6 py-4 w-64 whitespace-nowrap overflow-x-auto invisible-scrollbar align-middle text-sm font-medium text-gray-900" title={task.title} style={{verticalAlign: 'middle', width: '16rem', maxWidth: '16rem'}}><div className="overflow-x-auto invisible-scrollbar" style={{maxWidth: '16rem'}}><span>{task.title}</span></div></td>;
-                    case 'description':
-                      return <td key={col.id} className="px-6 py-4 w-64 whitespace-nowrap overflow-x-auto invisible-scrollbar align-middle text-sm text-gray-500" title={task.title} style={{verticalAlign: 'middle', width: '16rem', maxWidth: '16rem'}}><div className="overflow-x-auto invisible-scrollbar" style={{maxWidth: '16rem'}}><span>{task.description}</span></div></td>;
-                    case 'clientName':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap"><div className="text-sm font-medium text-gray-900">{task.clientName}</div></td>;
-                    case 'clientGroup':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap"><div className="text-sm text-gray-500">{task.clientGroup}</div></td>;
-                    case 'workType':
-                      return <td key={col.id} className="px-6 py-4"><div className="flex overflow-x-auto whitespace-nowrap gap-1 no-scrollbar">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></td>;
-                    case 'status':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${task.status === 'completed' ? 'bg-green-100 text-green-800' : task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' : task.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{task.status.replace('_', ' ')}</span></td>;
-                    case 'verificationStatus':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${task.verificationStatus === 'completed' ? 'bg-green-100 text-green-800' : task.verificationStatus === 'rejected' ? 'bg-red-100 text-red-800' : task.verificationStatus === 'first_verified' ? 'bg-blue-100 text-blue-800' : task.verificationStatus === 'executed' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{task.verificationStatus ? task.verificationStatus.replace(/_/g, ' ') : 'Pending'}</span></td>;
-                    case 'priority':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(task.priority)}`}>{task.priority.replace(/([A-Z])/g, ' $1').trim()}</span></td>;
-                    case 'inwardEntryDate':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500">{formatDateTime(task.inwardEntryDate)}</td>;
-                    case 'dueDate':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500">{formatDate(task.dueDate)}</td>;
-                    case 'targetDate':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500">{formatDate(task.targetDate)}</td>;
-                    case 'assignedBy':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500"><div className="flex items-center"><img src={task.assignedBy.photo?.url || defaultProfile} alt={task.assignedBy.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" /><span className="ml-2">{task.assignedBy.firstName} {task.assignedBy.lastName}</span></div></td>;
-                    case 'assignedTo':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap align-middle text-sm text-gray-500"><div className="flex items-center"><img src={task.assignedTo.photo?.url || defaultProfile} alt={task.assignedTo.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" /><span className="ml-2">{task.assignedTo.firstName} {task.assignedTo.lastName}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.assignedTo._id)}h</span></span></div></td>;
-                    case 'verificationAssignedTo':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{task.verificationAssignedTo ? (<><img src={task.verificationAssignedTo.photo?.url || defaultProfile} alt={`${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`} className="h-8 w-8 rounded-full object-cover" onError={(e) => {e.target.onerror = null;e.target.src = defaultProfile;}} /><span>{`${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.verificationAssignedTo._id)}h</span></span></>) : (<span>N/A</span>)}</div></td>;
-                    case 'secondVerificationAssignedTo':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{task.secondVerificationAssignedTo ? (<><img src={task.secondVerificationAssignedTo.photo?.url || defaultProfile} alt={`${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`} className="h-8 w-8 rounded-full object-cover" onError={(e) => {e.target.onerror = null;e.target.src = defaultProfile;}} /><span>{`${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.secondVerificationAssignedTo._id)}h</span></span></>) : (<span>N/A</span>)}</div></td>;
-                    case 'files':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap"><div className="flex items-center">{task.files && task.files.length > 0 ? (<div className="flex items-center space-x-2"><span className="text-blue-600">{task.files.length}</span><span className="text-gray-500">files</span><button onClick={() => handleTaskClick(task)} className="text-blue-600 hover:text-blue-800 text-sm">View</button></div>) : (<div className="flex items-center"><span className="text-gray-400 text-sm italic">No files</span><button onClick={() => handleTaskClick(task)} className="ml-2 text-blue-600 hover:text-blue-800 text-sm">Upload</button></div>)}</div></td>;
-                    case 'comments':
-                      return <td key={col.id} className="px-6 py-4 whitespace-nowrap"><div className="flex items-center"><span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.comments ? task.comments.length : 0} comments</span><button onClick={() => {setSelectedTask(task);setShowComments(true);}} className="ml-2 text-blue-600 hover:text-blue-800 text-xs">View</button></div></td>;
-                    default:
-                      return null;
-                  }
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="overflow-x-auto w-full" ref={tableRef}>
+        <AdvancedTaskTable
+          tasks={getFilteredAndSortedTasks(tasks)}
+          viewType="admin"
+          taskType={null}
+          onTaskUpdate={() => {}}
+          onTaskDelete={() => {}}
+          onStatusChange={() => {}}
+          shouldDisableActions={() => true}
+          shouldDisableFileActions={() => true}
+          taskHours={taskHours}
+          storageKeyPrefix="admindashboard"
+          visibleColumns={visibleColumns}
+          setVisibleColumns={setVisibleColumns}
+        />
       </div>
 
+      {/* File Upload and Comments Modal */}
       {selectedTask && (showFileUpload || showComments) && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold">
-                {showFileUpload ? 'Task Details' : 'Task Comments'}
+                {showFileUpload ? 'Task Files' : 'Task Comments'}
               </h2>
               <button
                 onClick={() => {
@@ -906,85 +1100,33 @@ const Dashboard = () => {
                 ✕
               </button>
             </div>
-
             <div className="space-y-6">
               {showFileUpload ? (
                 <>
-                  {/* Task details */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <h3 className="font-medium text-gray-700">Title</h3>
-                      <p className="text-gray-900">{selectedTask.title}</p>
+                  <FileUpload
+                    taskId={selectedTask._id}
+                    onFileUploaded={handleFileUploaded}
+                    onFileDeleted={handleFileDeleted}
+                  />
+                  {selectedTask.files && selectedTask.files.length > 0 && (
+                    <div className="mt-4">
+                      <FileList
+                        taskId={selectedTask._id}
+                        files={selectedTask.files}
+                        onFileDeleted={handleFileDeleted}
+                      />
                     </div>
-                    <div>
-                      <h3 className="font-medium text-gray-700">Status</h3>
-                      <p className="text-gray-900">{selectedTask.status}</p>
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-700">Priority</h3>
-                      <p className="text-gray-900">{selectedTask.priority}</p>
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-700">Due Date</h3>
-                      <p className="text-gray-900">
-                        {formatDate(selectedTask.dueDate)}
-                      </p>
-                    </div>
-                    <div className="col-span-2">
-                      <h3 className="font-medium text-gray-700">Description</h3>
-                      <p className="text-gray-900">{selectedTask.description}</p>
-                    </div>
-                  </div>
-
-                  {/* File upload section */}
-                  <div className="border-t pt-4">
-                    <h3 className="text-lg font-medium mb-4">Files</h3>
-                    <FileUpload
-                      taskId={selectedTask._id}
-                      onFileUploaded={handleFileUploaded}
-                      onFileDeleted={handleFileDeleted}
-                    />
-                    {selectedTask.files && selectedTask.files.length > 0 && (
-                      <div className="mt-4">
-                        <FileList
-                          taskId={selectedTask._id}
-                          files={selectedTask.files}
-                          onFileDeleted={handleFileDeleted}
-                        />
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </>
               ) : (
-                <div className="border-t pt-4">
-                  <TaskComments taskId={selectedTask._id} />
-                </div>
+                <TaskComments taskId={selectedTask._id} />
               )}
             </div>
           </div>
         </div>
       )}
-
-      {/* PDF Column Selector */}
-      <PDFColumnSelector
-        isOpen={showPDFColumnSelector}
-        onClose={() => setShowPDFColumnSelector(false)}
-        onDownload={handleDownloadPDF}
-        availableColumns={ALL_COLUMNS}
-      />
     </div>
   );
 };
 
 export default Dashboard;
-
-<style>{`
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    background: #f1f1f1;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-  }
-`}</style> 

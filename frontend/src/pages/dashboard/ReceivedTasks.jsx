@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import TaskList from '../../components/TaskList';
+import AdvancedTaskTable from '../../components/AdvancedTaskTable';
 import CreateTask from '../../components/CreateTask';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -22,9 +23,10 @@ const ALL_COLUMNS = [
   { id: 'clientName', label: 'Client Name' },
   { id: 'clientGroup', label: 'Client Group' },
   { id: 'workType', label: 'Work Type' },
+  { id: 'billed', label: 'Billed' },
   { id: 'status', label: 'Task Status' },
-  { id: 'verificationStatus', label: 'Verification Status' },
   { id: 'priority', label: 'Priority' },
+  { id: 'selfVerification', label: 'Self Verification' },
   { id: 'inwardEntryDate', label: 'Inward Entry Date' },
   { id: 'dueDate', label: 'Due Date' },
   { id: 'targetDate', label: 'Target Date' },
@@ -32,6 +34,7 @@ const ALL_COLUMNS = [
   { id: 'assignedTo', label: 'Assigned To' },
   { id: 'verificationAssignedTo', label: 'First Verifier' },
   { id: 'secondVerificationAssignedTo', label: 'Second Verifier' },
+  { id: 'guides', label: 'Guide' },
   { id: 'files', label: 'Files' },
   { id: 'comments', label: 'Comments' },
 ];
@@ -45,7 +48,8 @@ const ReceivedTasks = () => {
   const [error, setError] = useState(null);
   const [taskCounts, setTaskCounts] = useState({
     execution: 0,
-    verification: 0,
+    receivedVerification: 0,
+    issuedVerification: 0,
     completed: 0
   });
   const [filters, setFilters] = useState([]);
@@ -67,6 +71,8 @@ const ReceivedTasks = () => {
     if (saved) return JSON.parse(saved);
     return ALL_COLUMNS.map(col => col.id);
   });
+  
+
 
   if (!isAuthenticated()) {
     return null;
@@ -75,7 +81,7 @@ const ReceivedTasks = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/users`, {
+        const res = await fetch(`${API_BASE_URL}/api/users/except-me`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
@@ -101,16 +107,20 @@ const ReceivedTasks = () => {
   useEffect(() => {
     const fetchTasks = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/tasks/received?tab=${activeTab}`, {
+        let url;
+        if (activeTab === 'guidance') {
+          url = `${API_BASE_URL}/api/tasks/received/guidance`;
+        } else {
+          url = `${API_BASE_URL}/api/tasks/received?tab=${activeTab}`;
+        }
+        const response = await fetch(url, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
         });
-
         if (!response.ok) {
           throw new Error('Failed to fetch tasks');
         }
-
         const data = await response.json();
         setTasks(data);
         setError(null);
@@ -225,6 +235,12 @@ const ReceivedTasks = () => {
     };
 
     let filteredTasks = tasks.filter(task => {
+      // Exclude tasks with verificationStatus 'pending'
+      if (task.verificationStatus === 'pending') return false;
+      // For guidance tab, only show tasks where status !== 'completed'
+      if (activeTab === 'guidance' && task.status === 'completed') return false;
+      // For completed tab, only show tasks where assignedTo is current user and status is completed
+      if (activeTab === 'completed' && (!task.assignedTo || (task.assignedTo._id !== user._id && task.assignedTo !== user._id || task.status !== 'completed'))) return false;
       // Filter by search term
       if (searchTerm) {
         const lowercasedTerm = searchTerm.toLowerCase();
@@ -429,6 +445,23 @@ const ReceivedTasks = () => {
     }
   };
 
+  useEffect(() => {
+    if (!showColumnDropdown) return;
+    function handleClickOutside(event) {
+      if (columnsDropdownRef.current && !columnsDropdownRef.current.contains(event.target)) {
+        setShowColumnDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showColumnDropdown]);
+
+  useEffect(() => {
+    const userId = user?._id || 'guest';
+    const key = `receivedtasks_columns_${userId}`;
+    localStorage.setItem(key, JSON.stringify(visibleColumns));
+  }, [visibleColumns, user]);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -449,7 +482,7 @@ const ReceivedTasks = () => {
   }
 
   return (
-    <div className="p-4 sm:p-6 md:p-8">
+    <div className="p-2 sm:p-3 md:p-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h2 className="text-2xl font-bold text-gray-800">Received Tasks</h2>
       </div>
@@ -471,16 +504,42 @@ const ReceivedTasks = () => {
               </span>
             </button>
             <button
-              onClick={() => setActiveTab('verification')}
+              onClick={() => setActiveTab('receivedVerification')}
               className={`whitespace-nowrap py-3 px-0 border-b-2 font-medium text-sm ${
-                activeTab === 'verification'
+                activeTab === 'receivedVerification'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Tasks Under Verification
+              Task Received For Verification
               <span className="bg-gray-200 text-gray-800 rounded-full px-2 py-0.5 ml-2 text-xs">
-                {taskCounts.verification}
+                {taskCounts.receivedVerification}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('issuedVerification')}
+              className={`whitespace-nowrap py-3 px-0 border-b-2 font-medium text-sm ${
+                activeTab === 'issuedVerification'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Task Issued For Verification
+              <span className="bg-gray-200 text-gray-800 rounded-full px-2 py-0.5 ml-2 text-xs">
+                {taskCounts.issuedVerification}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('guidance')}
+              className={`whitespace-nowrap py-3 px-0 border-b-2 font-medium text-sm ${
+                activeTab === 'guidance'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Task For Guidance
+              <span className="bg-gray-200 text-gray-800 rounded-full px-2 py-0.5 ml-2 text-xs">
+                {taskCounts.guidance}
               </span>
             </button>
             <button
@@ -500,7 +559,7 @@ const ReceivedTasks = () => {
         </div>
       </div>
       
-      <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex flex-row flex-wrap items-center gap-4 w-full sm:w-auto">
           <div className="relative" ref={filterPopupRef}>
             <button
@@ -587,14 +646,28 @@ const ReceivedTasks = () => {
         </div>
       </div>
       <ErrorBoundary>
-        <TaskList 
-          taskType={activeTab} 
-          viewType="received" 
+        <AdvancedTaskTable 
           tasks={getFilteredAndSortedTasks(tasks)} 
-          searchTerm={searchTerm} 
-          setSearchTerm={setSearchTerm} 
-          visibleColumns={visibleColumns} 
-          setVisibleColumns={setVisibleColumns} 
+          viewType="received" 
+          taskType={activeTab}
+          users={users}
+          currentUser={user}
+          onTaskUpdate={(taskId, updater) => {
+            setTasks(prevTasks => prevTasks.map(task => 
+              task._id === taskId ? updater(task) : task
+            ));
+          }}
+          onTaskDelete={handleDeleteTask}
+          onStatusChange={handleStatusChange}
+          shouldDisableActions={(task) => {
+            
+            return false;
+          }}
+          shouldDisableFileActions={() => false}
+          taskHours={[]}
+          visibleColumns={visibleColumns}
+          setVisibleColumns={setVisibleColumns}
+          storageKeyPrefix="receivedtasks"
         />
       </ErrorBoundary>
     </div>

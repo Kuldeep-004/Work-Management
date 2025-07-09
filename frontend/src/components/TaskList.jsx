@@ -58,12 +58,12 @@ function formatDateTime(date) {
 // Define ALL_COLUMNS at the top, similar to AdminDashboard
 const ALL_COLUMNS = [
   { id: 'title', label: 'Title' },
-  { id: 'description', label: 'Description' },
+  { id: 'description', label: 'Status' },
   { id: 'clientName', label: 'Client Name' },
   { id: 'clientGroup', label: 'Client Group' },
   { id: 'workType', label: 'Work Type' },
+  { id: 'billed', label: 'Billed' },
   { id: 'status', label: 'Task Status' },
-  { id: 'verificationStatus', label: 'Verification Status' },
   { id: 'priority', label: 'Priority' },
   { id: 'inwardEntryDate', label: 'Inward Entry Date' },
   { id: 'dueDate', label: 'Due Date' },
@@ -119,6 +119,10 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
 
   // Add ref for the columns dropdown
   const columnsDropdownRef = useRef(null);
+
+  // Add at the top, after useState imports
+  const [editingDescriptionTaskId, setEditingDescriptionTaskId] = useState(null);
+  const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
 
   // Helper function to filter users based on role-based permissions
   const getFilteredUsers = (task = null) => {
@@ -575,13 +579,19 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
     updateTaskInState(selectedTask._id, prevTasks =>
       prevTasks.map(t =>
         t._id === selectedTask._id
-          ? { ...t, files: [...(t.files || []), ...uploadedFiles] }
+          ? { ...t, files: [
+              ...(t.files || []),
+              ...uploadedFiles.filter(uf => !(t.files || []).some(f => f._id === uf._id))
+            ] }
           : t
       )
     );
     setSelectedTask(prev =>
       prev && prev._id === selectedTask._id
-        ? { ...prev, files: [...(prev.files || []), ...uploadedFiles] }
+        ? { ...prev, files: [
+            ...(prev.files || []),
+            ...uploadedFiles.filter(uf => !(prev.files || []).some(f => f._id === uf._id))
+          ] }
         : prev
     );
   };
@@ -728,6 +738,32 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showColumnDropdown]);
 
+  // Add this handler function in the component:
+  const handleDescriptionEditSave = async (task) => {
+    if (editingDescriptionValue === task.description) {
+      setEditingDescriptionTaskId(null);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/description`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${loggedInUser.token}`,
+        },
+        body: JSON.stringify({ description: editingDescriptionValue }),
+      });
+      if (!response.ok) throw new Error('Failed to update description');
+      const updatedTask = await response.json();
+      setTasks(tasks.map(t => t._id === task._id ? {...t, description: updatedTask.description} : t));
+      // updateTaskInState(task._id, prevTasks => prevTasks.map(t => t._id === task._id ? {...t, description: updatedTask.description} : t));
+      toast.success('Status updated');
+    } catch (error) {
+      toast.error(error.message || 'Failed to update status');
+    }
+    setEditingDescriptionTaskId(null);
+  };
+
   if (!isAuthenticated()) {
     return null;
   }
@@ -760,6 +796,9 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
                   {col.label}
                 </th>
               ))}
+              {viewType === 'assigned' && (
+                <th className="px-4 py-3 sm:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+              )}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -770,17 +809,48 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
                     case 'title':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap"><div className="text-sm font-medium text-gray-900">{task.title}</div></td>;
                     case 'description':
-                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap"><div className="text-sm text-gray-500">{task.description}</div></td>;
+                      return (
+                        <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500 border border-gray-300 bg-white w-[180px] min-w-[180px]" style={{verticalAlign: 'middle'}}>
+                          {editingDescriptionTaskId === task._id ? (
+                            <input
+                              type="text"
+                              value={editingDescriptionValue}
+                              autoFocus
+                              onChange={e => setEditingDescriptionValue(e.target.value)}
+                              onBlur={() => handleDescriptionEditSave(task)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  handleDescriptionEditSave(task);
+                                }
+                              }}
+                              className="border border-gray-300 focus:border-blue-400 px-1 py-1 rounded w-full min-w-[140px] bg-white text-sm transition-colors"
+                              style={{fontSize: '1rem', height: '32px'}}
+                            />
+                          ) : (
+                            <span
+                              className="cursor-pointer w-full block px-1 hover:border-gray-400 rounded border border-transparent"
+                              style={{minWidth: '140px', display: 'block'}}
+                              onClick={() => {
+                                setEditingDescriptionTaskId(task._id);
+                                setEditingDescriptionValue(task.description || '');
+                              }}
+                              title="Click to edit"
+                            >
+                              {task.description}
+                            </span>
+                          )}
+                        </td>
+                      );
                     case 'clientName':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap"><div className="text-sm font-medium text-gray-900">{task.clientName}</div></td>;
                     case 'clientGroup':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap"><div className="text-sm text-gray-500">{task.clientGroup}</div></td>;
                     case 'workType':
                       return <td key={col.id} className="px-4 py-4 sm:px-6"><div className="flex overflow-x-auto whitespace-nowrap gap-1 no-scrollbar">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></td>;
+                    case 'billed':
+                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-center text-lg">{task.billed ? '✔' : '✖'}</td>;
                     case 'status':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{task.assignedTo._id === loggedInUser._id && !shouldDisableActions(task) ? (<select value={task.status || 'pending'} onChange={(e) => handleStatusChange(task._id, e.target.value)} className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}><option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="completed">Completed</option></select>) : (<span className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}>{task.status ? task.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Pending'}</span>)}</div></td>;
-                    case 'verificationStatus':
-                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{(task.assignedTo._id === loggedInUser._id || task.verificationAssignedTo?._id === loggedInUser._id || task.secondVerificationAssignedTo?._id === loggedInUser._id) && !shouldDisableActions(task) ? (<select value={task.verificationStatus} onChange={(e) => handleVerificationStatusChange(task._id, e.target.value)} className={`px-2 py-1 rounded text-sm ${task.verificationStatus === 'completed' ? 'bg-green-100 text-green-800' : task.verificationStatus === 'rejected' ? 'bg-red-100 text-red-800' : task.verificationStatus === 'first_verified' ? 'bg-blue-100 text-blue-800' : task.verificationStatus === 'executed' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{getAllowedVerificationStatuses(task, loggedInUser).map(status => (<option key={status} value={status}>{status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</option>))}</select>) : (<span className={`px-2 py-1 rounded text-sm ${task.verificationStatus === 'completed' ? 'bg-green-100 text-green-800' : task.verificationStatus === 'rejected' ? 'bg-red-100 text-red-800' : task.verificationStatus === 'first_verified' ? 'bg-blue-100 text-blue-800' : task.verificationStatus === 'executed' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{task.verificationStatus ? task.verificationStatus.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Pending'}</span>)}</div></td>;
                     case 'priority':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(task.priority)}`}>{task.priority}</span></td>;
                     case 'inwardEntryDate':
@@ -805,6 +875,16 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
                       return null;
                   }
                 })}
+                {viewType === 'assigned' && (
+                  <td className="px-4 py-4 sm:px-6 whitespace-nowrap text-right">
+                    <button
+                      onClick={() => handleDeleteTask(task._id)}
+                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded shadow text-xs font-semibold"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

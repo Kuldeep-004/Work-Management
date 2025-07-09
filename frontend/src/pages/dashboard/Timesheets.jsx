@@ -122,8 +122,13 @@ const Timesheets = () => {
     }, 1000);
   };
 
-  const saveEntry = async (entry) => {
+  const saveEntry = async (entry, returnSaved = false, tempId = null) => {
     if (!entry) return;
+    // Prevent saving if no task is selected
+    if (!entry.task) {
+      toast.error('Please select a task before saving.');
+      return;
+    }
     try {
       let res;
       if (entry._id) {
@@ -136,7 +141,6 @@ const Timesheets = () => {
           },
           body: JSON.stringify({
             taskId: entry.task,
-            manualTaskName: entry.manualTaskName,
             workDescription: entry.workDescription,
             startTime: entry.startTime,
             endTime: entry.endTime
@@ -152,7 +156,6 @@ const Timesheets = () => {
           },
           body: JSON.stringify({
             taskId: entry.task,
-            manualTaskName: entry.manualTaskName,
             workDescription: entry.workDescription,
             startTime: entry.startTime,
             endTime: entry.endTime
@@ -164,10 +167,19 @@ const Timesheets = () => {
         throw new Error(errorData.message || 'Failed to save entry');
       }
       const updatedTimesheet = await res.json();
-      setTimesheet(updatedTimesheet);
       toast.success('Entry saved!');
+      // If called for optimistic UI, return the new entry for replacement
+      if (returnSaved && tempId) {
+        // Find the new entry by comparing entries
+        const newEntry = updatedTimesheet.entries.find(e => !e._id || e._id !== tempId);
+        // Fallback: just use the last entry
+        return newEntry || updatedTimesheet.entries[updatedTimesheet.entries.length - 1];
+      } else {
+        setTimesheet(updatedTimesheet);
+      }
     } catch (error) {
       toast.error(error.message);
+      throw error;
     }
   };
 
@@ -175,13 +187,27 @@ const Timesheets = () => {
   const defaultEnd = '10:00 AM';
 
   const handleAddTimeslot = async () => {
-    // Immediately create a new timeslot with default times
-    await saveEntry({
-      task: null,
-      manualTaskName: '',
+    // Add a new unsaved entry to the timesheet UI
+    if (!timesheet) return;
+    const tempId = `temp-${Date.now()}`;
+    const newEntry = {
+      _id: tempId,
+      task: '',
       workDescription: '',
       startTime: to24Hour(defaultStart),
-      endTime: to24Hour(defaultEnd)
+      endTime: to24Hour(defaultEnd),
+      isNew: true
+    };
+    setTimesheet({
+      ...timesheet,
+      entries: [...timesheet.entries, newEntry]
+    });
+    setEntryTimeParts({
+      ...entryTimeParts,
+      [tempId]: {
+        start: split24Hour(to24Hour(defaultStart)),
+        end: split24Hour(to24Hour(defaultEnd))
+      }
     });
   };
 
@@ -389,15 +415,55 @@ const Timesheets = () => {
             let taskValue = '';
             if (entry?.task) {
               taskValue = typeof entry.task === 'object' && entry.task !== null ? entry.task._id : entry.task;
-            } else if (entry && entry.task === null) {
-              taskValue = 'other';
             }
-            const showManualTaskName = taskValue === 'other';
             const key = entry._id;
             const startParts = (entryTimeParts[key] && entryTimeParts[key].start) || split24Hour(entry.startTime);
             const endParts = (entryTimeParts[key] && entryTimeParts[key].end) || split24Hour(entry.endTime);
-            const isSaving = !entry._id;
+            const isSaving = entry.isNew === true ? false : !entry._id;
             const isLocked = !isEditable(timesheet);
+            const handleTaskChange = async (e) => {
+              const value = e.target.value;
+              if (entry.isNew) {
+                // Optimistically mark as saving
+                setTimesheet(ts => ({
+                  ...ts,
+                  entries: ts.entries.map(en =>
+                    en._id === entry._id ? { ...en, task: value, isSaving: true } : en
+                  )
+                }));
+                // Prepare entry for saving
+                const updatedEntry = { ...entry, task: value };
+                delete updatedEntry.isNew;
+                if (typeof updatedEntry._id === 'string' && updatedEntry._id.startsWith('temp-')) {
+                  delete updatedEntry._id;
+                }
+                try {
+                  const saved = await saveEntry({
+                    ...updatedEntry,
+                    startTime: entry.startTime,
+                    endTime: entry.endTime,
+                    workDescription: entry.workDescription
+                  }, true, entry._id);
+                  // Replace temp row with real entry from backend
+                  setTimesheet(ts => ({
+                    ...ts,
+                    entries: ts.entries.map(en =>
+                      en._id === entry._id ? saved : en
+                    )
+                  }));
+                } catch (error) {
+                  // On error, keep row editable and show error
+                  setTimesheet(ts => ({
+                    ...ts,
+                    entries: ts.entries.map(en =>
+                      en._id === entry._id ? { ...en, isSaving: false } : en
+                    )
+                  }));
+                }
+              } else {
+                handleEntryChange(key, 'task', value);
+              }
+            };
             return (
               <div key={key || Math.random()} className="bg-white rounded-lg shadow border-2 border-gray-200">
                 <div className="p-4 sm:p-6">
@@ -474,7 +540,7 @@ const Timesheets = () => {
                     )}
                   </div>
                   {isSaving && <div className="text-blue-500 text-sm">Saving...</div>}
-                  <div className={`grid grid-cols-1 ${showManualTaskName ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-4`}>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {/* Task Selection */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -482,7 +548,7 @@ const Timesheets = () => {
                       </label>
                       <select
                         value={taskValue}
-                        onChange={(e) => !isSaving && !isLocked && handleEntryChange(key, 'task', e.target.value)}
+                        onChange={handleTaskChange}
                         className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         disabled={isSaving || isLocked}
                       >
@@ -492,25 +558,8 @@ const Timesheets = () => {
                             {task.title}
                           </option>
                         ))}
-                        <option value="other">Other task...</option>
                       </select>
                     </div>
-                    {/* Manual Task Input */}
-                    {showManualTaskName && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Task Name
-                        </label>
-                        <input
-                          type="text"
-                          value={entry?.manualTaskName || ''}
-                          onChange={(e) => !isSaving && !isLocked && handleEntryChange(key, 'manualTaskName', e.target.value)}
-                          placeholder="Enter task name"
-                          className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          disabled={isSaving || isLocked}
-                        />
-                      </div>
-                    )}
                     {/* Work Description */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -25,7 +25,8 @@ const CreateTask = ({ users = [] }) => {
     inwardEntryDate: '',
     inwardEntryTime: '',
     dueDate: '',
-    targetDate: ''
+    targetDate: '',
+    billed: true // default to Yes
   });
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -278,7 +279,8 @@ const CreateTask = ({ users = [] }) => {
       // Convert 12-hour time to 24-hour format for backend
       const taskData = {
         ...formData,
-        inwardEntryTime: convertTo24Hour(formData.inwardEntryTime)
+        inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
+        billed: formData.billed
       };
 
       const response = await fetch(`${API_BASE_URL}/api/tasks`, {
@@ -409,8 +411,8 @@ const CreateTask = ({ users = [] }) => {
       const newAssignedTo = prev.assignedTo.includes(userId)
         ? prev.assignedTo.filter(id => id !== userId)
         : [...prev.assignedTo, userId];
-      
       setSelectedUsers(users.filter(u => newAssignedTo.includes(u._id)));
+      setIsDropdownOpen(false); // Close dropdown after each selection
       return { ...prev, assignedTo: newAssignedTo };
     });
   };
@@ -454,22 +456,7 @@ const CreateTask = ({ users = [] }) => {
   const filteredUsers = users.filter(user => {
     // First filter by search term
     const matchesSearch = `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase());
-    if (!matchesSearch) return false;
-
-    // Then filter by role-based permissions
-    if (loggedInUser.role === 'Admin') {
-      // Admin can assign to anyone (including themselves)
-      return true;
-    } else if (loggedInUser.role === 'Head') {
-      // Head can assign to any Team Head and Fresher (including themselves)
-      return user.role === 'Team Head' || user.role === 'Fresher' || user._id === loggedInUser._id;
-    } else if (loggedInUser.role === 'Team Head') {
-      // Team Head can assign to any Fresher from their team (including themselves)
-      return (user.role === 'Fresher' && user.team === loggedInUser.team) || user._id === loggedInUser._id;
-    }
-    
-    // Freshers cannot assign tasks to anyone
-    return false;
+    return matchesSearch;
   });
 
   const handleWorkTypeSubmit = async (e) => {
@@ -515,7 +502,8 @@ const CreateTask = ({ users = [] }) => {
       inwardEntryDate: date,
       inwardEntryTime: time,
       dueDate: '',
-      targetDate: ''
+      targetDate: '',
+      billed: true
     });
     setIsModalOpen(true);
   };
@@ -533,7 +521,8 @@ const CreateTask = ({ users = [] }) => {
       inwardEntryDate: '',
       inwardEntryTime: '',
       dueDate: '',
-      targetDate: ''
+      targetDate: '',
+      billed: true
     });
     setSelectedFiles([]);
     setTaskFiles([]);
@@ -559,11 +548,6 @@ const CreateTask = ({ users = [] }) => {
       document.removeEventListener('mousedown', handleClickOutsideDropdown);
     };
   }, [isWorkTypeDropdownOpen]);
-
-  // Don't render anything for Freshers
-  if (!isAuthenticated() || loggedInUser?.role === 'Fresher') {
-    return null;
-  }
 
   return (
     <>
@@ -779,6 +763,20 @@ const CreateTask = ({ users = [] }) => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Billed
+                  </label>
+                  <select
+                    value={formData.billed ? 'yes' : 'no'}
+                    onChange={e => setFormData({ ...formData, billed: e.target.value === 'yes' })}
+                    className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Assign To <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
@@ -856,7 +854,10 @@ const CreateTask = ({ users = [] }) => {
                           {user.firstName} {user.lastName}
                           <button
                             type="button"
-                            onClick={() => handleAssignedToChange(user._id)}
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.filter(id => id !== user._id) }));
+                              setSelectedUsers(prev => prev.filter(u => u._id !== user._id));
+                            }}
                             className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200"
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

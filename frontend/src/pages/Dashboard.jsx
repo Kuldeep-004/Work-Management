@@ -5,7 +5,6 @@ import AssignedTasks from './dashboard/AssignedTasks';
 import TeamMembers from '../components/TeamMembers';
 import Analytics from '../components/Analytics';
 import Settings from '../components/Settings';
-import TodoList from '../components/TodoList';
 import UserApprovals from '../components/UserApprovals';
 import BlockedUsers from '../components/BlockedUsers';
 import AddUsers from './dashboard/AddUsers';
@@ -16,6 +15,10 @@ import { useAuth } from '../context/AuthContext';
 import Timesheets from './dashboard/Timesheets';
 import SubordinateTimesheets from './dashboard/SubordinateTimesheets';
 import Cost from './dashboard/Cost';
+import Notes from '../components/Notes';
+import BilledTasks from './dashboard/BilledTasks';
+import UnBilledTasks from './dashboard/UnBilledTasks';
+import TaskVerification from './dashboard/TaskVerification';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -28,7 +31,8 @@ const Dashboard = () => {
           <Route path="/" element={<AdminDashboard />} />
           <Route path="received-tasks" element={<ReceivedTasks />} />
           <Route path="assigned-tasks" element={<AssignedTasks />} />
-          <Route path="todos" element={<TodoList />} />
+          <Route path="task-verification" element={<TaskVerification />} />
+          <Route path="notes" element={<Notes />} />
           <Route path="team" element={<TeamMembers />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="cost" element={<Cost />} />
@@ -39,6 +43,8 @@ const Dashboard = () => {
           <Route path="clients" element={<Clients />} />
           <Route path="timesheets" element={<Timesheets />} />
           <Route path="subordinate-timesheets" element={<SubordinateTimesheets />} />
+          <Route path="billed-tasks" element={<BilledTasks />} />
+          <Route path="unbilled-tasks" element={<UnBilledTasks />} />
           <Route path="*" element={<AdminDashboard />} />
         </Routes>
       </DashboardLayout>
@@ -57,7 +63,7 @@ const Dashboard = () => {
           <Route path="announcements" element={<Announcements />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="todos" element={<TodoList />} />
+          <Route path="notes" element={<Notes />} />
           <Route path="clients" element={<Clients />} />
           <Route path="timesheets" element={<Timesheets />} />
           <Route path="*" element={<AdminDashboard/>}/>
@@ -75,7 +81,7 @@ const Dashboard = () => {
           <Route path="received-tasks" element={<ReceivedTasks />} />
           <Route path="assigned-tasks" element={<AssignedTasks />} />
           <Route path="subordinate-timesheets" element={<SubordinateTimesheets />} />
-          <Route path="todos" element={<TodoList />} />
+          <Route path="notes" element={<Notes />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="settings" element={<Settings />} />
           <Route path="clients" element={<Clients />} />
@@ -91,12 +97,17 @@ const Dashboard = () => {
     <DashboardLayout>
       <Routes>
         <Route path="received-tasks" element={<ReceivedTasks />} />
+        <Route path="assigned-tasks" element={<AssignedTasks />} />
+        {/* Only show Task Verification for Task Verifier (role2) */}
+        {user?.role2 === 'Task Verifier' && (
+          <Route path="task-verification" element={<TaskVerification />} />
+        )}
         <Route path="announcements" element={<Announcements />} />
         <Route path="cost" element={<Cost />} />
         <Route path="subordinate-timesheets" element={<SubordinateTimesheets />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="settings" element={<Settings />} />
-        <Route path="todos" element={<TodoList />} />
+        <Route path="notes" element={<Notes />} />
         <Route path="clients" element={<Clients />} />
         <Route path="timesheets" element={<Timesheets />} />
         <Route path="/" element={<ReceivedTasks />} />

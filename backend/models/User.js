@@ -47,7 +47,7 @@ const userSchema = new mongoose.Schema(
     },
     role2: {
       type: String,
-      enum: ['None', 'TimeSheet Verifier'],
+      enum: ['None', 'TimeSheet Verifier', 'Task Verifier'],
       default: 'None',
     },
     status: {

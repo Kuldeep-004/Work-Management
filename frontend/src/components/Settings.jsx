@@ -13,25 +13,19 @@ const Settings = () => {
     email: user.email,
   });
   const [tasks, setTasks] = useState([]);
-  const [todos, setTodos] = useState([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const [tasksRes, todosRes] = await Promise.all([
+        const [tasksRes] = await Promise.all([
           fetch(`${API_BASE_URL}/api/tasks?type=received`, {
-            headers: { Authorization: `Bearer ${user.token}` },
-          }),
-          fetch(`${API_BASE_URL}/api/todos`, {
             headers: { Authorization: `Bearer ${user.token}` },
           }),
         ]);
         const tasksData = await tasksRes.json();
-        const todosData = await todosRes.json();
         setTasks(tasksData);
-        setTodos(todosData);
       } catch (error) {
         toast.error('Failed to fetch user stats');
       } finally {
@@ -45,7 +39,6 @@ const Settings = () => {
   const totalTasks = tasks.length;
   const pendingOrInProgressTasks = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length;
   const urgentTasks = tasks.filter(t => (t.status === 'pending' || t.status === 'in_progress') && t.priority === 'urgent').length;
-  const pendingOrInProgressTodos = todos.filter(td => td.status === 'pending' || td.status === 'in_progress').length;
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -187,11 +180,6 @@ const Settings = () => {
             <div className="flex flex-col items-center">
               <span className="text-2xl md:text-4xl text-white">{loadingStats ? '-' : urgentTasks}</span>
               <span className="text-xs uppercase font-bold text-gray-300 tracking-wide mt-1 text-center">Urgent Tasks</span>
-            </div>
-            {/* Stat: Pending/In-Progress Todos */}
-            <div className="flex flex-col items-center">
-              <span className="text-2xl md:text-4xl text-white">{loadingStats ? '-' : pendingOrInProgressTodos}</span>
-              <span className="text-xs uppercase font-bold text-gray-300 tracking-wide mt-1 text-center">Todos</span>
             </div>
           </div>
         </div>

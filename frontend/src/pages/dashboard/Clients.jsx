@@ -18,7 +18,8 @@ const Clients = () => {
     name: '',
     group: '',
     status: 'Individual',
-    workOffered: []
+    workOffered: [],
+    priority: 'A',
   });
   const [groupFormData, setGroupFormData] = useState({
     name: ''
@@ -97,7 +98,8 @@ const Clients = () => {
         name: '',
         group: '',
         status: 'Individual',
-        workOffered: []
+        workOffered: [],
+        priority: 'A',
       });
       toast.success('Client created successfully');
     } catch (error) {
@@ -183,6 +185,28 @@ const Clients = () => {
     }
   };
 
+  const handleDeleteGroup = async (groupId) => {
+    if (!window.confirm('Are you sure you want to delete this group?')) {
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/clients/groups/${groupId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete group');
+      }
+      await fetchClientGroups();
+      await fetchClients();
+      toast.success('Group deleted successfully');
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
   // Redirect Fresher users
   if (user.role === 'Fresher') {
     navigate('/dashboard', { replace: true });
@@ -226,31 +250,44 @@ const Clients = () => {
         <div className="overflow-x-auto scrollbar-hide">
           {clientGroups.map((group) => {
             const groupClients = clients.filter(client => client.group._id === group._id);
+            const priorityOrder = { A: 1, B: 2, C: 3, D: 4 };
+            const sortedGroupClients = groupClients.sort((a, b) => (priorityOrder[a.priority] || 5) - (priorityOrder[b.priority] || 5));
             return (
               <div key={group._id} className="mb-4 border border-gray-200 rounded-lg shadow-sm bg-white">
-                <div className="bg-gray-100 px-4 py-2 rounded-t-lg border-b border-gray-200">
+                <div className="bg-gray-100 px-4 py-2 rounded-t-lg border-b border-gray-200 flex items-center justify-between">
                   <h3 className="text-base font-semibold text-gray-800 tracking-wide">{group.name}</h3>
+                  <button
+                    onClick={() => handleDeleteGroup(group._id)}
+                    className="text-red-600 hover:text-red-800 transition-colors ml-2"
+                    title="Delete group"
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                  </button>
                 </div>
                 <div className="overflow-x-auto w-full">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-white">
                       <tr>
                         <th className="w-1/4 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+                        <th className="w-1/6 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Priority</th>
                         <th className="w-1/6 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                         <th className="w-1/3 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Work Offered</th>
                         <th className="w-20 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-100">
-                      {groupClients.length === 0 ? (
+                      {sortedGroupClients.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="px-4 py-4 text-center text-gray-400 text-sm">No clients in this group.</td>
+                          <td colSpan={5} className="px-4 py-4 text-center text-gray-400 text-sm">No clients in this group.</td>
                         </tr>
                       ) : (
-                        groupClients.map((client) => (
+                        sortedGroupClients.map((client) => (
                           <tr key={client._id}>
                             <td className="w-1/4 px-4 py-2">
                               <div className="w-32 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm">{client.name}</div>
+                            </td>
+                            <td className="w-1/6 px-4 py-2">
+                              <div className="w-10 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm font-semibold">{client.priority}</div>
                             </td>
                             <td className="w-1/6 px-4 py-2">
                               <div className="w-24 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm">{client.status}</div>
@@ -351,6 +388,23 @@ const Clients = () => {
                   <option value="Firm">Firm</option>
                   <option value="Company">Company</option>
                   <option value="Others">Others</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Priority
+                </label>
+                <select
+                  value={formData.priority}
+                  onChange={e => setFormData({ ...formData, priority: e.target.value })}
+                  className="w-full border rounded-md px-3 py-2"
+                  required
+                >
+                  <option value="A">A (Most Priority)</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                  <option value="D">D (Least Priority)</option>
                 </select>
               </div>
 

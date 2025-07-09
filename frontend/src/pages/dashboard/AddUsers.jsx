@@ -5,7 +5,7 @@ import defaultProfile from '../../assets/avatar.jpg';
 import { API_BASE_URL } from '../../apiConfig';
 
 const rolesList = ['Admin', 'Head', 'Team Head', 'Fresher'];
-const role2List = ['None', 'TimeSheet Verifier'];
+const role2List = ['None', 'TimeSheet Verifier', 'Task Verifier'];
 
 const AllUsers = () => {
   const { user } = useAuth();

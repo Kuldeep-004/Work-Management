@@ -115,7 +115,7 @@ const Cost = () => {
           <tbody className="bg-white divide-y divide-gray-100">
             {costLoading ? (
               <tr><td colSpan={5} className="text-center py-8">Loading...</td></tr>
-            ) : costs.length === 0 ? (
+            ) : !Array.isArray(costs) || costs.length === 0 ? (
               <tr><td colSpan={5} className="text-center py-8">No tasks found.</td></tr>
             ) : costs.map((t) => (
               <tr key={t.taskId}>

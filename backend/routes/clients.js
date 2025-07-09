@@ -33,10 +33,10 @@ router.get('/', protect, async (req, res) => {
 // Create a client
 router.post('/', protect, async (req, res) => {
   try {
-    const { name, group, status, workOffered } = req.body;
+    const { name, group, status, workOffered, priority } = req.body;
 
     // Basic validation
-    if (!name || !group || !status) {
+    if (!name || !group || !status || !priority) {
       return res.status(400).json({ msg: 'Please provide all required fields' });
     }
 
@@ -45,6 +45,7 @@ router.post('/', protect, async (req, res) => {
       group,
       status,
       workOffered,
+      priority,
       createdBy: req.user._id,
     });
 
@@ -118,6 +119,31 @@ router.post('/groups', protect, async (req, res) => {
     res.json(group);
   } catch (err) {
     console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// Delete a client group
+router.delete('/groups/:id', protect, async (req, res) => {
+  try {
+    const group = await ClientGroup.findById(req.params.id);
+    if (!group) {
+      return res.status(404).json({ msg: 'Client group not found' });
+    }
+    // Check if user has permission to delete
+    if (!['Admin', 'Head', 'Team Head'].includes(req.user.role)) {
+      return res.status(403).json({ msg: 'Not authorized to delete client groups' });
+    }
+    // Delete all clients in this group
+    await Client.deleteMany({ group: group._id });
+    // Delete the group itself
+    await group.deleteOne();
+    res.json({ msg: 'Client group and all its clients removed' });
+  } catch (err) {
+    console.error(err.message);
+    if (err.kind === 'ObjectId') {
+      return res.status(404).json({ msg: 'Client group not found' });
+    }
     res.status(500).send('Server Error');
   }
 });

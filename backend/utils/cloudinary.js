@@ -1,58 +1,95 @@
-import ImageKit from 'imagekit';
 import fs from 'fs';
-import path from 'path';
+import axios from 'axios';
+import FormData from 'form-data';
 
+const PCLOUD_TOKEN = process.env.PCLOUD_TOKEN;
+const PCLOUD_API = 'https://api.pcloud.com';
 
-const imagekit = new ImageKit({
-  publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
-  privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
-  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
-});
-
-// Helper to get file extension
-const getFileExtension = (filePath) => path.extname(filePath).slice(1);
-
-// Upload image or file to ImageKit
-export const uploadImage = async (filePath) => {
-  return uploadFile(filePath, 'profile_pictures');
-};
-
-export const uploadFile = async (filePath, folder = 'documents', mimetype = null) => {
+async function getOrCreateFolder(folder) {
+  if (!folder) return 0;
+ // root
+  // Only upload to existing folders, do not create
   try {
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`File not found at path: ${filePath}`);
+    const listRes = await axios.get(`${PCLOUD_API}/listfolder`, {
+      params: { auth: PCLOUD_TOKEN, path: `/${folder}` }
+    });
+    if (listRes.data.result === 0 && listRes.data.metadata?.folderid) {
+      return listRes.data.metadata.folderid;
+    } else {
+      throw new Error(`Folder '${folder}' does not exist in pCloud.`);
     }
-    const fileName = path.basename(filePath);
-    const fileBuffer = fs.readFileSync(filePath);
-    const uploadOptions = {
-      file: fileBuffer,
-      fileName: fileName,
-      folder: folder,
-      useUniqueFileName: true,
-    };
-    if (mimetype) {
-      uploadOptions.mime = mimetype;
+  } catch (err) {
+    throw new Error(`Folder '${folder}' does not exist in pCloud. Details: ${err.response?.data?.error || err.message}`);
+  }
+}
+
+export const uploadFile = async (filePath, folder = 'Documents') => {
+  try {
+    if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
+    const folderId = await getOrCreateFolder(folder);
+    const filename = filePath.split('/').pop();
+    const form = new FormData();
+    form.append('file', fs.createReadStream(filePath));
+    form.append('filename', filename);
+    
+
+    const uploadRes = await axios.post(
+      `https://api.pcloud.com/uploadfile?auth=${PCLOUD_TOKEN}&folderid=${folderId}`,
+      form,
+      {
+        headers: form.getHeaders(),
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity
+      }
+    );
+    
+
+    // Safe handling of metadata
+    const meta = uploadRes.data?.metadata;
+    let fileMeta = null;
+    if (Array.isArray(meta)) {
+      if (meta.length > 0) {
+        fileMeta = meta[0];
+      } else {
+        console.error('Upload failed: metadata array is empty. Full response:', JSON.stringify(uploadRes.data, null, 2));
+        throw new Error('Upload failed: metadata array is empty');
+      }
+    } else if (meta && typeof meta === 'object' && meta.fileid) {
+      fileMeta = meta;
+    } else {
+      console.error('Upload failed: Full response:', JSON.stringify(uploadRes.data, null, 2));
+      throw new Error(`Upload failed: metadata is missing or malformed. Received metadata: ${JSON.stringify(meta)}`);
     }
-    const result = await imagekit.upload(uploadOptions);
+
+    // Get permanent public link instead of temporary link
+    const publinkRes = await axios.get(`${PCLOUD_API}/getfilepublink`, {
+      params: { auth: PCLOUD_TOKEN, fileid: fileMeta.fileid }
+    });
+
     return {
-      public_id: result.fileId,
-      url: result.url
+      public_id: fileMeta?.fileid,
+      url: publinkRes?.data?.result === 0 && publinkRes.data.link
+        ? publinkRes.data.link
+        : null,
     };
   } catch (error) {
-    throw new Error(error.message || 'Error uploading file to ImageKit');
+    console.error('pCloud upload error:', error.response?.data || error);
+    throw new Error(error.message || 'Upload to pCloud failed');
   }
 };
 
-// Delete file from ImageKit
-export const deleteImage = async (public_id) => {
+export const uploadImage = async (filePath) => {
+  return uploadFile(filePath, 'Documents/Profile');
+};
+
+export const deleteFile = async (public_id) => {
   try {
     if (public_id) {
-      const result = await imagekit.deleteFile(public_id);
-      if (!result || result.error) {
-        throw new Error(`Failed to delete image: ${result.error?.message || 'Unknown error'}`);
-      }
+      await axios.get(`${PCLOUD_API}/deletefile`, {
+        params: { auth: PCLOUD_TOKEN, fileid: public_id }
+      });
     }
   } catch (error) {
-    throw new Error(error.message || 'Error deleting image from ImageKit');
+    throw new Error(error.message || 'Error deleting file from pCloud');
   }
-}; 
+};

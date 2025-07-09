@@ -39,14 +39,24 @@ router.get('/my-tasks', protect, async (req, res) => {
       $or: [
         { assignedTo: req.user._id },
         { verificationAssignedTo: req.user._id },
-        { secondVerificationAssignedTo: req.user._id }
+        { secondVerificationAssignedTo: req.user._id },
+        { guides: req.user._id }
       ],
       status: { $ne: 'completed' }
     })
     .select('title description clientName clientGroup workType')
     .sort({ createdAt: -1 });
     
-    res.json(tasks);
+    // Remove duplicates (if any)
+    const uniqueTasks = [];
+    const seen = new Set();
+    for (const task of tasks) {
+      if (!seen.has(task._id.toString())) {
+        uniqueTasks.push(task);
+        seen.add(task._id.toString());
+      }
+    }
+    res.json(uniqueTasks);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -367,8 +377,9 @@ router.get('/task-hours', protect, async (req, res) => {
 
     timesheets.forEach(ts => {
       const user = ts.user;
+      if (!user) return; // skip if user is null
       ts.entries.forEach(entry => {
-        if (entry.task) {
+        if (entry.task && entry.task._id) {
           // Regular task
           const taskId = entry.task._id.toString();
           const userId = user._id.toString();
@@ -483,11 +494,13 @@ router.get('/task-costs', protect, async (req, res) => {
     const taskUserMinutes = {};
     timesheets.forEach(ts => {
       const user = ts.user;
+      if (!user) return; // skip if user is null
       ts.entries.forEach(entry => {
-        if (entry.task) {
+        if (entry.task && user) {
           // Regular task
-          const taskId = entry.task._id.toString();
-          const userId = user._id.toString();
+          const taskId = entry.task._id?.toString();
+          const userId = user._id?.toString();
+          if (!taskId || !userId) return;
           if (!taskUserMinutes[taskId]) taskUserMinutes[taskId] = {};
           if (!taskUserMinutes[taskId][userId]) taskUserMinutes[taskId][userId] = 0;
           // Calculate minutes
@@ -497,10 +510,11 @@ router.get('/task-costs', protect, async (req, res) => {
           let endM = eh * 60 + em;
           if (endM < startM) endM += 24 * 60;
           taskUserMinutes[taskId][userId] += (endM - startM);
-        } else if (entry.manualTaskName) {
+        } else if (entry.manualTaskName && user) {
           // Manual task - create a special key for manual tasks
           const manualTaskKey = `manual_${entry.manualTaskName}_${user._id}`;
-          const userId = user._id.toString();
+          const userId = user._id?.toString();
+          if (!userId) return;
           if (!taskUserMinutes[manualTaskKey]) taskUserMinutes[manualTaskKey] = {};
           if (!taskUserMinutes[manualTaskKey][userId]) taskUserMinutes[manualTaskKey][userId] = 0;
           // Calculate minutes
@@ -553,7 +567,7 @@ router.get('/task-costs', protect, async (req, res) => {
     }
     res.json(result);
   } catch (error) {
-    console.error('Error aggregating task costs:', error);
+    console.error('Error aggregating task costs:', error.stack || error);
     res.status(500).json({ message: 'Server error' });
   }
 });

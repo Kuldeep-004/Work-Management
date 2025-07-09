@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import TaskList from '../../components/TaskList';
+import AdvancedTaskTable from '../../components/AdvancedTaskTable';
 import CreateTask from '../../components/CreateTask';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -22,9 +23,10 @@ const ALL_COLUMNS = [
   { id: 'clientName', label: 'Client Name' },
   { id: 'clientGroup', label: 'Client Group' },
   { id: 'workType', label: 'Work Type' },
+  { id: 'billed', label: 'Billed' },
   { id: 'status', label: 'Task Status' },
-  { id: 'verificationStatus', label: 'Verification Status' },
   { id: 'priority', label: 'Priority' },
+  { id: 'selfVerification', label: 'Self Verification' },
   { id: 'inwardEntryDate', label: 'Inward Entry Date' },
   { id: 'dueDate', label: 'Due Date' },
   { id: 'targetDate', label: 'Target Date' },
@@ -32,6 +34,7 @@ const ALL_COLUMNS = [
   { id: 'assignedTo', label: 'Assigned To' },
   { id: 'verificationAssignedTo', label: 'First Verifier' },
   { id: 'secondVerificationAssignedTo', label: 'Second Verifier' },
+  { id: 'guides', label: 'Guide' },
   { id: 'files', label: 'Files' },
   { id: 'comments', label: 'Comments' },
 ];
@@ -67,6 +70,8 @@ const AssignedTasks = () => {
     if (saved) return JSON.parse(saved);
     return ALL_COLUMNS.map(col => col.id);
   });
+  
+
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -350,6 +355,11 @@ const AssignedTasks = () => {
     });
   };
 
+  // Debug logs
+  console.log('ALL_COLUMNS:', ALL_COLUMNS);
+  console.log('visibleColumns:', visibleColumns);
+  console.log('tasks:', tasks);
+
   if (!isAuthenticated()) {
     return null;
   }
@@ -374,7 +384,7 @@ const AssignedTasks = () => {
   }
 
   return (
-    <div className="p-4 sm:p-6 md:p-8">
+    <div className="p-2 sm:p-3 md:p-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h2 className="text-2xl font-bold text-gray-800">Assigned Tasks</h2>
         <CreateTask users={users} />
@@ -426,7 +436,7 @@ const AssignedTasks = () => {
         </div>
       </div>
       
-      <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-0 gap-4">
         <div className="flex flex-row flex-wrap items-center gap-4 w-full sm:w-auto">
           <div className="relative" ref={filterPopupRef}>
             <button
@@ -513,15 +523,32 @@ const AssignedTasks = () => {
         </div>
       </div>
       <ErrorBoundary>
-        <TaskList 
-          taskType={activeTab} 
-          viewType="assigned" 
+        <AdvancedTaskTable 
           tasks={getFilteredAndSortedTasks(tasks)} 
-          showControls={false} 
-          searchTerm={searchTerm} 
-          setSearchTerm={setSearchTerm} 
-          visibleColumns={visibleColumns} 
-          setVisibleColumns={setVisibleColumns} 
+          viewType="assigned" 
+          taskType={activeTab}
+          onTaskUpdate={(taskId, updater) => {
+            setTasks(prevTasks => prevTasks.map(task => 
+              task._id === taskId ? updater(task) : task
+            ));
+          }}
+          onTaskDelete={(taskId) => {
+            setTasks(tasks.filter(task => task._id !== taskId));
+          }}
+          onStatusChange={(taskId, newStatus) => {
+            setTasks(prevTasks => prevTasks.map(task => 
+              task._id === taskId ? { ...task, status: newStatus } : task
+            ));
+          }}
+          shouldDisableActions={(task) => {
+           
+            return false;
+          }}
+          shouldDisableFileActions={() => false}
+          taskHours={[]}
+          visibleColumns={visibleColumns}
+          setVisibleColumns={setVisibleColumns}
+          storageKeyPrefix="assignedtasks"
         />
       </ErrorBoundary>
     </div>

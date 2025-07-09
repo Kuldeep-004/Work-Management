@@ -9,6 +9,10 @@ const FileList = ({ taskId, files: initialFiles = [], onFileDeleted }) => {
   const [files, setFiles] = useState(initialFiles);
 
   useEffect(() => {
+    setFiles(initialFiles);
+  }, [initialFiles]);
+
+  useEffect(() => {
     const fetchFiles = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/files`, {

@@ -21,6 +21,12 @@ const clientSchema = new mongoose.Schema({
     ref: 'WorkType',
     required: true
   }],
+  priority: {
+    type: String,
+    enum: ['A', 'B', 'C', 'D'],
+    required: true,
+    default: 'A',
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

@@ -19,3 +19,12 @@
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
 }
+
+/* Hide scrollbars for scrollable content inside table cells */
+td *::-webkit-scrollbar {
+  display: none;
+}
+td * {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
