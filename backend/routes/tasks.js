@@ -127,13 +127,22 @@ router.get('/received/counts', protect, async (req, res) => {
       verificationAssignedTo: { $exists: false },
       secondVerificationAssignedTo: { $exists: false }
     });
-    // Received for verification: not completed, first verifier is current user, second verifier is empty
+    // Received for verification: not completed, first or second verifier is current user
     const receivedVerificationCount = await Task.countDocuments({
       status: { $ne: 'completed' },
-      verificationAssignedTo: req.user._id,
       $or: [
-        { secondVerificationAssignedTo: { $exists: false } },
-        { secondVerificationAssignedTo: null }
+        // First verifier, second not yet assigned
+        {
+          verificationAssignedTo: req.user._id,
+          $or: [
+            { secondVerificationAssignedTo: { $exists: false } },
+            { secondVerificationAssignedTo: null }
+          ]
+        },
+        // Second verifier, assigned
+        {
+          secondVerificationAssignedTo: req.user._id
+        }
       ]
     });
     // Issued for verification: not completed, first verifier is set, assigned to current user
@@ -430,13 +439,22 @@ router.get('/received', protect, async (req, res) => {
         };
         break;
       case 'receivedVerification':
-        // Tasks received for verification: not completed, first verifier is current user, second verifier is empty
+        // Tasks for first or second verifier
         query = {
           status: { $ne: 'completed' },
-          verificationAssignedTo: req.user._id,
           $or: [
-            { secondVerificationAssignedTo: { $exists: false } },
-            { secondVerificationAssignedTo: null }
+            // First verifier, second not yet assigned
+            {
+              verificationAssignedTo: req.user._id,
+              $or: [
+                { secondVerificationAssignedTo: { $exists: false } },
+                { secondVerificationAssignedTo: null }
+              ]
+            },
+            // Second verifier, assigned
+            {
+              secondVerificationAssignedTo: req.user._id
+            }
           ]
         };
         break;
@@ -641,7 +659,7 @@ router.patch('/:taskId/status', protect, async (req, res) => {
     if (status === 'reject') {
       task.verificationAssignedTo = undefined;
       task.secondVerificationAssignedTo = undefined;
-      task.status = 'pending';
+      task.status = 'yet_to_start';
       await task.save();
       const updatedTask = await Task.findById(task._id)
         .populate('assignedTo', 'firstName lastName photo')

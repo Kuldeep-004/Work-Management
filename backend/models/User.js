@@ -46,9 +46,9 @@ const userSchema = new mongoose.Schema(
       default: 'Fresher',
     },
     role2: {
-      type: String,
+      type: [String],
       enum: ['None', 'TimeSheet Verifier', 'Task Verifier'],
-      default: 'None',
+      default: ['None'],
     },
     status: {
       type: String,

@@ -61,6 +61,7 @@ const Dashboard = () => {
           <Route path="assigned-tasks" element={<AssignedTasks />} />
           <Route path="subordinate-timesheets" element={<SubordinateTimesheets />} />
           <Route path="announcements" element={<Announcements />} />
+          <Route path="task-verification" element={<TaskVerification />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
           <Route path="notes" element={<Notes />} />
@@ -87,6 +88,7 @@ const Dashboard = () => {
           <Route path="clients" element={<Clients />} />
           <Route path="timesheets" element={<Timesheets />} />
           <Route path="*" element={<AdminDashboard />} />
+          <Route path="task-verification" element={<TaskVerification />} />
         </Routes>
       </DashboardLayout>
     );
@@ -99,12 +101,15 @@ const Dashboard = () => {
         <Route path="received-tasks" element={<ReceivedTasks />} />
         <Route path="assigned-tasks" element={<AssignedTasks />} />
         {/* Only show Task Verification for Task Verifier (role2) */}
-        {user?.role2 === 'Task Verifier' && (
+        {(Array.isArray(user?.role2) ? user.role2.includes('Task Verifier') : user?.role2 === 'Task Verifier') && (
           <Route path="task-verification" element={<TaskVerification />} />
         )}
         <Route path="announcements" element={<Announcements />} />
         <Route path="cost" element={<Cost />} />
-        <Route path="subordinate-timesheets" element={<SubordinateTimesheets />} />
+        {/* Only show Subordinate Timesheets for TimeSheet Verifier (role2) */}
+        {(Array.isArray(user?.role2) ? user.role2.includes('TimeSheet Verifier') : user?.role2 === 'TimeSheet Verifier') && (
+          <Route path="subordinate-timesheets" element={<SubordinateTimesheets />} />
+        )}
         <Route path="analytics" element={<Analytics />} />
         <Route path="settings" element={<Settings />} />
         <Route path="notes" element={<Notes />} />

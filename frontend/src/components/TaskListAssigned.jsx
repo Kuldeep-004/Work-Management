@@ -74,6 +74,18 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
     }
     setEditingDescriptionTaskId(null);
   };
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'in_progress':
+        return 'bg-blue-100 text-blue-800';
+      case 'yet_to_start':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
   return (
      <div className="space-y-4">
     <div className="flex justify-between items-center mb-4 space-x-4">
@@ -90,7 +102,7 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
         onChange={(e) => setFilter(e.target.value)}
       >
         <option value="all">All Statuses</option>
-        <option value="pending">Pending</option>
+        <option value="yet_to_start">Yet to Start</option>
         <option value="in_progress">In Progress</option>
         <option value="completed">Completed</option>
       </select>
@@ -233,17 +245,17 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
                 <div className="flex items-center space-x-2">
                   {task.assignedTo._id === loggedInUser._id ? (
                     <select
-                      value={task.status || 'pending'}
+                      value={task.status || ''}
                       onChange={(e) => handleStatusChange(task._id, e.target.value)}
                       className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}
                     >
-                      <option value="pending">Pending</option>
+                      <option value="yet_to_start">Yet to Start</option>
                       <option value="in_progress">In Progress</option>
                       <option value="completed">Completed</option>
                     </select>
                   ) : (
                     <span className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}>
-                      {task.status ? task.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Pending'}
+                      {task.status ? task.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : ''}
                     </span>
                   )}
                 </div>
@@ -278,7 +290,7 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
                       task.verificationStatus === 'executed' ? 'bg-yellow-100 text-yellow-800' :
                       'bg-gray-100 text-gray-800'
                     }`}>
-                      {task.verificationStatus ? task.verificationStatus.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Pending'}
+                      {task.verificationStatus ? task.verificationStatus.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : ''}
                     </span>
                   )}
                 </div>

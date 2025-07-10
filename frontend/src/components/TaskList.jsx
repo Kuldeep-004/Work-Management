@@ -331,8 +331,8 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
         return 'bg-green-100 text-green-800';
       case 'in_progress':
         return 'bg-blue-100 text-blue-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
+      case 'yet_to_start':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -675,7 +675,7 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
 
     let statuses = [];
     if (isAssignee) {
-      statuses = ['pending', 'executed'];
+      statuses = ['executed'];
     } else if (isFirstVerifier) {
       statuses = ['rejected', 'first_verified', 'completed'];
     } else if (isSecondVerifier) {
@@ -836,7 +836,7 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
                               }}
                               title="Click to edit"
                             >
-                              {task.description}
+                              {task.description || 'N/A'}
                             </span>
                           )}
                         </td>
@@ -850,7 +850,7 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
                     case 'billed':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-center text-lg">{task.billed ? '✔' : '✖'}</td>;
                     case 'status':
-                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{task.assignedTo._id === loggedInUser._id && !shouldDisableActions(task) ? (<select value={task.status || 'pending'} onChange={(e) => handleStatusChange(task._id, e.target.value)} className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}><option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="completed">Completed</option></select>) : (<span className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}>{task.status ? task.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Pending'}</span>)}</div></td>;
+                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{task.assignedTo._id === loggedInUser._id && !shouldDisableActions(task) ? (<select value={task.status || ''} onChange={(e) => handleStatusChange(task._id, e.target.value)} className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}><option value="in_progress">In Progress</option><option value="completed">Completed</option></select>) : (<span className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}>{task.status ? task.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'N/A'}</span>)}</div></td>;
                     case 'priority':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(task.priority)}`}>{task.priority}</span></td>;
                     case 'inwardEntryDate':

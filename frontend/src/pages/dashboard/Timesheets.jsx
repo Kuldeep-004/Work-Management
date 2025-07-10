@@ -28,8 +28,10 @@ const Timesheets = () => {
       if (!timesheetRes.ok || !tasksRes.ok) throw new Error('Failed to fetch initial data');
       const timesheetData = await timesheetRes.json();
       const tasksData = await tasksRes.json();
+      // Filter out tasks that are completed in either status or verificationStatus
+      const filteredTasks = tasksData.filter(task => task.status !== 'completed' && task.verificationStatus !== 'pending');
       setTimesheet(timesheetData);
-      setTasks(tasksData);
+      setTasks(filteredTasks);
     } catch (error) {
       toast.error(error.message || 'Failed to fetch data');
     } finally {

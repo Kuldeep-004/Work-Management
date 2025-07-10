@@ -96,28 +96,32 @@ const DashboardLayout = ({ children }) => {
         break;
     }
     // Add Subordinate Timesheets link for TimeSheet Verifier (if not already admin)
-    if (user.role2 === 'TimeSheet Verifier' && user.role !== 'Admin') {
-      menuItems.push({
-        id: 'subordinate-timesheets',
-        label: 'Subordinate Timesheets',
-        icon: ClipboardDocumentListIcon,
-        path: '/dashboard/subordinate-timesheets'
-      });
+    if (Array.isArray(user.role2) ? user.role2.includes('TimeSheet Verifier') : user.role2 === 'TimeSheet Verifier') {
+      if (user.role !== 'Admin') {
+        menuItems.push({
+          id: 'subordinate-timesheets',
+          label: 'Subordinate Timesheets',
+          icon: ClipboardDocumentListIcon,
+          path: '/dashboard/subordinate-timesheets'
+        });
+      }
     }
     // Add Task Verification link for Task Verifier (if not already admin)
-    if (user.role2 === 'Task Verifier' && user.role !== 'Admin') {
-      // Find index of Notes to insert before it
-      const notesIndex = menuItems.findIndex(item => item.id === 'notes');
-      const taskVerificationItem = {
-        id: 'task-verification',
-        label: 'Tasks Pending For Approval',
-        icon: ShieldCheckIcon,
-        path: '/dashboard/task-verification'
-      };
-      if (notesIndex !== -1) {
-        menuItems.splice(notesIndex, 0, taskVerificationItem);
-      } else {
-        menuItems.push(taskVerificationItem);
+    if (Array.isArray(user.role2) ? user.role2.includes('Task Verifier') : user.role2 === 'Task Verifier') {
+      if (user.role !== 'Admin') {
+        // Find index of Notes to insert before it
+        const notesIndex = menuItems.findIndex(item => item.id === 'notes');
+        const taskVerificationItem = {
+          id: 'task-verification',
+          label: 'Tasks Pending For Approval',
+          icon: ShieldCheckIcon,
+          path: '/dashboard/task-verification'
+        };
+        if (notesIndex !== -1) {
+          menuItems.splice(notesIndex, 0, taskVerificationItem);
+        } else {
+          menuItems.push(taskVerificationItem);
+        }
       }
     }
   }

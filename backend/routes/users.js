@@ -340,8 +340,12 @@ router.patch('/:userId/update-fields', protect, async (req, res) => {
     }
 
     // Handle role2 update
-    if (role2) {
-      updatedFields.role2 = role2;
+    if (role2 !== undefined) {
+      if (Array.isArray(role2)) {
+        updatedFields.role2 = role2;
+      } else if (typeof role2 === 'string') {
+        updatedFields.role2 = [role2];
+      }
     }
 
     // Update user with new fields

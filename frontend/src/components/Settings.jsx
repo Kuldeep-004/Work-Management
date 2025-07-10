@@ -37,8 +37,8 @@ const Settings = () => {
 
   // Calculate stats
   const totalTasks = tasks.length;
-  const pendingOrInProgressTasks = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length;
-  const urgentTasks = tasks.filter(t => (t.status === 'pending' || t.status === 'in_progress') && t.priority === 'urgent').length;
+  const pendingOrInProgressTasks = tasks.filter(t => t.status === 'yet_to_start' || t.status === 'in_progress').length;
+  const urgentTasks = tasks.filter(t => (t.status === 'yet_to_start' || t.status === 'in_progress') && t.priority === 'urgent').length;
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });

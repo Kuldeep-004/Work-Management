@@ -272,6 +272,11 @@ const CreateTask = ({ users = [] }) => {
       return;
     }
 
+    if (formData.billed !== true && formData.billed !== false) {
+      toast.error('Please select whether the task is billed or not');
+      return;
+    }
+
     try {
       setUploading(true);
       console.log('Creating task with files:', selectedFiles); // Debug log
@@ -763,13 +768,15 @@ const CreateTask = ({ users = [] }) => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Billed
+                    Billed <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={formData.billed ? 'yes' : 'no'}
-                    onChange={e => setFormData({ ...formData, billed: e.target.value === 'yes' })}
+                    value={formData.billed === true ? 'yes' : formData.billed === false ? 'no' : ''}
+                    onChange={e => setFormData({ ...formData, billed: e.target.value === 'yes' ? true : e.target.value === 'no' ? false : '' })}
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
                   >
+                    <option value="" disabled>Select billed status</option>
                     <option value="yes">Yes</option>
                     <option value="no">No</option>
                   </select>

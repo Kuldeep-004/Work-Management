@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import defaultProfile from '../../assets/avatar.jpg';
 import { API_BASE_URL } from '../../apiConfig';
+import { CheckIcon } from '@heroicons/react/24/outline';
 
 const rolesList = ['Admin', 'Head', 'Team Head', 'Fresher'];
 const role2List = ['None', 'TimeSheet Verifier', 'Task Verifier'];
@@ -13,6 +14,7 @@ const AllUsers = () => {
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const dropdownRefs = useRef({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -48,6 +50,22 @@ const AllUsers = () => {
     };
     if (user && user.token) fetchData();
   }, [user]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      setUsers(prev => prev.map(u2 => {
+        if (u2.showRole2Dropdown) {
+          const ref = dropdownRefs.current[u2._id];
+          if (ref && !ref.contains(event.target)) {
+            return { ...u2, showRole2Dropdown: false };
+          }
+        }
+        return u2;
+      }));
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [setUsers]);
 
   const getTeamName = (teamId) => {
     if (!teamId) return '-';
@@ -292,17 +310,67 @@ const AllUsers = () => {
                 </td>
                 <td className="px-5 py-4 whitespace-nowrap text-sm text-gray-600">
                   {user.role === 'Admin' ? (
-                    <select
-                      value={u.role2 || 'None'}
-                      onChange={e => handleRole2Change(u._id, e.target.value)}
-                      className="px-2 py-1 border border-gray-300 rounded"
-                    >
-                      {role2List.map(r2 => (
-                        <option key={r2} value={r2}>{r2}</option>
-                      ))}
-                    </select>
+                    <div className="relative inline-block w-full">
+                      <button
+                        type="button"
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-left bg-white focus:outline-none"
+                        onClick={e => {
+                          const rect = e.target.getBoundingClientRect();
+                          setUsers(prev => prev.map(u2 =>
+                            u2._id === u._id
+                              ? {
+                                  ...u2,
+                                  showRole2Dropdown: !u2.showRole2Dropdown,
+                                  dropdownCoords: {
+                                    left: rect.left + window.scrollX,
+                                    top: rect.bottom + window.scrollY
+                                  }
+                                }
+                              : { ...u2, showRole2Dropdown: false }
+                          ));
+                        }}
+                      >
+                        {(Array.isArray(u.role2) ? u.role2.join(', ') : u.role2) || 'None'}
+                      </button>
+                      {u.showRole2Dropdown && (
+                        <div
+                          ref={el => { dropdownRefs.current[u._id] = el; }}
+                          className="fixed z-50 w-48 bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto"
+                          style={{ left: (u.dropdownCoords?.left || 0) + 'px', top: (u.dropdownCoords?.top || 0) + 'px' }}
+                        >
+                          {role2List.map(r2 => {
+                            const selected = Array.isArray(u.role2) ? u.role2.includes(r2) : u.role2 === r2;
+                            return (
+                              <div
+                                key={r2}
+                                className={`flex items-center px-3 py-2 cursor-pointer hover:bg-blue-50 ${selected ? 'font-semibold text-blue-600' : ''}`}
+                                onClick={() => {
+                                  let newRole2;
+                                  if (Array.isArray(u.role2)) {
+                                    if (u.role2.includes(r2)) {
+                                      newRole2 = u.role2.filter(val => val !== r2);
+                                    } else {
+                                      newRole2 = [...u.role2, r2].filter(val => val !== 'None');
+                                    }
+                                    if (newRole2.length === 0) newRole2 = ['None'];
+                                  } else {
+                                    newRole2 = r2 === u.role2 ? ['None'] : [r2];
+                                  }
+                                  handleRole2Change(u._id, newRole2);
+                                  setUsers(prev => prev.map(u2 => u2._id === u._id ? { ...u2, showRole2Dropdown: true, role2: newRole2 } : u2));
+                                }}
+                              >
+                                {selected && <CheckIcon className="w-4 h-4 mr-2 text-blue-600" />}
+                                {!selected && <span className="w-4 h-4 mr-2" />}
+                                {r2}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    u.role2 || 'None'
+                    (Array.isArray(u.role2) ? u.role2.join(', ') : u.role2) || 'None'
                   )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">

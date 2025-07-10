@@ -8,8 +8,8 @@ const Analytics = () => {
   const [stats, setStats] = useState({
     totalTasks: 0,
     completedTasks: 0,
-    pendingTasks: 0,
     inProgressTasks: 0,
+    yetToStartTasks: 0,
     priorityDistribution: {
       urgent: 0,
       regular: 0,
@@ -33,8 +33,8 @@ const Analytics = () => {
         const stats = {
           totalTasks: tasks.length,
           completedTasks: tasks.filter((task) => task.status === 'completed').length,
-          pendingTasks: tasks.filter((task) => task.status === 'pending').length,
           inProgressTasks: tasks.filter((task) => task.status === 'in_progress').length,
+          yetToStartTasks: tasks.filter((task) => task.status === 'yet_to_start').length,
           priorityDistribution: {
             urgent: tasks.filter((task) => task.priority === 'urgent').length,
             regular: tasks.filter((task) => task.priority === 'regular').length,
@@ -80,8 +80,8 @@ const Analytics = () => {
           <p className="text-3xl font-bold text-yellow-600">{stats.inProgressTasks}</p>
         </div>
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Pending</h3>
-          <p className="text-3xl font-bold text-red-600">{stats.pendingTasks}</p>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Yet to Start</h3>
+          <p className="text-3xl font-bold text-purple-600">{stats.yetToStartTasks}</p>
         </div>
 
         {/* Priority Distribution */}

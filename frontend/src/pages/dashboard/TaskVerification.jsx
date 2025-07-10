@@ -32,7 +32,7 @@ const TaskVerification = () => {
         });
         if (!res.ok) throw new Error('Failed to fetch tasks for verification');
         let data = await res.json();
-        data = data.filter(task => task.verificationStatus === 'pending');
+        // Remove all logic and UI related to 'pending' status
         setTasks(data);
       } catch (err) {
         setError(err.message);

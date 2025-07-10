@@ -71,7 +71,8 @@ const AssignedTasks = () => {
     return ALL_COLUMNS.map(col => col.id);
   });
   
-
+  // Add state for task hours
+  const [taskHours, setTaskHours] = useState([]);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -201,6 +202,25 @@ const AssignedTasks = () => {
       fetchData(`${API_BASE_URL}/api/tasks/unique/client-names`, setClientNames);
       fetchData(`${API_BASE_URL}/api/tasks/unique/client-groups`, setClientGroups);
       fetchData(`${API_BASE_URL}/api/tasks/unique/work-types`, setWorkTypes);
+    }
+  }, [user]);
+
+  // Fetch task hours for all users
+  useEffect(() => {
+    const fetchTaskHours = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/timesheets/task-hours`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch task hours');
+        const data = await response.json();
+        setTaskHours(data);
+      } catch (error) {
+        console.error('Error fetching task hours:', error);
+      }
+    };
+    if (user && user.token) {
+      fetchTaskHours();
     }
   }, [user]);
 
@@ -524,11 +544,11 @@ const AssignedTasks = () => {
       </div>
       <ErrorBoundary>
         <AdvancedTaskTable 
-          tasks={getFilteredAndSortedTasks(tasks)} 
-          viewType="assigned" 
+          tasks={getFilteredAndSortedTasks(tasks)}
+          viewType="assigned"
           taskType={activeTab}
           onTaskUpdate={(taskId, updater) => {
-            setTasks(prevTasks => prevTasks.map(task => 
+            setTasks(prevTasks => prevTasks.map(task =>
               task._id === taskId ? updater(task) : task
             ));
           }}
@@ -536,16 +556,15 @@ const AssignedTasks = () => {
             setTasks(tasks.filter(task => task._id !== taskId));
           }}
           onStatusChange={(taskId, newStatus) => {
-            setTasks(prevTasks => prevTasks.map(task => 
+            setTasks(prevTasks => prevTasks.map(task =>
               task._id === taskId ? { ...task, status: newStatus } : task
             ));
           }}
           shouldDisableActions={(task) => {
-           
             return false;
           }}
           shouldDisableFileActions={() => false}
-          taskHours={[]}
+          taskHours={taskHours}
           visibleColumns={visibleColumns}
           setVisibleColumns={setVisibleColumns}
           storageKeyPrefix="assignedtasks"

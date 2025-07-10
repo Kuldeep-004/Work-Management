@@ -63,7 +63,7 @@ const PRIORITY_OPTIONS = [
 ];
 
 const STATUS_OPTIONS = [
-  { value: 'pending', label: 'Pending' },
+  { value: 'yet_to_start', label: 'Yet to Start' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'completed', label: 'Completed' },
   { value: 'reject', label: 'Reject' },
@@ -158,8 +158,8 @@ const AdvancedTaskTable = ({
         return 'bg-green-100 text-green-800';
       case 'in_progress':
         return 'bg-blue-100 text-blue-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
+      case 'yet_to_start':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -650,6 +650,20 @@ const AdvancedTaskTable = ({
                       return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? '✔' : '✖'}</span></div></td>;
                     
                     case 'status':
+                      // Show colored status but disable interaction in 'Task Issued For Verification' and 'Task For Guidance' tabs in Received Tasks
+                      if (
+                        viewType === 'received' &&
+                        (taskType === 'issuedVerification' || taskType === 'guidance' || taskType === 'completed')
+                      ) {
+                        return (
+                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                            style={{ width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden' }}>
+                            <div className="overflow-x-auto whitespace-nowrap" style={{ width: '100%', maxWidth: '100%' }}>
+                              <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getStatusColor(task.status)}`}>{STATUS_OPTIONS.find(opt => opt.value === task.status)?.label || task.status}</span>
+                            </div>
+                          </td>
+                        );
+                      }
                       return (
                         <td
                           key={colId}
@@ -711,7 +725,11 @@ const AdvancedTaskTable = ({
                                       zIndex: 9999,
                                     }}
                                   >
-                                    {STATUS_OPTIONS.map(opt => (
+                                    {(
+                                      viewType === 'received' && taskType === 'execution'
+                                        ? STATUS_OPTIONS.filter(opt => opt.value !== 'reject')
+                                        : STATUS_OPTIONS
+                                    ).map(opt => (
                                       <div
                                         key={opt.value}
                                         style={{
@@ -852,6 +870,7 @@ const AdvancedTaskTable = ({
                       );
                     
                     case 'selfVerification':
+                      const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
                       return (
                         <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
                           style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
@@ -859,8 +878,8 @@ const AdvancedTaskTable = ({
                             <input
                               type="checkbox"
                               checked={!!task.selfVerification}
-                              disabled={viewType !== 'received'}
-                              onChange={viewType === 'received' ? async (e) => {
+                              disabled={!canEditSelfVerification}
+                              onChange={canEditSelfVerification ? async (e) => {
                                 const checked = e.target.checked;
                                 try {
                                   const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}`, {
@@ -929,7 +948,12 @@ const AdvancedTaskTable = ({
                                     className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
                                     onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
                                   />
-                                  <span className="ml-2">{task.verificationAssignedTo.firstName} {task.verificationAssignedTo.lastName}</span>
+                                  <span className="ml-2">
+                                    {task.verificationAssignedTo.firstName} {task.verificationAssignedTo.lastName}
+                                    <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                                      {getUserTaskHours(task._id, task.verificationAssignedTo._id)}h
+                                    </span>
+                                  </span>
                                 </>
                               ) : (
                                 <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
@@ -1018,7 +1042,7 @@ const AdvancedTaskTable = ({
                       );
                     
                     case 'secondVerificationAssignedTo':
-                      // Always show dropdown if first verifier is selected
+                      // Only show dropdown if first verifier is selected AND taskType is 'receivedVerification'
                       if (!task.verificationAssignedTo) {
                         return (
                           <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
@@ -1028,7 +1052,29 @@ const AdvancedTaskTable = ({
                           </td>
                         );
                       }
-                      // Always allow opening the dropdown if first verifier is selected
+                      // Only allow dropdown if taskType is 'receivedVerification'
+                      if (taskType !== 'receivedVerification') {
+                        return (
+                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
+                            <div className="overflow-x-auto whitespace-nowrap flex items-center" style={{width: '100%', maxWidth: '100%'}}>
+                              {task.secondVerificationAssignedTo ? (
+                                <>
+                                  <img src={task.secondVerificationAssignedTo.photo?.url || defaultProfile} alt={`${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
+                                  <span className="ml-2">
+                                    {task.secondVerificationAssignedTo.firstName} {task.secondVerificationAssignedTo.lastName}
+                                    <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                                      {getUserTaskHours(task._id, task.secondVerificationAssignedTo._id)}h
+                                    </span>
+                                  </span>
+                                </>
+                              ) : (
+                                <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      }
+                      // Show dropdown if first verifier is selected and taskType is 'receivedVerification'
                       return (
                         <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
                           <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
@@ -1044,7 +1090,12 @@ const AdvancedTaskTable = ({
                               {task.secondVerificationAssignedTo ? (
                                 <>
                                   <img src={task.secondVerificationAssignedTo.photo?.url || defaultProfile} alt={`${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
-                                  <span className="ml-2">{task.secondVerificationAssignedTo.firstName} {task.secondVerificationAssignedTo.lastName}</span>
+                                  <span className="ml-2">
+                                    {task.secondVerificationAssignedTo.firstName} {task.secondVerificationAssignedTo.lastName}
+                                    <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                                      {getUserTaskHours(task._id, task.secondVerificationAssignedTo._id)}h
+                                    </span>
+                                  </span>
                                 </>
                               ) : (
                                 <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
@@ -1168,7 +1219,7 @@ const AdvancedTaskTable = ({
                                             });
                                             if (!response.ok) throw new Error('Failed to update guides');
                                             const updatedTask = await response.json();
-                                            if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
+                                            if (onTaskUpdate) onTaskUpdate(task._id, (prevTask) => ({ ...prevTask, guides: updatedTask.guides }));
                                             toast.success('Guide removed');
                                           } catch (err) {
                                             toast.error('Failed to update guides');
@@ -1252,7 +1303,7 @@ const AdvancedTaskTable = ({
                                           });
                                           if (!response.ok) throw new Error('Failed to update guides');
                                           const updatedTask = await response.json();
-                                          if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
+                                          if (onTaskUpdate) onTaskUpdate(task._id, (prevTask) => ({ ...prevTask, guides: updatedTask.guides }));
                                           toast.success('Guide added');
                                         } catch (err) {
                                           toast.error('Failed to update guides');

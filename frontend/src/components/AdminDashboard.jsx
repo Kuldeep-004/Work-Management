@@ -397,6 +397,8 @@ const Dashboard = () => {
         return 'bg-blue-100 text-blue-800';
       case 'pending':
         return 'bg-yellow-100 text-yellow-800';
+      case 'yet_to_start':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -433,6 +435,7 @@ const Dashboard = () => {
     completedTasks: tasks.filter(t => t.status === 'completed').length,
     inProgressTasks: tasks.filter(t => t.status === 'in_progress').length,
     pendingTasks: tasks.filter(t => t.status === 'pending').length,
+    yetToStartTasks: tasks.filter(t => t.status === 'yet_to_start').length,
     todayTasks: tasks.filter(t => new Date(t.dueDate).toDateString() === new Date().toDateString()).length,
   };
 

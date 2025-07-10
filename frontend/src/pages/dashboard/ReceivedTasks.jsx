@@ -72,7 +72,8 @@ const ReceivedTasks = () => {
     return ALL_COLUMNS.map(col => col.id);
   });
   
-
+  // Add state for task hours
+  const [taskHours, setTaskHours] = useState([]);
 
   if (!isAuthenticated()) {
     return null;
@@ -215,6 +216,25 @@ const ReceivedTasks = () => {
       fetchData(`${API_BASE_URL}/api/tasks/unique/client-names`, setClientNames);
       fetchData(`${API_BASE_URL}/api/tasks/unique/client-groups`, setClientGroups);
       fetchData(`${API_BASE_URL}/api/tasks/unique/work-types`, setWorkTypes);
+    }
+  }, [user]);
+
+  // Fetch task hours for all users
+  useEffect(() => {
+    const fetchTaskHours = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/timesheets/task-hours`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch task hours');
+        const data = await response.json();
+        setTaskHours(data);
+      } catch (error) {
+        console.error('Error fetching task hours:', error);
+      }
+    };
+    if (user && user.token) {
+      fetchTaskHours();
     }
   }, [user]);
 
@@ -647,24 +667,23 @@ const ReceivedTasks = () => {
       </div>
       <ErrorBoundary>
         <AdvancedTaskTable 
-          tasks={getFilteredAndSortedTasks(tasks)} 
-          viewType="received" 
+          tasks={getFilteredAndSortedTasks(tasks)}
+          viewType="received"
           taskType={activeTab}
           users={users}
           currentUser={user}
           onTaskUpdate={(taskId, updater) => {
-            setTasks(prevTasks => prevTasks.map(task => 
+            setTasks(prevTasks => prevTasks.map(task =>
               task._id === taskId ? updater(task) : task
             ));
           }}
           onTaskDelete={handleDeleteTask}
           onStatusChange={handleStatusChange}
           shouldDisableActions={(task) => {
-            
             return false;
           }}
           shouldDisableFileActions={() => false}
-          taskHours={[]}
+          taskHours={taskHours}
           visibleColumns={visibleColumns}
           setVisibleColumns={setVisibleColumns}
           storageKeyPrefix="receivedtasks"

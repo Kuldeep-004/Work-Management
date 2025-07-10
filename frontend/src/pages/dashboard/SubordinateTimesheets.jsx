@@ -205,7 +205,17 @@ const SubordinateTimesheets = () => {
     return <div className="p-8 text-center">Please log in to view this page.</div>;
   }
 
-  if (user.role === 'Fresher') {
+  if (user.role === 'Fresher' && !(Array.isArray(user.role2) ? user.role2.includes('TimeSheet Verifier') : user.role2 === 'TimeSheet Verifier')) {
+    return (
+      <div className="p-8 text-center">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-yellow-800 mb-2">Access Restricted</h2>
+          <p className="text-yellow-700">You don't have permission to view subordinate timesheets.</p>
+        </div>
+      </div>
+    );
+  }
+  if (!(user.role === 'Admin' || user.role === 'Head' || user.role === 'Team Head' || (Array.isArray(user.role2) ? user.role2.includes('TimeSheet Verifier') : user.role2 === 'TimeSheet Verifier'))) {
     return (
       <div className="p-8 text-center">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
