@@ -28,12 +28,12 @@ const CreateTask = ({
     clientGroup: '',
     workType: [],
     assignedTo: [],
-    priority: 'regular',
+    priority: 'today',
     inwardEntryDate: '',
     inwardEntryTime: '',
     dueDate: '',
     targetDate: '',
-    billed: true // default to Yes
+    billed: false // default to No (Internal Works)
   });
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,6 +50,7 @@ const CreateTask = ({
   const [isWorkTypeDropdownOpen, setIsWorkTypeDropdownOpen] = useState(false);
   const [workTypeSearchTerm, setWorkTypeSearchTerm] = useState("");
   const [isMultiUserAssign, setIsMultiUserAssign] = useState(false); // Toggle for multi-user assignment
+  const [isMultiWorkTypeAssign, setIsMultiWorkTypeAssign] = useState(false);
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
   const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
@@ -295,12 +296,12 @@ const CreateTask = ({
         clientGroup: '',
         workType: [],
         assignedTo: [],
-        priority: 'regular',
+        priority: 'today',
         inwardEntryDate: date,
         inwardEntryTime: time,
         dueDate: '',
         targetDate: '',
-        billed: true
+        billed: false
       });
       setClientSearchTerm('');
       setSelectedUsers([]);
@@ -444,7 +445,8 @@ const CreateTask = ({
               toast.error('An error occurred while processing one of the created tasks.');
             }
           }
-          
+          // Call onSubmit after all file uploads and before closing the modal
+          if (onSubmit) onSubmit(createdTasks);
           // Close the modal after successful task creation and file uploads
           onClose();
         } else {
@@ -623,12 +625,12 @@ const CreateTask = ({
       clientGroup: '',
       workType: [],
       assignedTo: [],
-      priority: 'regular',
+      priority: 'today',
       inwardEntryDate: date,
       inwardEntryTime: time,
       dueDate: '',
       targetDate: '',
-      billed: true
+      billed: false
     });
     setIsModalOpen(true);
   };
@@ -642,12 +644,12 @@ const CreateTask = ({
       clientGroup: '',
       workType: [],
       assignedTo: [],
-      priority: 'regular',
+      priority: 'today',
       inwardEntryDate: '',
       inwardEntryTime: '',
       dueDate: '',
       targetDate: '',
-      billed: true
+      billed: false
     });
     setSelectedFiles([]);
     setTaskFiles([]);
@@ -890,7 +892,7 @@ const CreateTask = ({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Billed <span className="text-red-500">*</span>
+                    Internal Works <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={formData.billed === true ? 'yes' : formData.billed === false ? 'no' : ''}
@@ -898,7 +900,7 @@ const CreateTask = ({
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >
-                    <option value="" disabled>Select billed status</option>
+                    <option value="" disabled>Select internal works status</option>
                     <option value="yes">Yes</option>
                     <option value="no">No</option>
                   </select>
@@ -1036,7 +1038,7 @@ const CreateTask = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 ">
-                  Description
+                  Status
                 </label>
                 <textarea
                   value={formData.description}
@@ -1090,8 +1092,28 @@ const CreateTask = ({
                   >
                     + New Work Type
                   </button>
+                  <button
+                    type="button"
+                    aria-pressed={isMultiWorkTypeAssign}
+                    onClick={() => {
+                      setIsMultiWorkTypeAssign(v => {
+                        const next = !v;
+                        if (!next && formData.workType.length > 1) {
+                          setFormData(prev => ({ ...prev, workType: prev.workType.slice(0, 1) }));
+                        }
+                        return next;
+                      });
+                    }}
+                    className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiWorkTypeAssign ? 'bg-blue-500' : 'bg-gray-200'}`}
+                    tabIndex={0}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiWorkTypeAssign ? 'translate-x-5' : 'translate-x-1'}`}
+                    />
+                  </button>
+                  <span className="ml-2 text-xs text-gray-500">Multiple</span>
                   {isWorkTypeDropdownOpen && (
-                    <div className="absolute z-20 w-full max-w-[400px]  mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto work-type-dropdown">
+                    <div className="absolute z-20 w-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto work-type-dropdown">
                       <div className="sticky top-0 bg-white p-2 border-b">
                         <input
                           type="text"
@@ -1112,7 +1134,12 @@ const CreateTask = ({
                               onClick={e => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleWorkTypeChange(type.name);
+                                if (isMultiWorkTypeAssign) {
+                                  handleWorkTypeChange(type.name);
+                                } else {
+                                  setFormData(prev => ({ ...prev, workType: [type.name] }));
+                                  setIsWorkTypeDropdownOpen(false);
+                                }
                               }}
                             >
                               {type.name}

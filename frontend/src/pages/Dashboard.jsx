@@ -98,6 +98,7 @@ const Dashboard = () => {
   return (
     <DashboardLayout>
       <Routes>
+      <Route path="/" element={<AdminDashboard />} />
         <Route path="received-tasks" element={<ReceivedTasks />} />
         <Route path="assigned-tasks" element={<AssignedTasks />} />
         {/* Only show Task Verification for Task Verifier (role2) */}
@@ -115,7 +116,6 @@ const Dashboard = () => {
         <Route path="notes" element={<Notes />} />
         <Route path="clients" element={<Clients />} />
         <Route path="timesheets" element={<Timesheets />} />
-        <Route path="/" element={<ReceivedTasks />} />
         <Route path="*" element={<ReceivedTasks />} />
       </Routes>
     </DashboardLayout>

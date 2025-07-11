@@ -34,7 +34,7 @@ const ALL_COLUMNS = [
   { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
   { id: 'clientGroup', label: 'Client Group', defaultWidth: 150 },
   { id: 'workType', label: 'Work Type', defaultWidth: 150 },
-  { id: 'billed', label: 'Billed', defaultWidth: 80 },
+  { id: 'billed', label: 'Internal Works', defaultWidth: 80 },
   { id: 'status', label: 'Stages', defaultWidth: 120 },
   { id: 'priority', label: 'Priority', defaultWidth: 120 },
   { id: 'selfVerification', label: 'Self Verification', defaultWidth: 120 },
@@ -514,13 +514,22 @@ const AdvancedTaskTable = ({
         if (response.status === 403) {
           throw new Error('You can only delete tasks that you created');
         }
-        throw new Error(errorData.message || 'Failed to delete task');
+        // Only show error toast if not 'Task not found'
+        if (errorData.message !== 'Task not found') {
+          throw new Error(errorData.message || 'Failed to delete task');
+        } else {
+          // Silently ignore 'Task not found' error
+          return;
+        }
       }
       if (onTaskDelete) onTaskDelete(task._id);
+      if (refetchTasks) refetchTasks();
       toast.success('Task deleted successfully');
     } catch (error) {
-      console.error('Error deleting task:', error);
-      toast.error(error.message || 'Failed to delete task');
+      if (error.message !== 'Task not found') {
+        console.error('Error deleting task:', error);
+        toast.error(error.message || 'Failed to delete task');
+      }
     }
   };
 
@@ -588,7 +597,7 @@ const AdvancedTaskTable = ({
                   </th>
                 );
               })}
-              {viewType === 'assigned' && (
+              {(viewType === 'assigned' || viewType === 'admin') && (
                 <th key="actions" className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none">Actions</th>
               )}
             </tr>
@@ -651,7 +660,7 @@ const AdvancedTaskTable = ({
                       return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex gap-1">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></div></td>;
                     
                     case 'billed':
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? '✔' : '✖'}</span></div></td>;
+                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? 'Yes' : 'No'}</span></div></td>;
                     
                     case 'status':
                       // Show colored status but disable interaction in 'Task Issued For Verification' and 'Task For Guidance' tabs in Received Tasks
@@ -773,8 +782,8 @@ const AdvancedTaskTable = ({
                       );
                     
                     case 'priority':
-                      // Only allow editing if not in guidance tab
-                      const canEditPriority = viewType === 'received' && taskType !== 'guidance';
+                      // Only allow editing if not in guidance or issuedVerification tab
+                      const canEditPriority = viewType === 'received' && taskType !== 'guidance' && taskType !== 'issuedVerification';
                       return (
                         <td
                           key={colId}
@@ -844,7 +853,7 @@ const AdvancedTaskTable = ({
                                   onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
                                   onMouseLeave={e => e.currentTarget.style.background = task.priority === opt.value ? '#f3f4f6' : 'transparent'}
                                 >
-                                  <span>{opt.label}</span>
+                                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(opt.value)}`}>{opt.label}</span>
                                   {task.priority === opt.value && (
                                     <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                                   )}
@@ -911,7 +920,7 @@ const AdvancedTaskTable = ({
                       const isCurrentUserFirstVerifier = currentUser?._id === task.verificationAssignedTo?._id;
                       const isCurrentUserSecondVerifier = currentUser?._id === task.secondVerificationAssignedTo?._id;
                       // Only hide first verifier dropdown if user is first verifier or second verifier
-                      const canEditVerifier = viewType === 'received' && isSelfVerified && !isCurrentUserFirstVerifier && !isCurrentUserSecondVerifier && taskType !== 'completed' && taskType !== 'guidance';
+                      const canEditVerifier = viewType === 'received' && isSelfVerified && !isCurrentUserFirstVerifier && !isCurrentUserSecondVerifier && taskType !== 'completed' && taskType !== 'guidance' && taskType !== 'issuedVerification';
                       if (isCurrentUserFirstVerifier) {
                         // Just show the value, no dropdown for first verifier
                         return (
@@ -973,7 +982,7 @@ const AdvancedTaskTable = ({
                         );
                       }
                       // Only allow editing if selfVerification is true, viewType is received, and user is not already the verifier, and not in completed, issuedVerification, or guidance tab
-                      const canEditFirstVerifier = viewType === 'received' && isSelfVerified && taskType !== 'completed' && taskType !== 'guidance';
+                      const canEditFirstVerifier = viewType === 'received' && isSelfVerified && taskType !== 'completed' && taskType !== 'guidance' && taskType !== 'issuedVerification';
                       return (
                         <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
                           style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden', cursor: canEditFirstVerifier ? 'pointer' : 'default', position: 'relative', zIndex: editingVerifierTaskId === task._id ? 50 : 'auto'}}
@@ -1404,7 +1413,7 @@ const AdvancedTaskTable = ({
                       return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task[colId]}</span></div></td>;
                   }
                 })}
-                {viewType === 'assigned' && (
+                {(viewType === 'assigned' || viewType === 'admin') && (
                   <td key="actions" className="px-2 py-1 text-sm font-normal align-middle bg-white">
                     {(!shouldDisableActions || !shouldDisableActions(task)) && (
                       <div className="flex items-center gap-0">

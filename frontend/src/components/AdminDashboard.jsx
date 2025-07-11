@@ -9,6 +9,7 @@ import {
   PaperClipIcon,
   ChatBubbleLeftIcon,
   AdjustmentsHorizontalIcon,
+  PlusIcon,
 } from '@heroicons/react/24/outline';
 import FileUpload from './FileUpload';
 import FileList from './FileList';
@@ -20,6 +21,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { API_BASE_URL } from '../apiConfig';
 import AdvancedTaskTable from './AdvancedTaskTable';
+import CreateTask from './CreateTask';
 
 function formatDate(date) {
   if (!date) return 'NA';
@@ -47,7 +49,7 @@ const ALL_COLUMNS = [
   { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
   { id: 'clientGroup', label: 'Client Group', defaultWidth: 150 },
   { id: 'workType', label: 'Work Type', defaultWidth: 150 },
-  { id: 'billed', label: 'Billed', defaultWidth: 80 },
+  { id: 'billed', label: 'Internal Works', defaultWidth: 80 },
   { id: 'status', label: 'Stages', defaultWidth: 120 },
   { id: 'priority', label: 'Priority', defaultWidth: 120 },
   { id: 'selfVerification', label: 'Self Verification', defaultWidth: 120 },
@@ -127,6 +129,11 @@ const Dashboard = () => {
   const [editingDescriptionTaskId, setEditingDescriptionTaskId] = useState(null);
   const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
 
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editTask, setEditTask] = useState(null);
+
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (filterPopupRef.current && !filterPopupRef.current.contains(event.target)) {
@@ -198,47 +205,41 @@ const Dashboard = () => {
     }
   }, [filters, sortBy, sortOrder, user]);
 
-  useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        let endpoint = '';
-        if (user.role === 'Admin') {
-          endpoint = 'tasks/all';
-        } else if (user.role === 'Head') {
-          endpoint = 'tasks/all';
-        } else if (user.role === 'Team Head') {
-          endpoint = 'tasks/all';
-        } else {
-          setError('Unauthorize: dInvalid role');
-          setTasks([]);
-          setLoading(false);
-          return;
-        }
-        const response = await fetch(`${API_BASE_URL}/api/${endpoint}`, {
-          headers: {
-            Authorization: `Bearer ${user.token}`,
-          },
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to fetch tasks');
-        }
-        const data = await response.json();
-        if (!Array.isArray(data)) {
-          throw new Error('Invalid response format');
-        }
-        setTasks(data);
-      } catch (error) {
-        console.error('Error fetching tasks:', error);
-        setError(error.message);
-        toast.error(error.message || 'Failed to fetch tasks');
-        setTasks([]);
-      } finally {
-        setLoading(false);
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      let endpoint = '';
+      if (user.role === 'Admin' || user.role === 'Head' || user.role === 'Team Head') {
+        endpoint = 'tasks/all';
+      } else {
+        endpoint = 'tasks';
       }
-    };
+      const response = await fetch(`${API_BASE_URL}/api/${endpoint}`, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to fetch tasks');
+      }
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid response format');
+      }
+      setTasks(data);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      setError(error.message);
+      toast.error(error.message || 'Failed to fetch tasks');
+      setTasks([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchTasks();
   }, [user]);
 
@@ -444,35 +445,32 @@ const Dashboard = () => {
     console.log(`Status clicked for task ${taskId}, new status: ${status}`);
   };
 
+  const handleEditTask = (task) => {
+    setEditTask(task);
+    setEditModalOpen(true);
+  };
+  const handleTaskSubmit = (updatedOrCreated) => {
+    setEditModalOpen(false);
+    setCreateModalOpen(false);
+    setEditTask(null);
+    fetchTasks(); // Light reload after create or edit
+  };
   const handleDeleteTask = async (taskId) => {
-    if (!window.confirm('Are you sure you want to delete this task?')) {
-      return;
-    }
-
     try {
       const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-        },
+        headers: { Authorization: `Bearer ${user.token}` },
       });
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to delete task');
       }
-
-      setTasks(tasks.filter(task => task._id !== taskId));
+      // setTasks(tasks.filter(task => task._id !== taskId));
+      fetchTasks(); // Light reload after delete
       toast.success('Task deleted successfully');
     } catch (error) {
-      console.error('Error deleting task:', error);
       toast.error(error.message || 'Failed to delete task');
     }
-  };
-
-  const handleTaskClick = (task) => {
-    setSelectedTask(task);
-    setShowFileUpload(true);
   };
 
   const handleFileUploaded = (files) => {
@@ -1038,7 +1036,7 @@ const Dashboard = () => {
             )}
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
           <select
             className="px-1 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[80px] transition-colors"
             value={sortBy}
@@ -1063,6 +1061,14 @@ const Dashboard = () => {
           >
             Download
           </button>
+          <button
+            onClick={() => setCreateModalOpen(true)}
+            className="ml-0 flex items-center justify-center w-11 h-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+            title="Create Task"
+            type="button"
+          >
+            <PlusIcon className="h-6 w-8" />
+          </button>
         </div>
       </div>
 
@@ -1072,18 +1078,47 @@ const Dashboard = () => {
           tasks={getFilteredAndSortedTasks(tasks)}
           viewType="admin"
           taskType={null}
-          onTaskUpdate={() => {}}
+          onTaskUpdate={(taskId, updater) => {
+            setTasks(prevTasks => prevTasks.map(task =>
+              task._id === taskId ? updater(task) : task
+            ));
+          }}
           onTaskDelete={() => {}}
           onStatusChange={() => {}}
-          shouldDisableActions={() => true}
+          shouldDisableActions={() => false}
           shouldDisableFileActions={() => true}
           taskHours={taskHours}
           storageKeyPrefix="admindashboard"
           visibleColumns={visibleColumns}
           setVisibleColumns={setVisibleColumns}
+          onEditTask={handleEditTask}
+          users={users}
+          currentUser={user}
+          refetchTasks={fetchTasks}
         />
       </div>
-
+      {/* Edit Task Modal */}
+      {editModalOpen && (
+        <CreateTask
+          users={users}
+          mode="edit"
+          initialData={editTask}
+          isOpen={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          onSubmit={handleTaskSubmit}
+        />
+      )}
+      {/* Create Task Modal */}
+      {createModalOpen && (
+        <CreateTask
+          users={users}
+          mode="create"
+          initialData={null}
+          isOpen={createModalOpen}
+          onClose={() => setCreateModalOpen(false)}
+          onSubmit={handleTaskSubmit}
+        />
+      )}
       {/* File Upload and Comments Modal */}
       {selectedTask && (showFileUpload || showComments) && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">

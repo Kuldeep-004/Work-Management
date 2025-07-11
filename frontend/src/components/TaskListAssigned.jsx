@@ -145,7 +145,7 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
               Work Type
             </th>
             <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Billed
+              Internal Works
             </th>
             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Task Status
@@ -239,7 +239,7 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
                 </div>
               </td>
               <td className="px-6 py-4 text-center text-lg">
-                {task.billed ? '✔' : '✖'}
+                {task.billed ? 'Yes' : 'No'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 <div className="flex items-center space-x-2">

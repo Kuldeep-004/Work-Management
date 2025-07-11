@@ -23,7 +23,7 @@ const ALL_COLUMNS = [
   { id: 'clientName', label: 'Client Name' },
   { id: 'clientGroup', label: 'Client Group' },
   { id: 'workType', label: 'Work Type' },
-  { id: 'billed', label: 'Billed' },
+  { id: 'billed', label: 'Internal Works' },
   { id: 'status', label: 'Task Status' },
   { id: 'priority', label: 'Priority' },
   { id: 'selfVerification', label: 'Self Verification' },

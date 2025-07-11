@@ -4,6 +4,8 @@ import FormData from 'form-data';
 
 const PCLOUD_TOKEN = process.env.PCLOUD_TOKEN;
 const PCLOUD_API = 'https://api.pcloud.com';
+const PCLOUD_PUBLIC_PROFILE_FOLDER_ID = process.env.PCLOUD_PUBLIC_PROFILE_FOLDER_ID;
+const PCLOUD_PUBLIC_FILES_FOLDER_ID = process.env.PCLOUD_PUBLIC_FILES_FOLDER_ID;
 
 async function getOrCreateFolder(folder) {
   if (!folder) return 0;
@@ -23,15 +25,19 @@ async function getOrCreateFolder(folder) {
   }
 }
 
-export const uploadFile = async (filePath, folder = 'Documents') => {
+export const uploadFile = async (filePath, type = 'files') => {
   try {
     if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
-    const folderId = await getOrCreateFolder(folder);
+    let folderId;
+    if (type === 'profile') {
+      folderId = PCLOUD_PUBLIC_PROFILE_FOLDER_ID;
+    } else {
+      folderId = PCLOUD_PUBLIC_FILES_FOLDER_ID;
+    }
     const filename = filePath.split('/').pop();
     const form = new FormData();
     form.append('file', fs.createReadStream(filePath));
     form.append('filename', filename);
-    
 
     const uploadRes = await axios.post(
       `https://api.pcloud.com/uploadfile?auth=${PCLOUD_TOKEN}&folderid=${folderId}`,
@@ -42,7 +48,6 @@ export const uploadFile = async (filePath, folder = 'Documents') => {
         maxBodyLength: Infinity
       }
     );
-    
 
     // Safe handling of metadata
     const meta = uploadRes.data?.metadata;
@@ -51,26 +56,22 @@ export const uploadFile = async (filePath, folder = 'Documents') => {
       if (meta.length > 0) {
         fileMeta = meta[0];
       } else {
-        console.error('Upload failed: metadata array is empty. Full response:', JSON.stringify(uploadRes.data, null, 2));
         throw new Error('Upload failed: metadata array is empty');
       }
     } else if (meta && typeof meta === 'object' && meta.fileid) {
       fileMeta = meta;
     } else {
-      console.error('Upload failed: Full response:', JSON.stringify(uploadRes.data, null, 2));
       throw new Error(`Upload failed: metadata is missing or malformed. Received metadata: ${JSON.stringify(meta)}`);
     }
 
-    // Get permanent public link instead of temporary link
-    const publinkRes = await axios.get(`${PCLOUD_API}/getfilepublink`, {
-      params: { auth: PCLOUD_TOKEN, fileid: fileMeta.fileid }
-    });
+    // Construct the public URL for Public Folder files using filedn.com hash
+    const publicHash = 'lwPvPL31jQvXObDsULFwm7L'; // pCloud Public Folder hash
+    const subfolder = type === 'profile' ? 'Profile' : 'Files';
+    const publicUrl = `https://filedn.com/${publicHash}/${subfolder}/${fileMeta.name}`;
 
     return {
       public_id: fileMeta?.fileid,
-      url: publinkRes?.data?.result === 0 && publinkRes.data.link
-        ? publinkRes.data.link
-        : null,
+      url: publicUrl,
     };
   } catch (error) {
     console.error('pCloud upload error:', error.response?.data || error);
@@ -79,7 +80,7 @@ export const uploadFile = async (filePath, folder = 'Documents') => {
 };
 
 export const uploadImage = async (filePath) => {
-  return uploadFile(filePath, 'Documents/Profile');
+  return uploadFile(filePath, 'profile');
 };
 
 export const deleteFile = async (public_id) => {

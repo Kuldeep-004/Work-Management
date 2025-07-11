@@ -62,7 +62,7 @@ const ALL_COLUMNS = [
   { id: 'clientName', label: 'Client Name' },
   { id: 'clientGroup', label: 'Client Group' },
   { id: 'workType', label: 'Work Type' },
-  { id: 'billed', label: 'Billed' },
+  { id: 'billed', label: 'Internal Works' },
   { id: 'status', label: 'Task Status' },
   { id: 'priority', label: 'Priority' },
   { id: 'inwardEntryDate', label: 'Inward Entry Date' },
@@ -848,7 +848,7 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
                     case 'workType':
                       return <td key={col.id} className="px-4 py-4 sm:px-6"><div className="flex overflow-x-auto whitespace-nowrap gap-1 no-scrollbar">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></td>;
                     case 'billed':
-                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-center text-lg">{task.billed ? '✔' : '✖'}</td>;
+                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-center text-lg">{task.billed ? 'Yes' : 'No'}</td>;
                     case 'status':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-sm text-gray-500"><div className="flex items-center space-x-2">{task.assignedTo._id === loggedInUser._id && !shouldDisableActions(task) ? (<select value={task.status || ''} onChange={(e) => handleStatusChange(task._id, e.target.value)} className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}><option value="in_progress">In Progress</option><option value="completed">Completed</option></select>) : (<span className={`px-2 py-1 rounded text-sm ${getStatusColor(task.status)}`}>{task.status ? task.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'N/A'}</span>)}</div></td>;
                     case 'priority':

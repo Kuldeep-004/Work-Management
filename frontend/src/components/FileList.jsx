@@ -110,13 +110,16 @@ const FileList = ({ taskId, files: initialFiles = [], onFileDeleted }) => {
               <span className="text-2xl">{getFileIcon(file.originalName)}</span>
               <div>
                 <a
-                  href={file.cloudUrl || `${API_BASE_URL}/uploads/${file.filename}`}
+                  href={file.cloudUrl ? file.cloudUrl : undefined}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-600 hover:text-blue-800 font-medium"
                 >
                   {file.originalName}
                 </a>
+                {!file.cloudUrl && (
+                  <div className="text-xs text-red-500">No public link available</div>
+                )}
                 <div className="text-sm text-gray-500">
                   Uploaded by {file.uploadedBy?.firstName} {file.uploadedBy?.lastName} on{' '}
                   {new Date(file.uploadedAt).toLocaleDateString()}

@@ -220,20 +220,17 @@ router.get('/all', protect, async (req, res) => {
         .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
         .sort({ createdAt: -1 });
     } else if (req.user.role === 'Head') {
-      // Head: all except tasks involving Admins or other Heads (including completed verification)
-      const users = await User.find({ role: { $nin: ['Admin', 'Head'] }, isEmailVerified: true }).select('_id');
-      const userIds = users.map(u => u._id.toString());
-      userIds.push(req.user._id.toString());
+      // Head: see own assigned/received tasks and all tasks assigned by/assigned to any Team Head
+      // Get all Team Heads
+      const teamHeads = await User.find({ role: 'Team Head', isEmailVerified: true }).select('_id');
+      const teamHeadIds = teamHeads.map(u => u._id.toString());
+      teamHeadIds.push(req.user._id.toString()); // include self
       tasks = await Task.find({
-        $and: [
-          {
-            $or: [
-              { assignedTo: { $in: userIds } },
-              { assignedBy: { $in: userIds } }
-            ]
-          },
-          { verificationStatus: { $ne: 'pending' } }
-        ]
+        $or: [
+          { assignedTo: { $in: teamHeadIds } },
+          { assignedBy: { $in: teamHeadIds } }
+        ],
+        verificationStatus: { $ne: 'pending' }
       })
         .populate('assignedTo', 'firstName lastName photo')
         .populate('assignedBy', 'firstName lastName photo')
@@ -241,27 +238,24 @@ router.get('/all', protect, async (req, res) => {
         .populate('secondVerificationAssignedTo', 'firstName lastName photo')
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
-        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
+        .populate('guides', 'firstName lastName photo')
+        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
         .sort({ createdAt: -1 });
     } else if (req.user.role === 'Team Head') {
+      // Team Head: see own assigned/received tasks and all tasks assigned to/assigned by Freshers of their team
       if (!req.user.team) {
         return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
       }
-      const teamUsers = await User.find({ team: req.user.team, isEmailVerified: true }).select('_id');
-      const teamUserIds = teamUsers.map(u => u._id.toString());
-      teamUserIds.push(req.user._id.toString());
+      // Get all Freshers in the same team
+      const freshers = await User.find({ team: req.user.team, role: 'Fresher', isEmailVerified: true }).select('_id');
+      const fresherIds = freshers.map(u => u._id.toString());
+      fresherIds.push(req.user._id.toString()); // include self
       tasks = await Task.find({
-        $and: [
-          {
-            $or: [
-              { assignedTo: { $in: teamUserIds } },
-              { assignedBy: { $in: teamUserIds } },
-              { verificationAssignedTo: req.user._id },
-              { secondVerificationAssignedTo: req.user._id }
-            ]
-          },
-          { verificationStatus: { $ne: 'pending' } }
-        ]
+        $or: [
+          { assignedTo: { $in: fresherIds } },
+          { assignedBy: { $in: fresherIds } }
+        ],
+        verificationStatus: { $ne: 'pending' }
       })
         .populate('assignedTo', 'firstName lastName photo')
         .populate('assignedBy', 'firstName lastName photo')
@@ -269,7 +263,8 @@ router.get('/all', protect, async (req, res) => {
         .populate('secondVerificationAssignedTo', 'firstName lastName photo')
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
-        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
+        .populate('guides', 'firstName lastName photo')
+        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
         .sort({ createdAt: -1 });
     } else {
       return res.status(403).json({ message: 'You are not authorized to access all tasks' });
@@ -583,12 +578,8 @@ router.post('/', protect, canAssignTask, async (req, res) => {
     }
 
     for (const userId of assignedTo) {
-      // Determine verification status based on assigner role
-      const assignerUser = await User.findById(req.user._id);
-      let verificationStatus = 'completed';
-      if (assignerUser.role === 'Fresher') {
-        verificationStatus = 'pending';
-      }
+      // Always set verification status to 'pending' for all users
+      const verificationStatus = 'pending';
       const task = new Task({
         title,
         description,
@@ -894,15 +885,14 @@ router.delete('/:id', protect, async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // Convert IDs to strings for comparison
-    const taskCreatorId = task.assignedBy.toString();
-    const taskAssigneeId = task.assignedTo.toString();
-    const userId = req.user._id.toString();
-
-    // Allow both creator and assignee to delete the task
-    if (taskCreatorId !== userId && taskAssigneeId !== userId) {
-      return res.status(403).json({ message: 'Not authorized to delete this task' });
-    }
+    // Remove restriction: allow any authenticated user to delete any task
+    // Previously:
+    // const taskCreatorId = task.assignedBy.toString();
+    // const taskAssigneeId = task.assignedTo.toString();
+    // const userId = req.user._id.toString();
+    // if (taskCreatorId !== userId && taskAssigneeId !== userId) {
+    //   return res.status(403).json({ message: 'Not authorized to delete this task' });
+    // }
 
     await Task.findByIdAndDelete(req.params.id);
     res.json({ message: 'Task deleted successfully' });
@@ -926,7 +916,7 @@ router.post('/:taskId/files', protect, uploadTaskFilesMiddleware, async (req, re
     for (const file of req.files) {
       try {
         // Upload to pCloud
-        const cloudResult = await uploadFile(file.path, 'Documents/Files');
+        const cloudResult = await uploadFile(file.path, 'files');
         // Delete local file after cloud upload
         try {
           await unlinkAsync(file.path);
@@ -1175,7 +1165,7 @@ router.post('/:taskId/comments/audio', protect, uploadAudio.single('audio'), asy
     let audioUrl;
     try {
       // Upload to pCloud
-      const cloudResult = await uploadFile(req.file.path, 'Documents/Files');
+      const cloudResult = await uploadFile(req.file.path, 'files');
       console.log('pCloud upload result:', cloudResult);
       audioUrl = cloudResult.url;
       // Delete local file after cloud upload

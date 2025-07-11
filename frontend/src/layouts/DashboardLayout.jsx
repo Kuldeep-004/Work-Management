@@ -31,7 +31,7 @@ const DashboardLayout = ({ children }) => {
         menuItems.push(
           { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon, path: '/dashboard' },
           { id: 'received-tasks', label: 'Received Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
-          { id: 'assigned-tasks', label: 'Assigned Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' },
+          // { id: 'assigned-tasks', label: 'Task Assigned By Me', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' }, // HIDDEN TEMPORARILY
           { id: 'billed-tasks', label: 'Billed Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/billed-tasks' },
           { id: 'unbilled-tasks', label: 'UnBilled Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/unbilled-tasks' },
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
@@ -52,7 +52,7 @@ const DashboardLayout = ({ children }) => {
         menuItems.push(
           { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon, path: '/dashboard' },
           { id: 'received-tasks', label: 'Received Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
-          { id: 'assigned-tasks', label: 'Assigned Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' },
+          // { id: 'assigned-tasks', label: 'Task Assigned By Me', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' }, // HIDDEN TEMPORARILY
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
@@ -64,7 +64,7 @@ const DashboardLayout = ({ children }) => {
         menuItems.push(
           { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon, path: '/dashboard' },
           { id: 'received-tasks', label: 'Received Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
-          { id: 'assigned-tasks', label: 'Assigned Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' },
+          // { id: 'assigned-tasks', label: 'Task Assigned By Me', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' }, // HIDDEN TEMPORARILY
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
@@ -75,8 +75,9 @@ const DashboardLayout = ({ children }) => {
         break;
       case 'Fresher':
         menuItems.push(
+          { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon, path: '/dashboard' },
           { id: 'received-tasks', label: 'Received Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
-          { id: 'assigned-tasks', label: 'Assigned Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' },
+          // { id: 'assigned-tasks', label: 'Task Assigned By Me', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' }, // HIDDEN TEMPORARILY
           { id: 'timesheets', label: 'Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
