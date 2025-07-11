@@ -773,6 +773,8 @@ const AdvancedTaskTable = ({
                       );
                     
                     case 'priority':
+                      // Only allow editing if not in guidance tab
+                      const canEditPriority = viewType === 'received' && taskType !== 'guidance';
                       return (
                         <td
                           key={colId}
@@ -783,12 +785,12 @@ const AdvancedTaskTable = ({
                             maxWidth: (columnWidths[colId] || 120) + 'px',
                             background: 'white',
                             overflow: 'visible',
-                            cursor: viewType === 'received' ? 'pointer' : 'default',
+                            cursor: canEditPriority ? 'pointer' : 'default',
                             position: 'relative',
                             zIndex: editingPriorityTaskId === task._id ? 50 : 'auto',
                           }}
                           onClick={e => {
-                            if (viewType === 'received') {
+                            if (canEditPriority) {
                               e.stopPropagation();
                               const rect = e.currentTarget.getBoundingClientRect();
                               setDropdownPosition({
@@ -799,77 +801,58 @@ const AdvancedTaskTable = ({
                             }
                           }}
                         >
-                          <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-                            {/* Always show the pill */}
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(task.priority)}`}
-                              style={{
-                                display: 'inline-block',
-                                whiteSpace: 'nowrap',
-                                overflowX: 'auto',
-                                textOverflow: 'ellipsis',
-                                maxWidth: '100%',
-                                verticalAlign: 'middle',
-                                scrollbarWidth: 'thin',
-                                msOverflowStyle: 'auto',
-                              }}
-                              title={task.priority.replace(/([A-Z])/g, ' $1').trim()}
-                            >
-                              {task.priority.replace(/([A-Z])/g, ' $1').trim()}
-                            </span>
-                            {/* Show dropdown as portal if open */}
-                            {editingPriorityTaskId === task._id && viewType === 'received'
-                              ? ReactDOM.createPortal(
-                                  <div
-                                    ref={priorityDropdownRef}
-                                    style={{
-                                      position: 'absolute',
-                                      top: dropdownPosition.top,
-                                      left: dropdownPosition.left,
-                                      minWidth: 160,
-                                      background: '#fff',
-                                      border: '1px solid #e5e7eb',
-                                      borderRadius: 8,
-                                      boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                      padding: 8,
-                                      zIndex: 9999,
-                                    }}
-                                  >
-                                    {PRIORITY_OPTIONS.map(opt => (
-                                      <div
-                                        key={opt.value}
-                                        style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 8,
-                                          padding: '6px 12px',
-                                          borderRadius: 6,
-                                          cursor: 'pointer',
-                                          background: task.priority === opt.value ? '#f3f4f6' : 'transparent',
-                                          marginBottom: 2,
-                                          transition: 'background 0.15s',
-                                        }}
-                                        onClick={e => {
-                                          e.stopPropagation();
-                                          if (!priorityLoading && task.priority !== opt.value) handlePriorityChange(task, opt.value);
-                                          setEditingPriorityTaskId(null);
-                                        }}
-                                        onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                        onMouseLeave={e => e.currentTarget.style.background = task.priority === opt.value ? '#f3f4f6' : 'transparent'}
-                                      >
-                                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(opt.value)}`}>{opt.label}</span>
-                                        {task.priority === opt.value && (
-                                          <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                          </svg>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>,
-                                  document.body
-                                )
-                              : null}
+                          <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                            <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getPriorityColor(task.priority)}`}>{PRIORITY_OPTIONS.find(opt => opt.value === task.priority)?.label || task.priority}</span>
                           </div>
+                          {/* Show dropdown as portal if open and canEditPriority */}
+                          {editingPriorityTaskId === task._id && canEditPriority && ReactDOM.createPortal(
+                            <div
+                              ref={priorityDropdownRef}
+                              style={{
+                                position: 'absolute',
+                                top: dropdownPosition.top,
+                                left: dropdownPosition.left,
+                                minWidth: 160,
+                                background: '#fff',
+                                border: '1px solid #e5e7eb',
+                                borderRadius: 8,
+                                boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                                padding: 8,
+                                zIndex: 9999,
+                              }}
+                            >
+                              {PRIORITY_OPTIONS.map(opt => (
+                                <div
+                                  key={opt.value}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    padding: '5px 12px',
+                                    borderRadius: 6,
+                                    cursor: 'pointer',
+                                    background: task.priority === opt.value ? '#f3f4f6' : 'transparent',
+                                    marginBottom: 2,
+                                    transition: 'background 0.15s',
+                                    opacity: priorityLoading ? 0.6 : 1,
+                                  }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    if (!priorityLoading && task.priority !== opt.value) handlePriorityChange(task, opt.value);
+                                    setEditingPriorityTaskId(null);
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                                  onMouseLeave={e => e.currentTarget.style.background = task.priority === opt.value ? '#f3f4f6' : 'transparent'}
+                                >
+                                  <span>{opt.label}</span>
+                                  {task.priority === opt.value && (
+                                    <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                  )}
+                                </div>
+                              ))}
+                            </div>,
+                            document.body
+                          )}
                         </td>
                       );
                     
@@ -923,12 +906,12 @@ const AdvancedTaskTable = ({
                       return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedTo.photo?.url || defaultProfile} alt={task.assignedTo.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedTo.firstName} {task.assignedTo.lastName}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.assignedTo._id)}h</span></span></div></div></td>;
                     
                     case 'verificationAssignedTo':
-                      // Only allow editing if selfVerification is true, viewType is received, and user is not already the first verifier
+                      // Only allow editing if selfVerification is true, viewType is received, and user is not already the first verifier, and not in completed, issuedVerification, or guidance tab
                       const isSelfVerified = !!task.selfVerification;
                       const isCurrentUserFirstVerifier = currentUser?._id === task.verificationAssignedTo?._id;
                       const isCurrentUserSecondVerifier = currentUser?._id === task.secondVerificationAssignedTo?._id;
                       // Only hide first verifier dropdown if user is first verifier or second verifier
-                      const canEditVerifier = viewType === 'received' && isSelfVerified && !isCurrentUserFirstVerifier && !isCurrentUserSecondVerifier;
+                      const canEditVerifier = viewType === 'received' && isSelfVerified && !isCurrentUserFirstVerifier && !isCurrentUserSecondVerifier && taskType !== 'completed' && taskType !== 'guidance';
                       if (isCurrentUserFirstVerifier) {
                         // Just show the value, no dropdown for first verifier
                         return (
@@ -989,8 +972,8 @@ const AdvancedTaskTable = ({
                           </td>
                         );
                       }
-                      // Only allow editing if selfVerification is true, viewType is received, and user is not already the verifier
-                      const canEditFirstVerifier = viewType === 'received' && isSelfVerified;
+                      // Only allow editing if selfVerification is true, viewType is received, and user is not already the verifier, and not in completed, issuedVerification, or guidance tab
+                      const canEditFirstVerifier = viewType === 'received' && isSelfVerified && taskType !== 'completed' && taskType !== 'guidance';
                       return (
                         <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
                           style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden', cursor: canEditFirstVerifier ? 'pointer' : 'default', position: 'relative', zIndex: editingVerifierTaskId === task._id ? 50 : 'auto'}}
@@ -1112,9 +1095,9 @@ const AdvancedTaskTable = ({
                       );
                     
                     case 'secondVerificationAssignedTo':
-                      // Only show dropdown if selfVerification is true, viewType is received, user is not the second verifier, and first verifier is chosen
+                      // Only show dropdown if selfVerification is true, viewType is received, user is not the second verifier, first verifier is chosen, and not in completed, issuedVerification, or guidance tab
                       const isCurrentUserSecondVerifier2 = currentUser?._id === task.secondVerificationAssignedTo?._id;
-                      const canEditSecondVerifier = viewType === 'received' && !!task.selfVerification && !isCurrentUserSecondVerifier2 && !!task.verificationAssignedTo?._id;
+                      const canEditSecondVerifier = viewType === 'received' && !!task.selfVerification && !isCurrentUserSecondVerifier2 && !!task.verificationAssignedTo?._id && taskType !== 'completed' && taskType !== 'issuedVerification' && taskType !== 'guidance';
                       if (!canEditSecondVerifier) {
                         // Just show the value, no dropdown or dropdown icon
                         return (

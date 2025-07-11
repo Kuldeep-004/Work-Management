@@ -1065,7 +1065,7 @@ router.post('/:taskId/verify', protect, async (req, res) => {
     }
 
     // Allow Admins and Task Verifiers to approve/reject any pending task
-    const isAdminOrTaskVerifier = req.user.role === 'Admin' || req.user.role2 === 'Task Verifier';
+    const isAdminOrTaskVerifier = req.user.role === 'Admin' || (req.user.role2 && req.user.role2.includes('Task Verifier'));
     const isFirstVerifier = task.verificationAssignedTo && task.verificationAssignedTo.toString() === req.user._id.toString();
     const isSecondVerifier = task.secondVerificationAssignedTo && task.secondVerificationAssignedTo.toString() === req.user._id.toString();
 
