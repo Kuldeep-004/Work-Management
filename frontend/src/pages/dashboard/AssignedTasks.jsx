@@ -74,6 +74,11 @@ const AssignedTasks = () => {
   // Add state for task hours
   const [taskHours, setTaskHours] = useState([]);
 
+  // Add state for edit modal
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editTask, setEditTask] = useState(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -375,6 +380,29 @@ const AssignedTasks = () => {
     });
   };
 
+  // Handler for edit
+  const handleEditTask = (task) => {
+    setEditTask(task);
+    setEditModalOpen(true);
+  };
+
+  // Handler for create
+  const handleCreateModal = (action) => {
+    if (action === 'open') setCreateModalOpen(true);
+    else setCreateModalOpen(false);
+  };
+
+  // Handler for after submit (edit or create)
+  const handleTaskSubmit = (updatedOrCreated) => {
+    setEditModalOpen(false);
+    setCreateModalOpen(false);
+    setEditTask(null);
+    // Optionally, refetch or update tasks state here
+    // For now, just reload tasks
+    // You can optimize by updating state directly
+    // setTasks(...)
+  };
+
   // Debug logs
   console.log('ALL_COLUMNS:', ALL_COLUMNS);
   console.log('visibleColumns:', visibleColumns);
@@ -407,7 +435,7 @@ const AssignedTasks = () => {
     <div className="p-2 sm:p-3 md:p-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h2 className="text-2xl font-bold text-gray-800">Assigned Tasks</h2>
-        <CreateTask users={users} />
+        <CreateTask users={users} isOpen={createModalOpen} onClose={handleCreateModal} onSubmit={handleTaskSubmit} />
       </div>
 
       <div className="mb-6">
@@ -568,8 +596,20 @@ const AssignedTasks = () => {
           visibleColumns={visibleColumns}
           setVisibleColumns={setVisibleColumns}
           storageKeyPrefix="assignedtasks"
+          onEditTask={handleEditTask}
         />
       </ErrorBoundary>
+      {/* Edit Task Modal */}
+      {editModalOpen && (
+        <CreateTask
+          users={users}
+          mode="edit"
+          initialData={editTask}
+          isOpen={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          onSubmit={handleTaskSubmit}
+        />
+      )}
     </div>
   );
 };

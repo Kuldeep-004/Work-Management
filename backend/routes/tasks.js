@@ -284,8 +284,14 @@ router.get('/all', protect, async (req, res) => {
 // Get tasks for verification (tasks assigned to user for verification)
 router.get('/for-verification', protect, async (req, res) => {
   try {
+    let isTaskVerifier = false;
+    if (Array.isArray(req.user.role2)) {
+      isTaskVerifier = req.user.role2.includes('Task Verifier');
+    } else {
+      isTaskVerifier = req.user.role2 === 'Task Verifier';
+    }
     let tasks;
-    if (req.user.role === 'Admin' || req.user.role2 === 'Task Verifier') {
+    if (req.user.role === 'Admin' || isTaskVerifier) {
       // Admins and Task Verifiers see all pending tasks
       tasks = await Task.find({
         verificationStatus: 'pending'

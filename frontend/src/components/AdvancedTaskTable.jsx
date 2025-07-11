@@ -85,7 +85,9 @@ const AdvancedTaskTable = ({
   setVisibleColumns: setExternalVisibleColumns,
   storageKeyPrefix = 'advancedtasktable',
   users = [],
-  currentUser = null
+  currentUser = null,
+  refetchTasks,
+  onEditTask
 }) => {
   const { user } = useAuth();
   
@@ -483,8 +485,10 @@ const AdvancedTaskTable = ({
         const updatedTask = await response.json();
         if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
         toast.success('Task rejected and set to pending');
+        if (refetchTasks) refetchTasks();
       } else {
         await onStatusChange(task._id, newStatus);
+        if (refetchTasks) refetchTasks();
       }
     } catch (error) {
       toast.error(error.message || 'Failed to update status');
@@ -919,14 +923,79 @@ const AdvancedTaskTable = ({
                       return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedTo.photo?.url || defaultProfile} alt={task.assignedTo.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedTo.firstName} {task.assignedTo.lastName}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.assignedTo._id)}h</span></span></div></div></td>;
                     
                     case 'verificationAssignedTo':
-                      // Only allow editing if selfVerification is true, viewType is received, and user is not already the verifier
+                      // Only allow editing if selfVerification is true, viewType is received, and user is not already the first verifier
                       const isSelfVerified = !!task.selfVerification;
-                      const canEditVerifier = viewType === 'received' && isSelfVerified;
+                      const isCurrentUserFirstVerifier = currentUser?._id === task.verificationAssignedTo?._id;
+                      const isCurrentUserSecondVerifier = currentUser?._id === task.secondVerificationAssignedTo?._id;
+                      // Only hide first verifier dropdown if user is first verifier or second verifier
+                      const canEditVerifier = viewType === 'received' && isSelfVerified && !isCurrentUserFirstVerifier && !isCurrentUserSecondVerifier;
+                      if (isCurrentUserFirstVerifier) {
+                        // Just show the value, no dropdown for first verifier
+                        return (
+                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                            style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
+                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                              <div className="flex items-center ">
+                                {task.verificationAssignedTo ? (
+                                  <>
+                                    <img
+                                      src={task.verificationAssignedTo.photo?.url || defaultProfile}
+                                      alt={`${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`}
+                                      className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
+                                      onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
+                                    />
+                                    <span className="ml-2">
+                                      {task.verificationAssignedTo.firstName} {task.verificationAssignedTo.lastName}
+                                      <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                                        {getUserTaskHours(task._id, task.verificationAssignedTo._id)}h
+                                      </span>
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        );
+                      }
+                      if (isCurrentUserSecondVerifier) {
+                        // Just show the value, no dropdown for first verifier if user is second verifier
+                        return (
+                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                            style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
+                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                              <div className="flex items-center ">
+                                {task.verificationAssignedTo ? (
+                                  <>
+                                    <img
+                                      src={task.verificationAssignedTo.photo?.url || defaultProfile}
+                                      alt={`${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`}
+                                      className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
+                                      onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
+                                    />
+                                    <span className="ml-2">
+                                      {task.verificationAssignedTo.firstName} {task.verificationAssignedTo.lastName}
+                                      <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                                        {getUserTaskHours(task._id, task.verificationAssignedTo._id)}h
+                                      </span>
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        );
+                      }
+                      // Only allow editing if selfVerification is true, viewType is received, and user is not already the verifier
+                      const canEditFirstVerifier = viewType === 'received' && isSelfVerified;
                       return (
                         <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                          style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden', cursor: canEditVerifier ? 'pointer' : 'default', position: 'relative', zIndex: editingVerifierTaskId === task._id ? 50 : 'auto'}}
+                          style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden', cursor: canEditFirstVerifier ? 'pointer' : 'default', position: 'relative', zIndex: editingVerifierTaskId === task._id ? 50 : 'auto'}}
                           onClick={e => {
-                            if (canEditVerifier) {
+                            if (canEditFirstVerifier) {
                               e.stopPropagation();
                               const rect = e.currentTarget.getBoundingClientRect();
                               setVerifierDropdownPosition({
@@ -958,12 +1027,12 @@ const AdvancedTaskTable = ({
                               ) : (
                                 <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
                               )}
-                              {canEditVerifier && (
+                              {canEditFirstVerifier && (
                                 <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" className="ml-1 text-gray-400"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
                               )}
                             </div>
                             {/* Dropdown for selecting verifier */}
-                            {editingVerifierTaskId === task._id && canEditVerifier && ReactDOM.createPortal(
+                            {editingVerifierTaskId === task._id && canEditFirstVerifier && ReactDOM.createPortal(
                               <div
                                 ref={verifierDropdownRef}
                                 style={{
@@ -1017,6 +1086,7 @@ const AdvancedTaskTable = ({
                                           const updatedTask = await response.json();
                                           if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
                                           toast.success('First verifier updated');
+                                          if (refetchTasks) refetchTasks();
                                         } catch (err) {
                                           toast.error('Failed to update first verifier');
                                         }
@@ -1042,18 +1112,11 @@ const AdvancedTaskTable = ({
                       );
                     
                     case 'secondVerificationAssignedTo':
-                      // Only show dropdown if first verifier is selected AND taskType is 'receivedVerification'
-                      if (!task.verificationAssignedTo) {
-                        return (
-                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
-                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                              <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
-                            </div>
-                          </td>
-                        );
-                      }
-                      // Only allow dropdown if taskType is 'receivedVerification'
-                      if (taskType !== 'receivedVerification') {
+                      // Only show dropdown if selfVerification is true, viewType is received, user is not the second verifier, and first verifier is chosen
+                      const isCurrentUserSecondVerifier2 = currentUser?._id === task.secondVerificationAssignedTo?._id;
+                      const canEditSecondVerifier = viewType === 'received' && !!task.selfVerification && !isCurrentUserSecondVerifier2 && !!task.verificationAssignedTo?._id;
+                      if (!canEditSecondVerifier) {
+                        // Just show the value, no dropdown or dropdown icon
                         return (
                           <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
                             <div className="overflow-x-auto whitespace-nowrap flex items-center" style={{width: '100%', maxWidth: '100%'}}>
@@ -1074,7 +1137,7 @@ const AdvancedTaskTable = ({
                           </td>
                         );
                       }
-                      // Show dropdown if first verifier is selected and taskType is 'receivedVerification'
+                      // Only render dropdown icon, click handler, and dropdown if canEditSecondVerifier is true
                       return (
                         <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
                           <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
@@ -1100,10 +1163,8 @@ const AdvancedTaskTable = ({
                               ) : (
                                 <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
                               )}
-                              {/* Always show dropdown icon if first verifier is selected */}
                               <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" className="ml-1 text-gray-400"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
                             </div>
-                            {/* Dropdown for selecting second verifier */}
                             {editingVerifierTaskId === task._id + '-second' && ReactDOM.createPortal(
                               <div
                                 ref={verifierDropdownRef}
@@ -1128,7 +1189,7 @@ const AdvancedTaskTable = ({
                                   users.filter(u => u._id !== (task.assignedTo?._id) && u._id !== (task.verificationAssignedTo?._id) && (`${u.firstName} ${u.lastName}`.toLowerCase().includes(verifierSearch.toLowerCase())))
                                     .map(u => {
                                       // Only allow selection if canEditSecondVerifier
-                                      const canEditSecondVerifier = viewType === 'received' && !shouldDisableActions?.(task);
+                                      const canEditSecondVerifierDropdown = viewType === 'received' && !shouldDisableActions?.(task);
                                       return (
                                         <div
                                           key={u._id}
@@ -1138,14 +1199,14 @@ const AdvancedTaskTable = ({
                                             gap: 8,
                                             padding: '6px 8px',
                                             borderRadius: 6,
-                                            cursor: canEditSecondVerifier ? 'pointer' : 'not-allowed',
+                                            cursor: canEditSecondVerifierDropdown ? 'pointer' : 'not-allowed',
                                             background: task.secondVerificationAssignedTo && task.secondVerificationAssignedTo._id === u._id ? '#f3f4f6' : 'transparent',
                                             marginBottom: 2,
                                             transition: 'background 0.15s',
                                             opacity: verifierLoading ? 0.6 : 1,
                                           }}
                                           onClick={async e => {
-                                            if (!canEditSecondVerifier) return;
+                                            if (!canEditSecondVerifierDropdown) return;
                                             e.stopPropagation();
                                             if (verifierLoading || (task.secondVerificationAssignedTo && task.secondVerificationAssignedTo._id === u._id)) return;
                                             setVerifierLoading(true);
@@ -1162,6 +1223,7 @@ const AdvancedTaskTable = ({
                                               const updatedTask = await response.json();
                                               if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
                                               toast.success('Second verifier updated');
+                                              if (refetchTasks) refetchTasks();
                                             } catch (err) {
                                               toast.error('Failed to update second verifier');
                                             }
@@ -1362,13 +1424,22 @@ const AdvancedTaskTable = ({
                 {viewType === 'assigned' && (
                   <td key="actions" className="px-2 py-1 text-sm font-normal align-middle bg-white">
                     {(!shouldDisableActions || !shouldDisableActions(task)) && (
-                      <button
-                        onClick={() => handleDeleteTask(task)}
-                        className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                        title="Delete Task"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex items-center gap-0">
+                        <button
+                          onClick={() => onEditTask && onEditTask(task)}
+                          className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
+                          title="Edit Task"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTask(task)}
+                          className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
+                          title="Delete Task"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     )}
                   </td>
                 )}

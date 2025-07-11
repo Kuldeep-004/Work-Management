@@ -75,6 +75,35 @@ const ReceivedTasks = () => {
   // Add state for task hours
   const [taskHours, setTaskHours] = useState([]);
 
+  // Move fetchTasks to component scope so it can be used as a prop
+  const fetchTasks = async () => {
+    try {
+      let url;
+      if (activeTab === 'guidance') {
+        url = `${API_BASE_URL}/api/tasks/received/guidance`;
+      } else {
+        url = `${API_BASE_URL}/api/tasks/received?tab=${activeTab}`;
+      }
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch tasks');
+      }
+      const data = await response.json();
+      setTasks(data);
+      setError(null);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      setError(error.message);
+      toast.error('Failed to fetch tasks');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!isAuthenticated()) {
     return null;
   }
@@ -106,34 +135,6 @@ const ReceivedTasks = () => {
   }, [user]);
 
   useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        let url;
-        if (activeTab === 'guidance') {
-          url = `${API_BASE_URL}/api/tasks/received/guidance`;
-        } else {
-          url = `${API_BASE_URL}/api/tasks/received?tab=${activeTab}`;
-        }
-        const response = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${user.token}`,
-          },
-        });
-        if (!response.ok) {
-          throw new Error('Failed to fetch tasks');
-        }
-        const data = await response.json();
-        setTasks(data);
-        setError(null);
-      } catch (error) {
-        console.error('Error fetching tasks:', error);
-        setError(error.message);
-        toast.error('Failed to fetch tasks');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (user && user.token) {
       fetchTasks();
     }
@@ -687,6 +688,7 @@ const ReceivedTasks = () => {
           visibleColumns={visibleColumns}
           setVisibleColumns={setVisibleColumns}
           storageKeyPrefix="receivedtasks"
+          refetchTasks={fetchTasks}
         />
       </ErrorBoundary>
     </div>

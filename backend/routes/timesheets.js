@@ -212,6 +212,16 @@ router.delete('/entry/:entryId', protect, async (req, res) => {
 // Get subordinates' timesheets based on user role hierarchy
 router.get('/subordinates', protect, async (req, res) => {
   try {
+    // Check if user is Admin or Task Verifier (role2 can be array or string)
+    let isTaskVerifier = false;
+    if (Array.isArray(req.user.role2)) {
+      isTaskVerifier = req.user.role2.includes('Task Verifier');
+    } else {
+      isTaskVerifier = req.user.role2 === 'Task Verifier';
+    }
+    if (!(req.user.role === 'Admin' || isTaskVerifier)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
     const { page = 1, limit = 10, startDate, userId } = req.query;
     let query = { status: { $ne: 'rejected' } };
     // Always get all users except rejected
@@ -255,24 +265,8 @@ router.get('/subordinates', protect, async (req, res) => {
       .limit(limit * 1)
       .skip((page - 1) * limit);
     const total = await Timesheet.countDocuments(timesheetQuery);
-    // Calculate totalTimeSpent for each timesheet
-    const timesheetsWithTotal = timesheets.map(ts => {
-      const entries = Array.isArray(ts.entries) ? ts.entries : [];
-      const totalTimeSpent = entries.reduce((sum, entry) => {
-        if (entry.startTime && entry.endTime) {
-          const [sh, sm] = entry.startTime.split(':').map(Number);
-          const [eh, em] = entry.endTime.split(':').map(Number);
-          let startM = sh * 60 + sm;
-          let endM = eh * 60 + em;
-          if (endM < startM) endM += 24 * 60;
-          return sum + (endM - startM);
-        }
-        return sum;
-      }, 0);
-      return { ...ts.toObject(), totalTimeSpent };
-    });
     res.json({
-      timesheets: timesheetsWithTotal,
+      timesheets,
       subordinates,
       totalPages: Math.ceil(total / limit),
       currentPage: parseInt(page),

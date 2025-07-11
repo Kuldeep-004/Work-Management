@@ -6,9 +6,16 @@ import FileUpload from './FileUpload';
 import FileList from './FileList';
 import { API_BASE_URL } from '../apiConfig';
 
-const CreateTask = ({ users = [] }) => {
+// Accept new props for edit mode
+const CreateTask = ({
+  users = [],
+  mode = 'create',
+  initialData = null,
+  isOpen = false,
+  onClose = () => {},
+  onSubmit = null,
+}) => {
   const { user: loggedInUser, isAuthenticated } = useAuth();
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isWorkTypeModalOpen, setIsWorkTypeModalOpen] = useState(false);
   const [workTypeFormData, setWorkTypeFormData] = useState({ name: '' });
   const [clients, setClients] = useState([]);
@@ -42,6 +49,7 @@ const CreateTask = ({ users = [] }) => {
   const fileInputRef = useRef(null);
   const [isWorkTypeDropdownOpen, setIsWorkTypeDropdownOpen] = useState(false);
   const [workTypeSearchTerm, setWorkTypeSearchTerm] = useState("");
+  const [isMultiUserAssign, setIsMultiUserAssign] = useState(false); // Toggle for multi-user assignment
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
   const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
@@ -125,10 +133,10 @@ const CreateTask = ({ users = [] }) => {
       }
     };
 
-    if (isModalOpen) {
+    if (isOpen) {
       fetchData();
     }
-  }, [isModalOpen, loggedInUser]);
+  }, [isOpen, loggedInUser]);
 
   // Filter clients based on search term
   const filteredClients = useMemo(() => {
@@ -143,20 +151,20 @@ const CreateTask = ({ users = [] }) => {
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (modalRef.current && !modalRef.current.contains(event.target) && !event.target.closest('.work-type-modal')) {
-        setIsModalOpen(false);
+        onClose();
         setIsDropdownOpen(false);
         setIsClientDropdownOpen(false);
       }
     };
 
-    if (isModalOpen) {
+    if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isModalOpen]);
+  }, [isOpen, onClose]);
 
   const validateFiles = (files) => {
     const newFiles = Array.from(files);
@@ -234,6 +242,97 @@ const CreateTask = ({ users = [] }) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Prefill formData if in edit mode
+  useEffect(() => {
+    if (mode === 'edit' && initialData && isOpen) {
+      let inwardEntryTime = '';
+      if (initialData.inwardEntryTime) {
+        inwardEntryTime = initialData.inwardEntryTime;
+      } else if (initialData.inwardEntryDate) {
+        const dateObj = new Date(initialData.inwardEntryDate);
+        const hours = dateObj.getHours().toString().padStart(2, '0');
+        const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+        inwardEntryTime = `${hours}:${minutes}`;
+      }
+      const convertedTime = inwardEntryTime ? convertTo12Hour(inwardEntryTime) : '';
+      setFormData({
+        title: initialData.title || '',
+        description: initialData.description || '',
+        clientName: initialData.clientName || '',
+        clientGroup: initialData.clientGroup || '',
+        workType: Array.isArray(initialData.workType) ? initialData.workType : [],
+        assignedTo: Array.isArray(initialData.assignedTo)
+          ? initialData.assignedTo.map(u => typeof u === 'string' ? u : u._id)
+          : initialData.assignedTo
+            ? [typeof initialData.assignedTo === 'string' ? initialData.assignedTo : initialData.assignedTo._id]
+            : [],
+        priority: initialData.priority || 'regular',
+        inwardEntryDate: initialData.inwardEntryDate ? initialData.inwardEntryDate.split('T')[0] : '',
+        inwardEntryTime: convertedTime,
+        dueDate: initialData.dueDate ? initialData.dueDate.split('T')[0] : '',
+        targetDate: initialData.targetDate ? initialData.targetDate.split('T')[0] : '',
+        billed: typeof initialData.billed === 'boolean' ? initialData.billed : true,
+      });
+      setClientSearchTerm(initialData.clientName || '');
+      const assignedToRaw = Array.isArray(initialData.assignedTo)
+        ? initialData.assignedTo
+        : initialData.assignedTo
+          ? [initialData.assignedTo]
+          : [];
+      const assignedUserIds = assignedToRaw.map(u => typeof u === 'string' ? u : u._id);
+      console.log('[EditModal-FIX] assignedToRaw:', assignedToRaw);
+      console.log('[EditModal-FIX] users:', users);
+      console.log('[EditModal-FIX] assignedUserIds:', assignedUserIds);
+      const selected = users.filter(u => assignedUserIds.includes(u._id));
+      console.log('[EditModal-FIX] selectedUsers to set:', selected);
+      setSelectedUsers(selected);
+    } else if (mode === 'create' && isOpen) {
+      const { date, time } = getCurrentDateTime();
+      setFormData({
+        title: '',
+        description: '',
+        clientName: '',
+        clientGroup: '',
+        workType: [],
+        assignedTo: [],
+        priority: 'regular',
+        inwardEntryDate: date,
+        inwardEntryTime: time,
+        dueDate: '',
+        targetDate: '',
+        billed: true
+      });
+      setClientSearchTerm('');
+      setSelectedUsers([]);
+    }
+  }, [mode, initialData, isOpen, users]);
+
+  // Ensure selectedUsers is set for edit mode when users are loaded
+  useEffect(() => {
+    if (
+      mode === 'edit' &&
+      initialData &&
+      isOpen &&
+      users.length > 0 &&
+      selectedUsers.length === 0 &&
+      (Array.isArray(initialData.assignedTo) || initialData.assignedTo)
+    ) {
+      const assignedToRaw = Array.isArray(initialData.assignedTo)
+        ? initialData.assignedTo
+        : initialData.assignedTo
+          ? [initialData.assignedTo]
+          : [];
+      const assignedUserIds = assignedToRaw.map(u => typeof u === 'string' ? u : u._id);
+      console.log('[EditModal-FIX][users effect] assignedToRaw:', assignedToRaw);
+      console.log('[EditModal-FIX][users effect] users:', users);
+      console.log('[EditModal-FIX][users effect] assignedUserIds:', assignedUserIds);
+      const selected = users.filter(u => assignedUserIds.includes(u._id));
+      console.log('[EditModal-FIX][users effect] selectedUsers to set:', selected);
+      setSelectedUsers(selected);
+    }
+    // eslint-disable-next-line
+  }, [users, initialData, isOpen, mode]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isAuthenticated()) {
@@ -284,53 +383,74 @@ const CreateTask = ({ users = [] }) => {
       // Convert 12-hour time to 24-hour format for backend
       const taskData = {
         ...formData,
+        assignedTo: Array.isArray(formData.assignedTo) ? formData.assignedTo.filter(Boolean) : [formData.assignedTo].filter(Boolean),
         inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
         billed: formData.billed
       };
 
-      const response = await fetch(`${API_BASE_URL}/api/tasks`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${loggedInUser.token}`,
-        },
-        body: JSON.stringify(taskData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create task');
-      }
-
-      const createdTasks = await response.json();
-      console.log('Tasks created:', createdTasks); // Debug log
-      
-      if (createdTasks && Array.isArray(createdTasks) && createdTasks.length > 0) {
-        toast.success(`${createdTasks.length} task(s) created successfully`);
-        
-        for (const task of createdTasks) {
-          if (task && task._id) {
-            if (selectedFiles.length > 0) {
-              console.log('Starting file upload for task:', task._id); // Debug log
-              try {
-                await uploadFiles(task._id);
-                toast.success(`Files uploaded for task: ${task.title}`);
-              } catch (uploadError) {
-                console.error('File upload error:', uploadError); // Debug log
-                toast.error(`Task created but file upload failed for ${task.title}: ${uploadError.message}`);
-              }
-            }
-          } else {
-            console.error('Invalid task ID received for one of the tasks');
-            toast.error('An error occurred while processing one of the created tasks.');
-          }
+      let response, updatedTask;
+      if (mode === 'edit' && initialData && initialData._id) {
+        response = await fetch(`${API_BASE_URL}/api/tasks/${initialData._id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${loggedInUser.token}`,
+          },
+          body: JSON.stringify(taskData),
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to update task');
         }
-        
-        // Close the modal after successful task creation and file uploads
-        handleClose();
+        updatedTask = await response.json();
+        toast.success('Task updated successfully');
+        if (onSubmit) onSubmit(updatedTask);
+        onClose();
       } else {
-        console.error('Invalid task ID received:', createdTasks);
-        toast.error('An error occurred while creating the task. Invalid ID received.');
+        const response = await fetch(`${API_BASE_URL}/api/tasks`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${loggedInUser.token}`,
+          },
+          body: JSON.stringify(taskData),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to create task');
+        }
+
+        const createdTasks = await response.json();
+        console.log('Tasks created:', createdTasks); // Debug log
+        
+        if (createdTasks && Array.isArray(createdTasks) && createdTasks.length > 0) {
+          toast.success(`${createdTasks.length} task(s) created successfully`);
+          
+          for (const task of createdTasks) {
+            if (task && task._id) {
+              if (selectedFiles.length > 0) {
+                console.log('Starting file upload for task:', task._id); // Debug log
+                try {
+                  await uploadFiles(task._id);
+                  toast.success(`Files uploaded for task: ${task.title}`);
+                } catch (uploadError) {
+                  console.error('File upload error:', uploadError); // Debug log
+                  toast.error(`Task created but file upload failed for ${task.title}: ${uploadError.message}`);
+                }
+              }
+            } else {
+              console.error('Invalid task ID received for one of the tasks');
+              toast.error('An error occurred while processing one of the created tasks.');
+            }
+          }
+          
+          // Close the modal after successful task creation and file uploads
+          onClose();
+        } else {
+          console.error('Invalid task ID received:', createdTasks);
+          toast.error('An error occurred while creating the task. Invalid ID received.');
+        }
       }
     } catch (error) {
       console.error('Error creating task:', error);
@@ -554,22 +674,24 @@ const CreateTask = ({ users = [] }) => {
     };
   }, [isWorkTypeDropdownOpen]);
 
+  // Render modal only if isOpen
   return (
     <>
-      <button
-        onClick={handleOpenModal}
-        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-      >
-        Create Task
-      </button>
-
-      {isModalOpen && (
+      {mode === 'create' && (
+        <button
+          onClick={() => onClose('open')}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Create Task
+        </button>
+      )}
+      {isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Create New Task</h2>
+              <h2 className="text-xl font-semibold">{mode === 'edit' ? 'Edit Task' : 'Create New Task'}</h2>
               <button
-                onClick={handleClose}
+                onClick={onClose}
                 className="text-gray-500 hover:text-gray-700"
               >
                 ✕
@@ -786,70 +908,99 @@ const CreateTask = ({ users = [] }) => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Assign To <span className="text-red-500">*</span>
                   </label>
-                  <div className="relative">
-                    {isDropdownOpen && (
-                      <div className="absolute z-10 w-full bottom-full mb-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
-                        <div className="sticky top-0 bg-white p-2 border-b">
-                          <input
-                            type="text"
-                            placeholder="Search users..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </div>
-                        <div className="py-1">
-                          {filteredUsers.length > 0 ? (
-                            filteredUsers.map((user) => (
-                              <button
-                                key={user._id}
-                                type="button"
-                                onClick={() => handleAssignedToChange(user._id)}
-                                className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${
-                                  formData.assignedTo.includes(user._id) ? 'bg-blue-50' : ''
-                                }`}
-                              >
-                                <div className="flex items-center">
-                                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium mr-3 overflow-hidden">
-                                    <img 
-                                      src={user.photo?.url || defaultProfile} 
-                                      alt={`${user.firstName} ${user.lastName}`}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  </div>
-                                  <div>
-                                    <div className="font-medium text-gray-900">
-                                      {user.firstName} {user.lastName}
+                  <div className="flex items-center gap-2">
+                    <div className="relative w-full">
+                      {isDropdownOpen && (
+                        <div className="absolute z-10 w-full bottom-full mb-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                          <div className="sticky top-0 bg-white p-2 border-b">
+                            <input
+                              type="text"
+                              placeholder="Search users..."
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <div className="py-1">
+                            {filteredUsers.length > 0 ? (
+                              filteredUsers.map((user) => (
+                                <button
+                                  key={user._id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isMultiUserAssign) {
+                                      handleAssignedToChange(user._id);
+                                    } else {
+                                      setFormData(prev => ({ ...prev, assignedTo: [user._id] }));
+                                      setSelectedUsers([user]);
+                                      setIsDropdownOpen(false);
+                                    }
+                                  }}
+                                  className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${formData.assignedTo.includes(user._id) ? 'bg-blue-50' : ''}`}
+                                >
+                                  <div className="flex items-center">
+                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium mr-3 overflow-hidden">
+                                      <img 
+                                        src={user.photo?.url || defaultProfile} 
+                                        alt={`${user.firstName} ${user.lastName}`}
+                                        className="w-full h-full object-cover"
+                                      />
                                     </div>
-                                    <div className="text-sm text-gray-500">{user.group}</div>
+                                    <div>
+                                      <div className="font-medium text-gray-900">
+                                        {user.firstName} {user.lastName}
+                                      </div>
+                                      <div className="text-sm text-gray-500">{user.group}</div>
+                                    </div>
                                   </div>
-                                </div>
-                              </button>
-                            ))
-                          ) : (
-                            <div className="px-4 py-2 text-gray-500 text-center">No users found</div>
-                          )}
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-4 py-2 text-gray-500 text-center">No users found</div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                        className="w-full flex items-center justify-between border rounded-md px-3 py-2 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <span className="text-gray-700">
+                          {selectedUserDisplay}
+                        </span>
+                        <svg
+                          className={`w-5 h-5 text-gray-400 transition-transform ${isDropdownOpen ? 'transform rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                      className="w-full flex items-center justify-between border rounded-md px-3 py-2 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      aria-pressed={isMultiUserAssign}
+                      onClick={() => {
+                        setIsMultiUserAssign(v => {
+                          const next = !v;
+                          if (!next && formData.assignedTo.length > 1) {
+                            setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.slice(0, 1) }));
+                            setSelectedUsers(users.filter(u => u._id === formData.assignedTo[0]));
+                          }
+                          return next;
+                        });
+                      }}
+                      className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiUserAssign ? 'bg-blue-500' : 'bg-gray-200'}`}
+                      tabIndex={0}
                     >
-                      <span className="text-gray-700">
-                        {selectedUserDisplay}
-                      </span>
-                      <svg
-                        className={`w-5 h-5 text-gray-400 transition-transform ${isDropdownOpen ? 'transform rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                      </svg>
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiUserAssign ? 'translate-x-5' : 'translate-x-1'}`}
+                      />
                     </button>
+                    <span className="ml-2 text-xs text-gray-500">Multiple</span>
                   </div>
                   {selectedUsers.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -862,8 +1013,13 @@ const CreateTask = ({ users = [] }) => {
                           <button
                             type="button"
                             onClick={() => {
-                              setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.filter(id => id !== user._id) }));
-                              setSelectedUsers(prev => prev.filter(u => u._id !== user._id));
+                              if (isMultiUserAssign) {
+                                setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.filter(id => id !== user._id) }));
+                                setSelectedUsers(prev => prev.filter(u => u._id !== user._id));
+                              } else {
+                                setFormData(prev => ({ ...prev, assignedTo: [] }));
+                                setSelectedUsers([]);
+                              }
                             }}
                             className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200"
                           >
@@ -1073,7 +1229,7 @@ const CreateTask = ({ users = [] }) => {
               <div className="flex justify-end space-x-4 mt-6">
                 <button
                   type="button"
-                  onClick={handleClose}
+                  onClick={onClose}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800"
                   disabled={uploading}
                 >
@@ -1085,7 +1241,7 @@ const CreateTask = ({ users = [] }) => {
                   className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700
                     ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  {uploading ? 'Creating Task...' : 'Create Task'}
+                  {uploading ? (mode === 'edit' ? 'Updating...' : 'Creating Task...') : (mode === 'edit' ? 'Update Task' : 'Create Task')}
                 </button>
               </div>
             </form>
@@ -1103,7 +1259,7 @@ const CreateTask = ({ users = [] }) => {
                   />
                   <div className="flex justify-end">
                     <button
-                      onClick={handleClose}
+                      onClick={onClose}
                       className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
                     >
                       Done
