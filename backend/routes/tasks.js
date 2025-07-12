@@ -578,8 +578,8 @@ router.post('/', protect, canAssignTask, async (req, res) => {
     }
 
     for (const userId of assignedTo) {
-      // Always set verification status to 'pending' for all users
-      const verificationStatus = 'pending';
+      // Set verification status based on whether assignedBy and assignedTo are the same
+      const verificationStatus = (req.user._id.toString() === userId.toString()) ? 'completed' : 'pending';
       const task = new Task({
         title,
         description,
