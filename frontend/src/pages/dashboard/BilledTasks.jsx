@@ -38,6 +38,7 @@ const BilledTasks = () => {
     if (saved) return JSON.parse(saved);
     return ALL_COLUMNS.map(col => col.id);
   });
+  const [sortBy, setSortBy] = useState('createdAt');
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -73,12 +74,32 @@ const BilledTasks = () => {
   return (
     <div className="p-4 sm:p-6 md:p-8">
       <h2 className="text-2xl font-bold text-gray-800 mb-6">Billed Tasks</h2>
+      <div className="flex flex-row gap-4 mb-4">
+        <input
+          type="text"
+          placeholder="Search tasks..."
+          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+        />
+        <select
+          className="px-3 py-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value)}
+        >
+          <option value="createdAt">Assigned On</option>
+          <option value="priority">Priority</option>
+          <option value="status">Stages</option>
+          <option value="clientName">Client</option>
+        </select>
+      </div>
       <AdvancedTaskTable
         tasks={tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))}
         viewType="billed"
         visibleColumns={visibleColumns}
         setVisibleColumns={setVisibleColumns}
         currentUser={user}
+        sortBy={sortBy}
       />
     </div>
   );

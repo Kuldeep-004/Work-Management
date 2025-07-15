@@ -32,8 +32,11 @@ const ALL_COLUMNS = [
   { id: 'targetDate', label: 'Target Date' },
   { id: 'assignedBy', label: 'Assigned By' },
   { id: 'assignedTo', label: 'Assigned To' },
-  { id: 'verificationAssignedTo', label: 'First Verifier' },
-  { id: 'secondVerificationAssignedTo', label: 'Second Verifier' },
+  { id: 'verificationAssignedTo', label: 'Verifier 1' },
+  { id: 'secondVerificationAssignedTo', label: 'Verifier 2' },
+  { id: 'thirdVerificationAssignedTo', label: 'Third Verifier' },
+  { id: 'fourthVerificationAssignedTo', label: 'Fourth Verifier' },
+  { id: 'fifthVerificationAssignedTo', label: 'Fifth Verifier' },
   { id: 'guides', label: 'Guide' },
   { id: 'files', label: 'Files' },
   { id: 'comments', label: 'Comments' },
@@ -557,7 +560,7 @@ const AssignedTasks = () => {
           >
             <option value="createdAt">Assigned On</option>
             <option value="priority">Priority</option>
-            <option value="status">Status</option>
+            <option value="status">Stages</option>
             <option value="clientName">Client</option>
           </select>
           <select
@@ -597,6 +600,7 @@ const AssignedTasks = () => {
           setVisibleColumns={setVisibleColumns}
           storageKeyPrefix="assignedtasks"
           onEditTask={handleEditTask}
+          sortBy={sortBy}
         />
       </ErrorBoundary>
       {/* Edit Task Modal */}

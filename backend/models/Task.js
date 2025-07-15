@@ -67,6 +67,18 @@ const taskSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  thirdVerificationAssignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  fourthVerificationAssignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  fifthVerificationAssignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
   verificationStatus: {
     type: String,
     enum: ['pending','completed'],

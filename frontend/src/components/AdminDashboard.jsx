@@ -60,6 +60,9 @@ const ALL_COLUMNS = [
   { id: 'assignedTo', label: 'Assigned To', defaultWidth: 150 },
   { id: 'verificationAssignedTo', label: 'First Verifier', defaultWidth: 150 },
   { id: 'secondVerificationAssignedTo', label: 'Second Verifier', defaultWidth: 150 },
+  { id: 'thirdVerificationAssignedTo', label: 'Third Verifier', defaultWidth: 150 },
+  { id: 'fourthVerificationAssignedTo', label: 'Fourth Verifier', defaultWidth: 150 },
+  { id: 'fifthVerificationAssignedTo', label: 'Fifth Verifier', defaultWidth: 150 },
   { id: 'guides', label: 'Guide', defaultWidth: 150 },
   { id: 'files', label: 'Files', defaultWidth: 120 },
   { id: 'comments', label: 'Comments', defaultWidth: 120 },
@@ -1044,7 +1047,7 @@ const Dashboard = () => {
           >
             <option value="createdAt">Assigned On</option>
             <option value="priority">Priority</option>
-            <option value="status">Status</option>
+            <option value="status">Stages</option>
             <option value="clientName">Client</option>
           </select>
           <select
@@ -1095,6 +1098,7 @@ const Dashboard = () => {
           users={users}
           currentUser={user}
           refetchTasks={fetchTasks}
+          sortBy={sortBy}
         />
       </div>
       {/* Edit Task Modal */}

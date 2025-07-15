@@ -113,7 +113,7 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
       >
         <option value="createdAt">Assigned On</option>
         <option value="priority">Priority</option>
-        <option value="status">Status</option>
+        <option value="status">Stages</option>
         <option value="clientName">Client Name</option>
         <option value="clientGroup">Client Group</option>
       </select>
@@ -264,7 +264,10 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
                 <div className="flex items-center space-x-2">
                   {(task.assignedTo._id === loggedInUser._id || 
                     task.verificationAssignedTo?._id === loggedInUser._id || 
-                    task.secondVerificationAssignedTo?._id === loggedInUser._id) ? (
+                    task.secondVerificationAssignedTo?._id === loggedInUser._id || 
+                    task.thirdVerificationAssignedTo?._id === loggedInUser._id || 
+                    task.fourthVerificationAssignedTo?._id === loggedInUser._id || 
+                    task.fifthVerificationAssignedTo?._id === loggedInUser._id) ? (
                     <select
                       value={task.verificationStatus }
                       onChange={(e) => handleVerificationStatusChange(task._id, e.target.value)}

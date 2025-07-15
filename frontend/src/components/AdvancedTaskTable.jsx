@@ -7,6 +7,7 @@ import FileList from './FileList';
 import TaskComments from './TaskComments';
 import { API_BASE_URL } from '../apiConfig';
 import ReactDOM from 'react-dom';
+import React from 'react';
 
 function formatDate(date) {
   if (!date) return 'NA';
@@ -45,6 +46,9 @@ const ALL_COLUMNS = [
   { id: 'assignedTo', label: 'Assigned To', defaultWidth: 150 },
   { id: 'verificationAssignedTo', label: 'First Verifier', defaultWidth: 150 },
   { id: 'secondVerificationAssignedTo', label: 'Second Verifier', defaultWidth: 150 },
+  { id: 'thirdVerificationAssignedTo', label: 'Third Verifier', defaultWidth: 150 },
+  { id: 'fourthVerificationAssignedTo', label: 'Fourth Verifier', defaultWidth: 150 },
+  { id: 'fifthVerificationAssignedTo', label: 'Fifth Verifier', defaultWidth: 150 },
   { id: 'guides', label: 'Guide', defaultWidth: 200 },
   { id: 'files', label: 'Files', defaultWidth: 120 },
   { id: 'comments', label: 'Comments', defaultWidth: 120 },
@@ -87,7 +91,8 @@ const AdvancedTaskTable = ({
   users = [],
   currentUser = null,
   refetchTasks,
-  onEditTask
+  onEditTask,
+  sortBy // <-- add this prop
 }) => {
   const { user } = useAuth();
   
@@ -533,6 +538,19 @@ const AdvancedTaskTable = ({
     }
   };
 
+  // Helper to group tasks by a field
+  function groupTasksBy(tasks, field, options = {}) {
+    const groups = {};
+    tasks.forEach(task => {
+      let key = task[field];
+      // Use label if options provided (e.g., for priority/status)
+      if (options && options[key]) key = options[key];
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(task);
+    });
+    return groups;
+  }
+
   if (!user) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -541,648 +559,1272 @@ const AdvancedTaskTable = ({
     );
   }
 
+  // In the main render, before tbody:
+  const groupField = (columnOrder.includes('priority') && sortBy === 'priority') ? 'priority'
+    : (columnOrder.includes('status') && sortBy === 'status') ? 'status'
+    : (columnOrder.includes('clientName') && sortBy === 'clientName') ? 'clientName'
+    : null;
+  const shouldGroup = groupField && sortBy !== 'createdAt';
+  let groupedTasks = null;
+  if (shouldGroup) {
+    let options = {};
+    if (groupField === 'priority') PRIORITY_OPTIONS.forEach(opt => options[opt.value] = opt.label);
+    if (groupField === 'status') STATUS_OPTIONS.forEach(opt => options[opt.value] = opt.label);
+    groupedTasks = groupTasksBy(tasks, groupField, options);
+  }
+
+  // After initializing visibleColumns and columnOrder, add this effect:
+  useEffect(() => {
+    // Ensure all columns in ALL_COLUMNS are present in visibleColumns and columnOrder
+    const allIds = ALL_COLUMNS.map(col => col.id);
+    let updated = false;
+    let newVisible = visibleColumns;
+    let newOrder = columnOrder;
+    if (visibleColumns.some(colId => !allIds.includes(colId)) || allIds.some(colId => !visibleColumns.includes(colId))) {
+      newVisible = allIds;
+      updated = true;
+    }
+    if (columnOrder.some(colId => !allIds.includes(colId)) || allIds.some(colId => !columnOrder.includes(colId))) {
+      newOrder = allIds;
+      updated = true;
+    }
+    if (updated) {
+      setVisibleColumns(newVisible);
+      setColumnOrder(newOrder);
+    }
+    // eslint-disable-next-line
+  }, []);
+
+  // Helper to get all assigned verifier user IDs for a task
+  const getAssignedVerifierIds = (task) => [
+    task.verificationAssignedTo?._id,
+    task.secondVerificationAssignedTo?._id,
+    task.thirdVerificationAssignedTo?._id,
+    task.fourthVerificationAssignedTo?._id,
+    task.fifthVerificationAssignedTo?._id,
+  ].filter(Boolean);
+
   return (
-    <div className="pt-4 bg-gray-50 min-h-screen">
-      {/* Responsive table wrapper */}
-      <div className="overflow-x-auto w-full" ref={tableRef}>
-        <table className={`min-w-full divide-y divide-gray-200 ${isResizing ? 'select-none' : ''}`}>
-          <thead className="border-b border-gray-200">
-            <tr>
-              {getOrderedVisibleColumns().map((colId, idx, arr) => {
-                const col = ALL_COLUMNS.find(c => c.id === colId);
-                if (!col) return null;
-                const isLast = idx === arr.length - 1;
-                return (
-                  <th
-                    key={colId}
-                    className={`px-2 py-1 text-left text-sm font-normal bg-white tracking-wider relative select-none ${!isLast ? 'border-r border-gray-200' : ''} ${dragOverColumn === colId ? 'drag-over-highlight' : ''}`}
-                    style={{
-                      width: (columnWidths[colId] || 150) + 'px',
-                      minWidth: (columnWidths[colId] || 150) + 'px',
-                      position: 'relative',
-                      background: dragOverColumn === colId ? '#eff6ff' : 'white',
-                      borderBottom: '1px solid #e5e7eb',
-                      borderLeft: dragOverColumn === colId ? '2px solid #3b82f6' : undefined
-                    }}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, colId)}
-                    onDragOver={(e) => handleDragOver(e, colId)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, colId)}
-                    onMouseMove={(e) => {
-                      if (isLast) return;
-                      const th = e.currentTarget;
-                      const rect = th.getBoundingClientRect();
-                      if (rect.right - e.clientX < 6) {
-                        th.style.cursor = 'col-resize';
-                      } else {
-                        th.style.cursor = '';
-                      }
-                    }}
-                    onMouseLeave={e => { e.currentTarget.style.cursor = ''; }}
-                    onMouseDown={(e) => {
-                      if (isLast) return;
-                      const th = e.currentTarget;
-                      const rect = th.getBoundingClientRect();
-                      if (rect.right - e.clientX < 6) {
-                        handleResizeStart(e, colId);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center justify-between relative">
-                      <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                        <span className="cursor-move drag-handle" style={{fontWeight: 500}}>{col.label}</span>
-                      </div>
-                    </div>
-                  </th>
-                );
-              })}
-              {(viewType === 'assigned' || viewType === 'admin') && (
-                <th key="actions" className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none">Actions</th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {tasks.map((task) => (
-              <tr key={task._id} className="border-b border-gray-200 hover:bg-gray-50 transition-none">
-                {getOrderedVisibleColumns().map((colId, idx, arr) => {
-                  const col = ALL_COLUMNS.find(c => c.id === colId);
-                  if (!col) return null;
-                  const isLast = idx === arr.length - 1;
-                  
-                  switch (colId) {
-                    case 'title':
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{verticalAlign: 'middle', width: (columnWidths[colId] || 256) + 'px', minWidth: (columnWidths[colId] || 256) + 'px', maxWidth: (columnWidths[colId] || 256) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.title}</span></div></td>;
-                    
-                    case 'description':
-                      return (
-                        <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white border-0 ${!isLast ? 'border-r border-gray-200' : ''}`} style={{verticalAlign: 'middle', width: (columnWidths[colId] || 180) + 'px', minWidth: (columnWidths[colId] || 180) + 'px', maxWidth: (columnWidths[colId] || 180) + 'px', background: 'white', overflow: 'hidden'}}>
-                          {editingDescriptionTaskId === task._id ? (
-                            <input
-                              type="text"
-                              value={editingDescriptionValue}
-                              autoFocus
-                              onChange={e => setEditingDescriptionValue(e.target.value)}
-                              onBlur={() => handleDescriptionEditSave(task)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  handleDescriptionEditSave(task);
-                                }
-                              }}
-                              className="no-border-input w-full bg-white px-1 py-1 rounded"
-                              style={{fontSize: 'inherit', height: '28px'}}
-                            />
-                          ) : (
-                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                              <span
-                                className="cursor-pointer block"
-                                onClick={() => {
-                                  setEditingDescriptionTaskId(task._id);
-                                  setEditingDescriptionValue(task.description || '');
-                                }}
-                                title="Click to edit"
-                                style={{ minHeight: '14px', color: !task.description ? '#aaa' : undefined, fontSize: 'inherit' }}
-                              >
-                                {task.description && task.description.trim() !== '' ? task.description : <span style={{fontStyle: 'italic', fontSize: 'inherit'}}></span>}
-                              </span>
-                            </div>
-                          )}
-                        </td>
-                      );
-                    
-                    case 'clientName':
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span className="text-sm font-medium text-gray-900">{task.clientName}</span></div></td>;
-                    
-                    case 'clientGroup':
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span className="text-sm text-gray-500">{task.clientGroup}</span></div></td>;
-                    
-                    case 'workType':
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex gap-1">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></div></td>;
-                    
-                    case 'billed':
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? 'Yes' : 'No'}</span></div></td>;
-                    
-                    case 'status':
-                      // Show colored status but disable interaction in 'Task Issued For Verification' and 'Task For Guidance' tabs in Received Tasks
-                      if (
-                        viewType === 'received' &&
-                        (taskType === 'issuedVerification' || taskType === 'guidance' || taskType === 'completed')
-                      ) {
+    <>
+      <div className="pt-4 bg-gray-50 min-h-screen">
+        {/* Responsive table wrapper */}
+        <div className="overflow-x-auto w-full" ref={tableRef}>
+          <table className={`min-w-full divide-y divide-gray-200 ${isResizing ? 'select-none' : ''}`}> 
+            {/* Only render thead at the top if not grouping */}
+            {!shouldGroup && (
+              <thead className="border-b border-gray-200">
+                <tr>
+                  {getOrderedVisibleColumns().map((colId, idx, arr) => {
+                    const col = ALL_COLUMNS.find(c => c.id === colId);
+                    if (!col) return null;
+                    const isLast = idx === arr.length - 1;
+                    return (
+                      <th
+                        key={colId}
+                        className={`px-2 py-1 text-left text-sm font-normal bg-white tracking-wider relative select-none whitespace-nowrap ${!isLast ? 'border-r border-gray-200' : ''}`}
+                        style={{
+                          width: (columnWidths[colId] || 150) + 'px',
+                          minWidth: (columnWidths[colId] || 150) + 'px',
+                          background: dragOverColumn === colId ? '#f0f6ff' : 'white',
+                          boxShadow: dragOverColumn === colId ? 'inset 2px 0 0 0 #60a5fa' : undefined,
+                          borderBottom: '1px solid #e5e7eb',
+                        }}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, colId)}
+                        onDragOver={(e) => handleDragOver(e, colId)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, colId)}
+                        onMouseMove={(e) => {
+                          if (isLast) return;
+                          const th = e.currentTarget;
+                          const rect = th.getBoundingClientRect();
+                          if (rect.right - e.clientX < 6) {
+                            th.style.cursor = 'col-resize';
+                          } else {
+                            th.style.cursor = '';
+                          }
+                        }}
+                        onMouseLeave={e => { e.currentTarget.style.cursor = ''; }}
+                        onMouseDown={(e) => {
+                          if (isLast) return;
+                          const th = e.currentTarget;
+                          const rect = th.getBoundingClientRect();
+                          if (rect.right - e.clientX < 6) {
+                            handleResizeStart(e, colId);
+                          }
+                        }}
+                      >
+                        <span style={{fontWeight: 500}} className="whitespace-nowrap overflow-hidden text-ellipsis block">{col.label}</span>
+                      </th>
+                    );
+                  })}
+                  {(viewType === 'assigned' || viewType === 'admin') && (
+                    <th key="actions" className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none">Actions</th>
+                  )}
+                </tr>
+              </thead>
+            )}
+            <tbody>
+              {shouldGroup ? (
+                Object.entries(groupedTasks).map(([group, groupTasks]) => (
+                  <React.Fragment key={group}>
+                    <tr key={group + '-header'}>
+                      <td colSpan={getOrderedVisibleColumns().length + ((viewType === 'assigned' || viewType === 'admin') ? 1 : 0)} className="bg-gray-100 text-gray-800 font-semibold px-4 py-2 border-t border-b border-gray-300">{group}</td>
+                    </tr>
+                    <tr key={group + '-columns'} className="border-b border-gray-200">
+                      {getOrderedVisibleColumns().map((colId, idx, arr) => {
+                        const col = ALL_COLUMNS.find(c => c.id === colId);
+                        if (!col) return null;
+                        const isLast = idx === arr.length - 1;
                         return (
-                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                            style={{ width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden' }}>
-                            <div className="overflow-x-auto whitespace-nowrap" style={{ width: '100%', maxWidth: '100%' }}>
-                              <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getStatusColor(task.status)}`}>{STATUS_OPTIONS.find(opt => opt.value === task.status)?.label || task.status}</span>
+                          <th
+                            key={colId}
+                            className={`px-2 py-1 text-left text-sm font-normal bg-white tracking-wider relative select-none whitespace-nowrap ${!isLast ? 'border-r border-gray-200' : ''}`}
+                            style={{
+                              width: (columnWidths[colId] || 150) + 'px',
+                              minWidth: (columnWidths[colId] || 150) + 'px',
+                              background: dragOverColumn === colId ? '#f0f6ff' : 'white',
+                              boxShadow: dragOverColumn === colId ? 'inset 2px 0 0 0 #60a5fa' : undefined,
+                              borderBottom: '1px solid #e5e7eb',
+                            }}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, colId)}
+                            onDragOver={(e) => handleDragOver(e, colId)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, colId)}
+                            onMouseMove={(e) => {
+                              if (isLast) return;
+                              const th = e.currentTarget;
+                              const rect = th.getBoundingClientRect();
+                              if (rect.right - e.clientX < 6) {
+                                th.style.cursor = 'col-resize';
+                              } else {
+                                th.style.cursor = '';
+                              }
+                            }}
+                            onMouseLeave={e => { e.currentTarget.style.cursor = ''; }}
+                            onMouseDown={(e) => {
+                              if (isLast) return;
+                              const th = e.currentTarget;
+                              const rect = th.getBoundingClientRect();
+                              if (rect.right - e.clientX < 6) {
+                                handleResizeStart(e, colId);
+                              }
+                            }}
+                          >
+                            <span style={{fontWeight: 500}} className="whitespace-nowrap overflow-hidden text-ellipsis block">{col.label}</span>
+                          </th>
+                        );
+                      })}
+                      {(viewType === 'assigned' || viewType === 'admin') && (
+                        <th key="actions" className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none">Actions</th>
+                      )}
+                    </tr>
+                    {groupTasks.map((task) => (
+                      <tr key={task._id} className="border-b border-gray-200 hover:bg-gray-50 transition-none">
+                        {getOrderedVisibleColumns().map((colId, idx, arr) => {
+                          const col = ALL_COLUMNS.find(c => c.id === colId);
+                          if (!col) return null;
+                          const isLast = idx === arr.length - 1;
+                          
+                          switch (colId) {
+                            case 'title':
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{verticalAlign: 'middle', width: (columnWidths[colId] || 256) + 'px', minWidth: (columnWidths[colId] || 256) + 'px', maxWidth: (columnWidths[colId] || 256) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.title}</span></div></td>;
+                            
+                            case 'description':
+                              return (
+                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white border-0 ${!isLast ? 'border-r border-gray-200' : ''}`} style={{verticalAlign: 'middle', width: (columnWidths[colId] || 180) + 'px', minWidth: (columnWidths[colId] || 180) + 'px', maxWidth: (columnWidths[colId] || 180) + 'px', background: 'white', overflow: 'hidden'}}>
+                                  {editingDescriptionTaskId === task._id ? (
+                                    <input
+                                      type="text"
+                                      value={editingDescriptionValue}
+                                      autoFocus
+                                      onChange={e => setEditingDescriptionValue(e.target.value)}
+                                      onBlur={() => handleDescriptionEditSave(task)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                          handleDescriptionEditSave(task);
+                                        }
+                                      }}
+                                      className="no-border-input w-full bg-white px-1 py-1 rounded"
+                                      style={{fontSize: 'inherit', height: '28px'}}
+                                    />
+                                  ) : (
+                                    <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                                      <span
+                                        className="cursor-pointer block"
+                                        onClick={() => {
+                                          setEditingDescriptionTaskId(task._id);
+                                          setEditingDescriptionValue(task.description || '');
+                                        }}
+                                        title="Click to edit"
+                                        style={{ minHeight: '14px', color: !task.description ? '#aaa' : undefined, fontSize: 'inherit' }}
+                                      >
+                                        {task.description && task.description.trim() !== '' ? task.description : <span style={{fontStyle: 'italic', fontSize: 'inherit'}}></span>}
+                                      </span>
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            
+                            case 'clientName':
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span className="text-sm font-medium text-gray-900">{task.clientName}</span></div></td>;
+                            
+                            case 'clientGroup':
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span className="text-sm text-gray-500">{task.clientGroup}</span></div></td>;
+                            
+                            case 'workType':
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex gap-1">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></div></td>;
+                            
+                            case 'billed':
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? 'Yes' : 'No'}</span></div></td>;
+                            
+                            case 'status':
+                              // Show colored status but disable interaction in 'Task Issued For Verification' and 'Task For Guidance' tabs in Received Tasks
+                              if (
+                                viewType === 'received' &&
+                                (taskType === 'issuedVerification' || taskType === 'guidance' || taskType === 'completed')
+                              ) {
+                                return (
+                                  <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                                    style={{ width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden' }}>
+                                  <div className="overflow-x-auto whitespace-nowrap" style={{ width: '100%', maxWidth: '100%' }}>
+                                    <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getStatusColor(task.status)}`}>{STATUS_OPTIONS.find(opt => opt.value === task.status)?.label || task.status}</span>
+                                  </div>
+                                </td>
+                              );
+                            }
+                            return (
+                              <td
+                                key={colId}
+                                className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                                style={{
+                                  width: (columnWidths[colId] || 120) + 'px',
+                                  minWidth: (columnWidths[colId] || 120) + 'px',
+                                  maxWidth: (columnWidths[colId] || 120) + 'px',
+                                  background: 'white',
+                                  overflow: 'visible',
+                                  cursor: viewType === 'received' ? 'pointer' : 'default',
+                                  position: 'relative',
+                                  zIndex: editingStatusTaskId === task._id ? 50 : 'auto',
+                                }}
+                                onClick={e => {
+                                  if (viewType === 'received') {
+                                    e.stopPropagation();
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setDropdownPosition({
+                                      top: rect.bottom + window.scrollY,
+                                      left: rect.left + window.scrollX,
+                                    });
+                                    setEditingStatusTaskId(task._id);
+                                  }
+                                }}
+                              >
+                                <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+                                  <span
+                                    className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}
+                                    style={{
+                                      display: 'inline-block',
+                                      whiteSpace: 'nowrap',
+                                      overflowX: 'auto',
+                                      textOverflow: 'ellipsis',
+                                      maxWidth: '100%',
+                                      verticalAlign: 'middle',
+                                      scrollbarWidth: 'thin',
+                                      msOverflowStyle: 'auto',
+                                    }}
+                                    title={task.status.replace(/_/g, ' ')}
+                                  >
+                                    {task.status.replace(/_/g, ' ')}
+                                  </span>
+                                  {/* Show dropdown as portal if open */}
+                                  {editingStatusTaskId === task._id && viewType === 'received'
+                                    ? ReactDOM.createPortal(
+                                        <div
+                                          ref={statusDropdownRef}
+                                          style={{
+                                            position: 'absolute',
+                                            top: dropdownPosition.top,
+                                            left: dropdownPosition.left,
+                                            minWidth: 160,
+                                            background: '#fff',
+                                            border: '1px solid #e5e7eb',
+                                            borderRadius: 8,
+                                            boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                                            padding: 8,
+                                            zIndex: 9999,
+                                          }}
+                                        >
+                                          {(
+                                            viewType === 'received' && taskType === 'execution'
+                                              ? STATUS_OPTIONS.filter(opt => opt.value !== 'reject')
+                                              : STATUS_OPTIONS
+                                          ).map(opt => (
+                                            <div
+                                              key={opt.value}
+                                              style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 8,
+                                                padding: '5px 12px',
+                                                borderRadius: 6,
+                                                cursor: 'pointer',
+                                                background: task.status === opt.value ? '#f3f4f6' : 'transparent',
+                                                marginBottom: 2,
+                                                transition: 'background 0.15s',
+                                                opacity: statusLoading ? 0.6 : 1,
+                                              }}
+                                              onClick={e => {
+                                                e.stopPropagation();
+                                                if (!statusLoading && task.status !== opt.value) handleStatusChangeLocal(task, opt.value);
+                                                setEditingStatusTaskId(null);
+                                              }}
+                                              onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                                              onMouseLeave={e => e.currentTarget.style.background = task.status === opt.value ? '#f3f4f6' : 'transparent'}
+                                            >
+                                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(opt.value)}`}>{opt.label}</span>
+                                              {task.status === opt.value && (
+                                                <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>,
+                                        document.body
+                                      )
+                                    : null}
+                                </div>
+                              </td>
+                            );
+                          
+                            case 'priority':
+                              // Only allow editing if not in guidance or issuedVerification tab
+                              const canEditPriority = viewType === 'received' && (taskType === 'execution' || taskType === 'receivedVerification');
+                              return (
+                                <td
+                                  key={colId}
+                                  className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                                  style={{
+                                    width: (columnWidths[colId] || 120) + 'px',
+                                    minWidth: (columnWidths[colId] || 120) + 'px',
+                                    maxWidth: (columnWidths[colId] || 120) + 'px',
+                                    background: 'white',
+                                    overflow: 'visible',
+                                    cursor: canEditPriority ? 'pointer' : 'default',
+                                    position: 'relative',
+                                    zIndex: editingPriorityTaskId === task._id ? 50 : 'auto',
+                                  }}
+                                  onClick={e => {
+                                    if (canEditPriority) {
+                                      e.stopPropagation();
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setDropdownPosition({
+                                        top: rect.bottom + window.scrollY,
+                                        left: rect.left + window.scrollX,
+                                      });
+                                      setEditingPriorityTaskId(task._id);
+                                    }
+                                  }}
+                                >
+                                  <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                                    <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getPriorityColor(task.priority)}`}>{PRIORITY_OPTIONS.find(opt => opt.value === task.priority)?.label || task.priority}</span>
+                                  </div>
+                                  {/* Show dropdown as portal if open and canEditPriority */}
+                                  {editingPriorityTaskId === task._id && canEditPriority && ReactDOM.createPortal(
+                                    <div
+                                      ref={priorityDropdownRef}
+                                      style={{
+                                        position: 'absolute',
+                                        top: dropdownPosition.top,
+                                        left: dropdownPosition.left,
+                                        minWidth: 160,
+                                        background: '#fff',
+                                        border: '1px solid #e5e7eb',
+                                        borderRadius: 8,
+                                        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                                        padding: 8,
+                                        zIndex: 9999,
+                                      }}
+                                    >
+                                      {PRIORITY_OPTIONS.map(opt => (
+                                        <div
+                                          key={opt.value}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 8,
+                                            padding: '5px 12px',
+                                            borderRadius: 6,
+                                            cursor: 'pointer',
+                                            background: task.priority === opt.value ? '#f3f4f6' : 'transparent',
+                                            marginBottom: 2,
+                                            transition: 'background 0.15s',
+                                            opacity: priorityLoading ? 0.6 : 1,
+                                          }}
+                                          onClick={e => {
+                                            e.stopPropagation();
+                                            if (!priorityLoading && task.priority !== opt.value) handlePriorityChange(task, opt.value);
+                                            setEditingPriorityTaskId(null);
+                                          }}
+                                          onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                                          onMouseLeave={e => e.currentTarget.style.background = task.priority === opt.value ? '#f3f4f6' : 'transparent'}
+                                        >
+                                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(opt.value)}`}>{opt.label}</span>
+                                          {task.priority === opt.value && (
+                                            <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>,
+                                    document.body
+                                  )}
+                                </td>
+                              );
+                            
+                            case 'selfVerification':
+                              const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
+                              return (
+                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                                  style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
+                                <div className="flex justify-center items-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!task.selfVerification}
+                                    disabled={!canEditSelfVerification}
+                                    onChange={canEditSelfVerification ? async (e) => {
+                                      const checked = e.target.checked;
+                                      try {
+                                        const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}`, {
+                                          method: 'PUT',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                            Authorization: `Bearer ${user.token}`,
+                                          },
+                                          body: JSON.stringify({ selfVerification: checked }),
+                                        });
+                                        if (!response.ok) throw new Error('Failed to update self verification');
+                                        const updatedTask = await response.json();
+                                        if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
+                                        toast.success('Self Verification updated');
+                                      } catch (err) {
+                                        toast.error('Failed to update Self Verification');
+                                      }
+                                    } : undefined}
+                                  />
+                                </div>
+                              </td>
+                            );
+                          
+                            case 'inwardEntryDate':
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDateTime(task.inwardEntryDate)}</span></div></td>;
+                          
+                            case 'dueDate':
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDate(task.dueDate)}</span></div></td>;
+                          
+                            case 'targetDate':
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDate(task.targetDate)}</span></div></td>;
+                          
+                            case 'assignedBy':
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedBy.photo?.url || defaultProfile} alt={task.assignedBy.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedBy.firstName} {task.assignedBy.lastName}</span></div></div></td>;
+                          
+                            case 'assignedTo':
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedTo.photo?.url || defaultProfile} alt={task.assignedTo.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedTo.firstName} {task.assignedTo.lastName}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.assignedTo._id)}h</span></span></div></div></td>;
+                          
+                            case 'verificationAssignedTo':
+                            case 'secondVerificationAssignedTo':
+                            case 'thirdVerificationAssignedTo':
+                            case 'fourthVerificationAssignedTo':
+                            case 'fifthVerificationAssignedTo': {
+                              // Map column to index (0-based)
+                              const verifierFields = [
+                                'verificationAssignedTo',
+                                'secondVerificationAssignedTo',
+                                'thirdVerificationAssignedTo',
+                                'fourthVerificationAssignedTo',
+                                'fifthVerificationAssignedTo',
+                              ];
+                              const colIdx = verifierFields.indexOf(colId);
+                              const currVerifierField = verifierFields[colIdx];
+                              const prevVerifierField = verifierFields[colIdx - 1];
+
+                              // Show dropdown if:
+                              // 1. Current user is the assigned verifier for this column (nth)
+                              // 2. OR, current user is the previous verifier and this column is unassigned (N+1th)
+                              const userIsThisVerifier = task[currVerifierField]?._id === currentUser?._id;
+                              const userIsPrevVerifier = colIdx > 0 && task[prevVerifierField]?._id === currentUser?._id && !task[currVerifierField];
+                              const canEditThisVerifier =
+                                viewType === 'received' &&
+                                (userIsThisVerifier || userIsPrevVerifier) &&
+                                taskType !== 'completed' &&
+                                taskType !== 'guidance' &&
+                                taskType !== 'issuedVerification';
+
+                              // Exclude assignedTo and all already assigned verifiers
+                              const assignedVerifierIds = getAssignedVerifierIds(task);
+                              const dropdownUsers = users.filter(
+                                (u) =>
+                                  u._id !== task.assignedTo?._id &&
+                                  !assignedVerifierIds.includes(u._id) &&
+                                  u._id !== currentUser?._id &&
+                                  (`${u.firstName} ${u.lastName}`.toLowerCase().includes(verifierSearch.toLowerCase()))
+                              );
+
+                              if (canEditThisVerifier) {
+                                return (
+                                  <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                                    style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden', cursor: 'pointer', position: 'relative', zIndex: editingVerifierTaskId === `${task._id}-${colId}` ? 50 : 'auto'}}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setVerifierDropdownPosition({
+                                        top: rect.bottom + window.scrollY,
+                                        left: rect.left + window.scrollX,
+                                      });
+                                      setEditingVerifierTaskId(`${task._id}-${colId}`);
+                                      setVerifierSearch('');
+                                    }}
+                                  >
+                                    <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                                      <div className="flex items-center ">
+                                        {task[colId] ? (
+                                          <>
+                                            <img
+                                              src={task[colId].photo?.url || defaultProfile}
+                                              alt={`${task[colId].firstName} ${task[colId].lastName}`}
+                                              className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
+                                              onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
+                                            />
+                                            <span className="ml-2">
+                                              {task[colId].firstName} {task[colId].lastName}
+                                              <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                                                {getUserTaskHours(task._id, task[colId]._id)}h
+                                              </span>
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
+                                        )}
+                                        <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" className="ml-1 text-gray-400"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                                      </div>
+                                      {/* Dropdown for selecting verifier */}
+                                      {editingVerifierTaskId === `${task._id}-${colId}` && ReactDOM.createPortal(
+                                        <div
+                                          ref={verifierDropdownRef}
+                                          style={{
+                                            position: 'absolute',
+                                            top: verifierDropdownPosition.top,
+                                            left: verifierDropdownPosition.left,
+                                            minWidth: 200,
+                                            background: '#fff',
+                                            border: '1px solid #e5e7eb',
+                                            borderRadius: 8,
+                                            boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                                            padding: 8,
+                                            zIndex: 9999,
+                                            maxHeight: 300,
+                                            overflowY: 'auto',
+                                          }}
+                                        >
+                                          {dropdownUsers.length === 0 ? (
+                                            <div className="text-gray-400 text-sm px-2 py-2">No users found</div>
+                                          ) : (
+                                            dropdownUsers.map(u => (
+                                              <div
+                                                key={u._id}
+                                                style={{
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  gap: 8,
+                                                  padding: '6px 8px',
+                                                  borderRadius: 6,
+                                                  cursor: 'pointer',
+                                                  background: task[colId] && task[colId]._id === u._id ? '#f3f4f6' : 'transparent',
+                                                  marginBottom: 2,
+                                                  transition: 'background 0.15s',
+                                                  opacity: verifierLoading ? 0.6 : 1,
+                                                }}
+                                                onClick={async e => {
+                                                  e.stopPropagation();
+                                                  if (verifierLoading || (task[colId] && task[colId]._id === u._id)) return;
+                                                  setVerifierLoading(true);
+                                                  try {
+                                                    const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verifier`, {
+                                                      method: 'PATCH',
+                                                      headers: {
+                                                        'Content-Type': 'application/json',
+                                                        Authorization: `Bearer ${currentUser.token}`,
+                                                      },
+                                                      body: JSON.stringify({ [colId]: u._id }),
+                                                    });
+                                                    if (!response.ok) throw new Error('Failed to update verifier');
+                                                    const updatedTask = await response.json();
+                                                    if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
+                                                    toast.success(`${col.label} updated`);
+                                                    if (refetchTasks) refetchTasks();
+                                                  } catch (err) {
+                                                    toast.error(`Failed to update ${col.label.toLowerCase()}`);
+                                                  }
+                                                  setVerifierLoading(false);
+                                                  setEditingVerifierTaskId(null);
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                                                onMouseLeave={e => e.currentTarget.style.background = (task[colId] && task[colId]._id === u._id) ? '#f3f4f6' : 'transparent'}
+                                              >
+                                                <img src={u.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
+                                                <span style={{fontSize: '14px'}}>{u.firstName} {u.lastName}</span>
+                                                {task[colId] && task[colId]._id === u._id && (
+                                                  <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                                )}
+                                              </div>
+                                            ))
+                                          )}
+                                        </div>,
+                                        document.body
+                                      )}
+                                    </div>
+                                  </td>
+                                );
+                              }
+                              // Otherwise, just show the value
+                              return (
+                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                                  style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
+                                  <div className="overflow-x-auto whitespace-nowrap flex items-center" style={{width: '100%', maxWidth: '100%'}}>
+                                    {task[colId] ? (
+                                      <>
+                                        <img src={task[colId].photo?.url || defaultProfile} alt={`${task[colId].firstName} ${task[colId].lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
+                                        <span className="ml-2">
+                                          {task[colId].firstName} {task[colId].lastName}
+                                          <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                                            {getUserTaskHours(task._id, task[colId]._id)}h
+                                          </span>
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
+                                    )}
+                                  </div>
+                                </td>
+                              );
+                            }
+                            case 'guides':
+                              const guideChipsClass = viewType === 'received' ? 'pr-6' : 'pr-0';
+                              const guideChipsMaxWidth = viewType === 'received' ? 'calc(100% - 28px)' : '100%';
+                              return (
+                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                                  style={{width: (columnWidths[colId] || 200) + 'px', minWidth: (columnWidths[colId] || 200) + 'px', maxWidth: (columnWidths[colId] || 200) + 'px', background: 'white', overflow: 'hidden'}}>
+                                <div className="flex items-center relative" style={{width: '100%', maxWidth: '100%'}}>
+                                  {/* Scrollable chips */}
+                                  <div className={`flex items-center gap-1 overflow-x-auto whitespace-nowrap ${guideChipsClass}`} style={{maxWidth: guideChipsMaxWidth}}>
+                                    {Array.isArray(task.guides) && task.guides.length > 0 ? (
+                                      task.guides.map(u => (
+                                        <span key={u._id} className="flex items-center bg-blue-100 text-blue-800 rounded-full px-2 py-0.5 text-xs font-medium mr-1">
+                                          <img src={u.photo?.url || defaultProfile} alt={u.firstName} className="w-5 h-5 rounded-full object-cover mr-1" style={{minWidth: 20, minHeight: 20}} onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} />
+                                          {u.firstName} {u.lastName}
+                                          {viewType === 'received' && (
+                                            <button
+                                              className="ml-1 text-red-500 hover:text-red-700 focus:outline-none"
+                                              style={{fontSize: '12px'}}
+                                              onClick={async (e) => {
+                                                e.stopPropagation();
+                                                const newGuides = task.guides.filter(g => g._id !== u._id).map(g => g._id);
+                                                try {
+                                                  const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/guides`, {
+                                                    method: 'PUT',
+                                                    headers: {
+                                                      'Content-Type': 'application/json',
+                                                      Authorization: `Bearer ${currentUser.token}`,
+                                                    },
+                                                    body: JSON.stringify({ guides: newGuides }),
+                                                  });
+                                                  if (!response.ok) throw new Error('Failed to update guides');
+                                                  const updatedTask = await response.json();
+                                                  if (onTaskUpdate) onTaskUpdate(task._id, (prevTask) => ({ ...prevTask, guides: updatedTask.guides }));
+                                                  toast.success('Guide removed');
+                                                } catch (err) {
+                                                  toast.error('Failed to update guides');
+                                                }
+                                              }}
+                                              title="Remove guide"
+                                            >×</button>
+                                          )}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="italic text-gray-400">No guide</span>
+                                    )}
+                                  </div>
+                                  {/* Fixed dropdown icon at end, only in received viewType */}
+                                  {viewType === 'received' && (
+                                    <button
+                                      className="absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-white rounded-full border border-gray-200 hover:bg-blue-100 hover:border-blue-400 transition-colors cursor-pointer z-10"
+                                      style={{boxShadow: '0 1px 4px rgba(0,0,0,0.04)'}}
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        setDropdownPosition({
+                                          top: rect.bottom + window.scrollY,
+                                          left: rect.left + window.scrollX,
+                                        });
+                                        setOpenGuideDropdownTaskId(task._id);
+                                      }}
+                                      title="Add/Remove Guides"
+                                    >
+                                      <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" className="text-gray-500 group-hover:text-blue-600 transition-colors"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                                    </button>
+                                  )}
+                                  {/* Dropdown for selecting guides */}
+                                  {viewType === 'received' && openGuideDropdownTaskId === task._id && ReactDOM.createPortal(
+                                    <div
+                                      ref={guideDropdownRef}
+                                      style={{
+                                        position: 'absolute',
+                                        top: dropdownPosition.top,
+                                        left: dropdownPosition.left,
+                                        minWidth: 220,
+                                        background: '#fff',
+                                        border: '1px solid #e5e7eb',
+                                        borderRadius: 8,
+                                        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                                        padding: 8,
+                                        zIndex: 9999,
+                                        maxHeight: 300,
+                                        overflowY: 'auto',
+                                      }}
+                                    >
+                                      {users.filter(u => !task.guides?.some(g => g._id === u._id)).length === 0 ? (
+                                        <div className="text-gray-400 text-sm px-2 py-2">No users available</div>
+                                      ) : (
+                                        users.filter(u => !task.guides?.some(g => g._id === u._id)).map(u => (
+                                          <div
+                                            key={u._id}
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: 8,
+                                              padding: '6px 8px',
+                                              borderRadius: 6,
+                                              cursor: 'pointer',
+                                              background: 'transparent',
+                                              marginBottom: 2,
+                                              transition: 'background 0.15s',
+                                            }}
+                                            onClick={async e => {
+                                              e.stopPropagation();
+                                              const newGuides = [...(task.guides?.map(g => g._id) || []), u._id];
+                                              try {
+                                                const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/guides`, {
+                                                  method: 'PUT',
+                                                  headers: {
+                                                    'Content-Type': 'application/json',
+                                                    Authorization: `Bearer ${currentUser.token}`,
+                                                  },
+                                                  body: JSON.stringify({ guides: newGuides }),
+                                                });
+                                                if (!response.ok) throw new Error('Failed to update guides');
+                                                const updatedTask = await response.json();
+                                                if (onTaskUpdate) onTaskUpdate(task._id, (prevTask) => ({ ...prevTask, guides: updatedTask.guides }));
+                                                toast.success('Guide added');
+                                              } catch (err) {
+                                                toast.error('Failed to update guides');
+                                              }
+                                            }}
+                                          >
+                                            <img src={u.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
+                                            <span style={{fontSize: '14px'}}>{u.firstName} {u.lastName}</span>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>,
+                                    document.body
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          
+                            case 'files':
+                              return (
+                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
+                                  <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                                    <div className="flex items-center">
+                                      {task.files && task.files.length > 0 ? (
+                                        <div className="flex items-center space-x-2">
+                                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.files.length}</span>
+                                          <button onClick={() => handleTaskClick(task)} className="text-blue-600 hover:text-blue-800 text-sm">View</button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center">
+                                          <span className="text-gray-400 text-sm italic">No files</span>
+                                          <button onClick={() => handleTaskClick(task)} className="ml-2 text-blue-600 hover:text-blue-800 text-sm">Upload</button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              );
+                            
+                            case 'comments':
+                              return (
+                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
+                                  <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.comments ? task.comments.length : 0} </span>
+                                      <button onClick={() => { setSelectedTask(task); setShowComments(true); }} className="text-blue-600 hover:text-blue-800 text-sm">View</button>
+                                    </div>
+                                  </div>
+                                </td>
+                              );
+                            
+                            default:
+                              let cellValue = task[colId];
+                              if ([
+                                'thirdVerificationAssignedTo',
+                                'fourthVerificationAssignedTo',
+                                'fifthVerificationAssignedTo'
+                              ].includes(colId)) {
+                                cellValue = cellValue ? (cellValue.firstName ? `${cellValue.firstName} ${cellValue.lastName}` : cellValue) : 'NA';
+                              }
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{cellValue}</span></div></td>;
+                          }
+                        })}
+                        {(viewType === 'assigned' || viewType === 'admin') && (
+                          <td key="actions" className="px-2 py-1 text-sm font-normal align-middle bg-white">
+                            {(!shouldDisableActions || !shouldDisableActions(task)) && (
+                              <div className="flex items-center gap-0">
+                                <button
+                                  onClick={() => onEditTask && onEditTask(task)}
+                                  className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
+                                  title="Edit Task"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteTask(task)}
+                                  className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
+                                  title="Delete Task"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))
+              ) : (
+                tasks.map((task) => (
+                  <tr key={task._id} className="border-b border-gray-200 hover:bg-gray-50 transition-none">
+                    {getOrderedVisibleColumns().map((colId, idx, arr) => {
+                      const col = ALL_COLUMNS.find(c => c.id === colId);
+                      if (!col) return null;
+                      const isLast = idx === arr.length - 1;
+                      
+                      switch (colId) {
+                        case 'title':
+                          return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{verticalAlign: 'middle', width: (columnWidths[colId] || 256) + 'px', minWidth: (columnWidths[colId] || 256) + 'px', maxWidth: (columnWidths[colId] || 256) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.title}</span></div></td>;
+                      
+                        case 'description':
+                          return (
+                            <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white border-0 ${!isLast ? 'border-r border-gray-200' : ''}`} style={{verticalAlign: 'middle', width: (columnWidths[colId] || 180) + 'px', minWidth: (columnWidths[colId] || 180) + 'px', maxWidth: (columnWidths[colId] || 180) + 'px', background: 'white', overflow: 'hidden'}}>
+                              {editingDescriptionTaskId === task._id ? (
+                                <input
+                                  type="text"
+                                  value={editingDescriptionValue}
+                                  autoFocus
+                                  onChange={e => setEditingDescriptionValue(e.target.value)}
+                                  onBlur={() => handleDescriptionEditSave(task)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                      handleDescriptionEditSave(task);
+                                    }
+                                  }}
+                                  className="no-border-input w-full bg-white px-1 py-1 rounded"
+                                  style={{fontSize: 'inherit', height: '28px'}}
+                                />
+                              ) : (
+                                <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                                  <span
+                                    className="cursor-pointer block"
+                                    onClick={() => {
+                                      setEditingDescriptionTaskId(task._id);
+                                      setEditingDescriptionValue(task.description || '');
+                                    }}
+                                    title="Click to edit"
+                                    style={{ minHeight: '14px', color: !task.description ? '#aaa' : undefined, fontSize: 'inherit' }}
+                                  >
+                                    {task.description && task.description.trim() !== '' ? task.description : <span style={{fontStyle: 'italic', fontSize: 'inherit'}}></span>}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+                          );
+                      
+                      case 'clientName':
+                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span className="text-sm font-medium text-gray-900">{task.clientName}</span></div></td>;
+                      
+                      case 'clientGroup':
+                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span className="text-sm text-gray-500">{task.clientGroup}</span></div></td>;
+                      
+                      case 'workType':
+                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex gap-1">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></div></td>;
+                      
+                      case 'billed':
+                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? 'Yes' : 'No'}</span></div></td>;
+                      
+                      case 'status':
+                        // Show colored status but disable interaction in 'Task Issued For Verification' and 'Task For Guidance' tabs in Received Tasks
+                        if (
+                          viewType === 'received' &&
+                          (taskType === 'issuedVerification' || taskType === 'guidance' || taskType === 'completed')
+                        ) {
+                          return (
+                            <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                              style={{ width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden' }}>
+                              <div className="overflow-x-auto whitespace-nowrap" style={{ width: '100%', maxWidth: '100%' }}>
+                                <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getStatusColor(task.status)}`}>{STATUS_OPTIONS.find(opt => opt.value === task.status)?.label || task.status}</span>
+                              </div>
+                            </td>
+                          );
+                        }
+                        return (
+                          <td
+                            key={colId}
+                            className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                            style={{
+                              width: (columnWidths[colId] || 120) + 'px',
+                              minWidth: (columnWidths[colId] || 120) + 'px',
+                              maxWidth: (columnWidths[colId] || 120) + 'px',
+                              background: 'white',
+                              overflow: 'visible',
+                              cursor: viewType === 'received' ? 'pointer' : 'default',
+                              position: 'relative',
+                              zIndex: editingStatusTaskId === task._id ? 50 : 'auto',
+                            }}
+                            onClick={e => {
+                              if (viewType === 'received') {
+                                e.stopPropagation();
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setDropdownPosition({
+                                  top: rect.bottom + window.scrollY,
+                                  left: rect.left + window.scrollX,
+                                });
+                                setEditingStatusTaskId(task._id);
+                              }
+                            }}
+                          >
+                            <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}
+                                style={{
+                                  display: 'inline-block',
+                                  whiteSpace: 'nowrap',
+                                  overflowX: 'auto',
+                                  textOverflow: 'ellipsis',
+                                  maxWidth: '100%',
+                                  verticalAlign: 'middle',
+                                  scrollbarWidth: 'thin',
+                                  msOverflowStyle: 'auto',
+                                }}
+                                title={task.status.replace(/_/g, ' ')}
+                              >
+                                {task.status.replace(/_/g, ' ')}
+                              </span>
+                              {/* Show dropdown as portal if open */}
+                              {editingStatusTaskId === task._id && viewType === 'received'
+                                ? ReactDOM.createPortal(
+                                    <div
+                                      ref={statusDropdownRef}
+                                      style={{
+                                        position: 'absolute',
+                                        top: dropdownPosition.top,
+                                        left: dropdownPosition.left,
+                                        minWidth: 160,
+                                        background: '#fff',
+                                        border: '1px solid #e5e7eb',
+                                        borderRadius: 8,
+                                        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                                        padding: 8,
+                                        zIndex: 9999,
+                                      }}
+                                    >
+                                      {(
+                                        viewType === 'received' && taskType === 'execution'
+                                          ? STATUS_OPTIONS.filter(opt => opt.value !== 'reject')
+                                          : STATUS_OPTIONS
+                                      ).map(opt => (
+                                        <div
+                                          key={opt.value}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 8,
+                                            padding: '5px 12px',
+                                            borderRadius: 6,
+                                            cursor: 'pointer',
+                                            background: task.status === opt.value ? '#f3f4f6' : 'transparent',
+                                            marginBottom: 2,
+                                            transition: 'background 0.15s',
+                                            opacity: statusLoading ? 0.6 : 1,
+                                          }}
+                                          onClick={e => {
+                                            e.stopPropagation();
+                                            if (!statusLoading && task.status !== opt.value) handleStatusChangeLocal(task, opt.value);
+                                            setEditingStatusTaskId(null);
+                                          }}
+                                          onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                                          onMouseLeave={e => e.currentTarget.style.background = task.status === opt.value ? '#f3f4f6' : 'transparent'}
+                                        >
+                                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(opt.value)}`}>{opt.label}</span>
+                                          {task.status === opt.value && (
+                                            <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>,
+                                    document.body
+                                  )
+                                : null}
                             </div>
                           </td>
                         );
-                      }
-                      return (
-                        <td
-                          key={colId}
-                          className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                          style={{
-                            width: (columnWidths[colId] || 120) + 'px',
-                            minWidth: (columnWidths[colId] || 120) + 'px',
-                            maxWidth: (columnWidths[colId] || 120) + 'px',
-                            background: 'white',
-                            overflow: 'visible',
-                            cursor: viewType === 'received' ? 'pointer' : 'default',
-                            position: 'relative',
-                            zIndex: editingStatusTaskId === task._id ? 50 : 'auto',
-                          }}
-                          onClick={e => {
-                            if (viewType === 'received') {
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setDropdownPosition({
-                                top: rect.bottom + window.scrollY,
-                                left: rect.left + window.scrollX,
-                              });
-                              setEditingStatusTaskId(task._id);
-                            }
-                          }}
-                        >
-                          <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}
-                              style={{
-                                display: 'inline-block',
-                                whiteSpace: 'nowrap',
-                                overflowX: 'auto',
-                                textOverflow: 'ellipsis',
-                                maxWidth: '100%',
-                                verticalAlign: 'middle',
-                                scrollbarWidth: 'thin',
-                                msOverflowStyle: 'auto',
-                              }}
-                              title={task.status.replace(/_/g, ' ')}
-                            >
-                              {task.status.replace(/_/g, ' ')}
-                            </span>
-                            {/* Show dropdown as portal if open */}
-                            {editingStatusTaskId === task._id && viewType === 'received'
-                              ? ReactDOM.createPortal(
+                      
+                      case 'priority':
+                        // Only allow editing if not in guidance or issuedVerification tab
+                        const canEditPriority = viewType === 'received' && (taskType === 'execution' || taskType === 'receivedVerification');
+                        return (
+                          <td
+                            key={colId}
+                            className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                            style={{
+                              width: (columnWidths[colId] || 120) + 'px',
+                              minWidth: (columnWidths[colId] || 120) + 'px',
+                              maxWidth: (columnWidths[colId] || 120) + 'px',
+                              background: 'white',
+                              overflow: 'visible',
+                              cursor: canEditPriority ? 'pointer' : 'default',
+                              position: 'relative',
+                              zIndex: editingPriorityTaskId === task._id ? 50 : 'auto',
+                            }}
+                            onClick={e => {
+                              if (canEditPriority) {
+                                e.stopPropagation();
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setDropdownPosition({
+                                  top: rect.bottom + window.scrollY,
+                                  left: rect.left + window.scrollX,
+                                });
+                                setEditingPriorityTaskId(task._id);
+                              }
+                            }}
+                          >
+                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                              <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getPriorityColor(task.priority)}`}>{PRIORITY_OPTIONS.find(opt => opt.value === task.priority)?.label || task.priority}</span>
+                            </div>
+                            {/* Show dropdown as portal if open and canEditPriority */}
+                            {editingPriorityTaskId === task._id && canEditPriority && ReactDOM.createPortal(
+                              <div
+                                ref={priorityDropdownRef}
+                                style={{
+                                  position: 'absolute',
+                                  top: dropdownPosition.top,
+                                  left: dropdownPosition.left,
+                                  minWidth: 160,
+                                  background: '#fff',
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: 8,
+                                  boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                                  padding: 8,
+                                  zIndex: 9999,
+                                }}
+                              >
+                                {PRIORITY_OPTIONS.map(opt => (
                                   <div
-                                    ref={statusDropdownRef}
+                                    key={opt.value}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      padding: '5px 12px',
+                                      borderRadius: 6,
+                                      cursor: 'pointer',
+                                      background: task.priority === opt.value ? '#f3f4f6' : 'transparent',
+                                      marginBottom: 2,
+                                      transition: 'background 0.15s',
+                                      opacity: priorityLoading ? 0.6 : 1,
+                                    }}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      if (!priorityLoading && task.priority !== opt.value) handlePriorityChange(task, opt.value);
+                                      setEditingPriorityTaskId(null);
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                                    onMouseLeave={e => e.currentTarget.style.background = task.priority === opt.value ? '#f3f4f6' : 'transparent'}
+                                  >
+                                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(opt.value)}`}>{opt.label}</span>
+                                    {task.priority === opt.value && (
+                                      <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>,
+                              document.body
+                            )}
+                          </td>
+                        );
+                      
+                      case 'selfVerification':
+                        const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
+                        return (
+                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                            style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
+                            <div className="flex justify-center items-center">
+                              <input
+                                type="checkbox"
+                                checked={!!task.selfVerification}
+                                disabled={!canEditSelfVerification}
+                                onChange={canEditSelfVerification ? async (e) => {
+                                  const checked = e.target.checked;
+                                  try {
+                                    const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}`, {
+                                      method: 'PUT',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        Authorization: `Bearer ${user.token}`,
+                                      },
+                                      body: JSON.stringify({ selfVerification: checked }),
+                                    });
+                                    if (!response.ok) throw new Error('Failed to update self verification');
+                                    const updatedTask = await response.json();
+                                    if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
+                                    toast.success('Self Verification updated');
+                                  } catch (err) {
+                                    toast.error('Failed to update Self Verification');
+                                  }
+                                } : undefined}
+                              />
+                            </div>
+                          </td>
+                        );
+                      
+                      case 'inwardEntryDate':
+                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDateTime(task.inwardEntryDate)}</span></div></td>;
+                      
+                      case 'dueDate':
+                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDate(task.dueDate)}</span></div></td>;
+                      
+                      case 'targetDate':
+                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDate(task.targetDate)}</span></div></td>;
+                      
+                      case 'assignedBy':
+                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedBy.photo?.url || defaultProfile} alt={task.assignedBy.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedBy.firstName} {task.assignedBy.lastName}</span></div></div></td>;
+                      
+                      case 'assignedTo':
+                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedTo.photo?.url || defaultProfile} alt={task.assignedTo.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedTo.firstName} {task.assignedTo.lastName}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.assignedTo._id)}h</span></span></div></div></td>;
+                      
+                      case 'verificationAssignedTo':
+                      case 'secondVerificationAssignedTo':
+                      case 'thirdVerificationAssignedTo':
+                      case 'fourthVerificationAssignedTo':
+                      case 'fifthVerificationAssignedTo': {
+                        // Map column to index (0-based)
+                        const verifierFields = [
+                          'verificationAssignedTo',
+                          'secondVerificationAssignedTo',
+                          'thirdVerificationAssignedTo',
+                          'fourthVerificationAssignedTo',
+                          'fifthVerificationAssignedTo',
+                        ];
+                        const colIdx = verifierFields.indexOf(colId);
+                        const currVerifierField = verifierFields[colIdx];
+                        const prevVerifierField = verifierFields[colIdx - 1];
+
+                        // Show dropdown if:
+                        // 1. Current user is the assigned verifier for this column (nth)
+                        // 2. OR, current user is the previous verifier and this column is unassigned (N+1th)
+                        const userIsThisVerifier = task[currVerifierField]?._id === currentUser?._id;
+                        const userIsPrevVerifier = colIdx > 0 && task[prevVerifierField]?._id === currentUser?._id && !task[currVerifierField];
+                        const canEditThisVerifier =
+                          viewType === 'received' &&
+                          (userIsThisVerifier || userIsPrevVerifier) &&
+                          taskType !== 'completed' &&
+                          taskType !== 'guidance' &&
+                          taskType !== 'issuedVerification';
+
+                        // Exclude assignedTo and all already assigned verifiers
+                        const assignedVerifierIds = getAssignedVerifierIds(task);
+                        const dropdownUsers = users.filter(
+                          (u) =>
+                            u._id !== task.assignedTo?._id &&
+                            !assignedVerifierIds.includes(u._id) &&
+                            u._id !== currentUser?._id &&
+                            (`${u.firstName} ${u.lastName}`.toLowerCase().includes(verifierSearch.toLowerCase()))
+                        );
+
+                        if (canEditThisVerifier) {
+                          return (
+                            <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                              style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden', cursor: 'pointer', position: 'relative', zIndex: editingVerifierTaskId === `${task._id}-${colId}` ? 50 : 'auto'}}
+                              onClick={e => {
+                                e.stopPropagation();
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setVerifierDropdownPosition({
+                                  top: rect.bottom + window.scrollY,
+                                  left: rect.left + window.scrollX,
+                                });
+                                setEditingVerifierTaskId(`${task._id}-${colId}`);
+                                setVerifierSearch('');
+                              }}
+                            >
+                              <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                                <div className="flex items-center ">
+                                  {task[colId] ? (
+                                    <>
+                                      <img
+                                        src={task[colId].photo?.url || defaultProfile}
+                                        alt={`${task[colId].firstName} ${task[colId].lastName}`}
+                                        className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
+                                        onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
+                                      />
+                                      <span className="ml-2">
+                                        {task[colId].firstName} {task[colId].lastName}
+                                        <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                                          {getUserTaskHours(task._id, task[colId]._id)}h
+                                        </span>
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
+                                  )}
+                                  <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" className="ml-1 text-gray-400"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                                </div>
+                                {/* Dropdown for selecting verifier */}
+                                {editingVerifierTaskId === `${task._id}-${colId}` && ReactDOM.createPortal(
+                                  <div
+                                    ref={verifierDropdownRef}
                                     style={{
                                       position: 'absolute',
-                                      top: dropdownPosition.top,
-                                      left: dropdownPosition.left,
-                                      minWidth: 160,
+                                      top: verifierDropdownPosition.top,
+                                      left: verifierDropdownPosition.left,
+                                      minWidth: 200,
                                       background: '#fff',
                                       border: '1px solid #e5e7eb',
                                       borderRadius: 8,
                                       boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
                                       padding: 8,
                                       zIndex: 9999,
+                                      maxHeight: 300,
+                                      overflowY: 'auto',
                                     }}
                                   >
-                                    {(
-                                      viewType === 'received' && taskType === 'execution'
-                                        ? STATUS_OPTIONS.filter(opt => opt.value !== 'reject')
-                                        : STATUS_OPTIONS
-                                    ).map(opt => (
-                                      <div
-                                        key={opt.value}
-                                        style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 8,
-                                          padding: '5px 12px',
-                                          borderRadius: 6,
-                                          cursor: 'pointer',
-                                          background: task.status === opt.value ? '#f3f4f6' : 'transparent',
-                                          marginBottom: 2,
-                                          transition: 'background 0.15s',
-                                          opacity: statusLoading ? 0.6 : 1,
-                                        }}
-                                        onClick={e => {
-                                          e.stopPropagation();
-                                          if (!statusLoading && task.status !== opt.value) handleStatusChangeLocal(task, opt.value);
-                                          setEditingStatusTaskId(null);
-                                        }}
-                                        onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                        onMouseLeave={e => e.currentTarget.style.background = task.status === opt.value ? '#f3f4f6' : 'transparent'}
-                                      >
-                                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(opt.value)}`}>{opt.label}</span>
-                                        {task.status === opt.value && (
-                                          <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                          </svg>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>,
-                                  document.body
-                                )
-                              : null}
-                          </div>
-                        </td>
-                      );
-                    
-                    case 'priority':
-                      // Only allow editing if not in guidance or issuedVerification tab
-                      const canEditPriority = viewType === 'received' && taskType !== 'guidance' && taskType !== 'issuedVerification';
-                      return (
-                        <td
-                          key={colId}
-                          className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                          style={{
-                            width: (columnWidths[colId] || 120) + 'px',
-                            minWidth: (columnWidths[colId] || 120) + 'px',
-                            maxWidth: (columnWidths[colId] || 120) + 'px',
-                            background: 'white',
-                            overflow: 'visible',
-                            cursor: canEditPriority ? 'pointer' : 'default',
-                            position: 'relative',
-                            zIndex: editingPriorityTaskId === task._id ? 50 : 'auto',
-                          }}
-                          onClick={e => {
-                            if (canEditPriority) {
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setDropdownPosition({
-                                top: rect.bottom + window.scrollY,
-                                left: rect.left + window.scrollX,
-                              });
-                              setEditingPriorityTaskId(task._id);
-                            }
-                          }}
-                        >
-                          <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                            <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getPriorityColor(task.priority)}`}>{PRIORITY_OPTIONS.find(opt => opt.value === task.priority)?.label || task.priority}</span>
-                          </div>
-                          {/* Show dropdown as portal if open and canEditPriority */}
-                          {editingPriorityTaskId === task._id && canEditPriority && ReactDOM.createPortal(
-                            <div
-                              ref={priorityDropdownRef}
-                              style={{
-                                position: 'absolute',
-                                top: dropdownPosition.top,
-                                left: dropdownPosition.left,
-                                minWidth: 160,
-                                background: '#fff',
-                                border: '1px solid #e5e7eb',
-                                borderRadius: 8,
-                                boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                padding: 8,
-                                zIndex: 9999,
-                              }}
-                            >
-                              {PRIORITY_OPTIONS.map(opt => (
-                                <div
-                                  key={opt.value}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 8,
-                                    padding: '5px 12px',
-                                    borderRadius: 6,
-                                    cursor: 'pointer',
-                                    background: task.priority === opt.value ? '#f3f4f6' : 'transparent',
-                                    marginBottom: 2,
-                                    transition: 'background 0.15s',
-                                    opacity: priorityLoading ? 0.6 : 1,
-                                  }}
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    if (!priorityLoading && task.priority !== opt.value) handlePriorityChange(task, opt.value);
-                                    setEditingPriorityTaskId(null);
-                                  }}
-                                  onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                  onMouseLeave={e => e.currentTarget.style.background = task.priority === opt.value ? '#f3f4f6' : 'transparent'}
-                                >
-                                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(opt.value)}`}>{opt.label}</span>
-                                  {task.priority === opt.value && (
-                                    <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                  )}
-                                </div>
-                              ))}
-                            </div>,
-                            document.body
-                          )}
-                        </td>
-                      );
-                    
-                    case 'selfVerification':
-                      const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
-                      return (
-                        <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                          style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
-                          <div className="flex justify-center items-center">
-                            <input
-                              type="checkbox"
-                              checked={!!task.selfVerification}
-                              disabled={!canEditSelfVerification}
-                              onChange={canEditSelfVerification ? async (e) => {
-                                const checked = e.target.checked;
-                                try {
-                                  const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}`, {
-                                    method: 'PUT',
-                                    headers: {
-                                      'Content-Type': 'application/json',
-                                      Authorization: `Bearer ${user.token}`,
-                                    },
-                                    body: JSON.stringify({ selfVerification: checked }),
-                                  });
-                                  if (!response.ok) throw new Error('Failed to update self verification');
-                                  const updatedTask = await response.json();
-                                  if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
-                                  toast.success('Self Verification updated');
-                                } catch (err) {
-                                  toast.error('Failed to update Self Verification');
-                                }
-                              } : undefined}
-                            />
-                          </div>
-                        </td>
-                      );
-                    
-                    case 'inwardEntryDate':
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDateTime(task.inwardEntryDate)}</span></div></td>;
-                    
-                    case 'dueDate':
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDate(task.dueDate)}</span></div></td>;
-                    
-                    case 'targetDate':
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDate(task.targetDate)}</span></div></td>;
-                    
-                    case 'assignedBy':
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedBy.photo?.url || defaultProfile} alt={task.assignedBy.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedBy.firstName} {task.assignedBy.lastName}</span></div></div></td>;
-                    
-                    case 'assignedTo':
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedTo.photo?.url || defaultProfile} alt={task.assignedTo.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedTo.firstName} {task.assignedTo.lastName}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.assignedTo._id)}h</span></span></div></div></td>;
-                    
-                    case 'verificationAssignedTo':
-                      // Only allow editing if selfVerification is true, viewType is received, and user is not already the first verifier, and not in completed, issuedVerification, or guidance tab
-                      const isSelfVerified = !!task.selfVerification;
-                      const isCurrentUserFirstVerifier = currentUser?._id === task.verificationAssignedTo?._id;
-                      const isCurrentUserSecondVerifier = currentUser?._id === task.secondVerificationAssignedTo?._id;
-                      // Only hide first verifier dropdown if user is first verifier or second verifier
-                      const canEditVerifier = viewType === 'received' && isSelfVerified && !isCurrentUserFirstVerifier && !isCurrentUserSecondVerifier && taskType !== 'completed' && taskType !== 'guidance' && taskType !== 'issuedVerification';
-                      if (isCurrentUserFirstVerifier) {
-                        // Just show the value, no dropdown for first verifier
-                        return (
-                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                            style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
-                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                              <div className="flex items-center ">
-                                {task.verificationAssignedTo ? (
-                                  <>
-                                    <img
-                                      src={task.verificationAssignedTo.photo?.url || defaultProfile}
-                                      alt={`${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`}
-                                      className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
-                                      onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
-                                    />
-                                    <span className="ml-2">
-                                      {task.verificationAssignedTo.firstName} {task.verificationAssignedTo.lastName}
-                                      <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                                        {getUserTaskHours(task._id, task.verificationAssignedTo._id)}h
-                                      </span>
-                                    </span>
-                                  </>
-                                ) : (
-                                  <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                        );
-                      }
-                      if (isCurrentUserSecondVerifier) {
-                        // Just show the value, no dropdown for first verifier if user is second verifier
-                        return (
-                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                            style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
-                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                              <div className="flex items-center ">
-                                {task.verificationAssignedTo ? (
-                                  <>
-                                    <img
-                                      src={task.verificationAssignedTo.photo?.url || defaultProfile}
-                                      alt={`${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`}
-                                      className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
-                                      onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
-                                    />
-                                    <span className="ml-2">
-                                      {task.verificationAssignedTo.firstName} {task.verificationAssignedTo.lastName}
-                                      <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                                        {getUserTaskHours(task._id, task.verificationAssignedTo._id)}h
-                                      </span>
-                                    </span>
-                                  </>
-                                ) : (
-                                  <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                        );
-                      }
-                      // Only allow editing if selfVerification is true, viewType is received, and user is not already the verifier, and not in completed, issuedVerification, or guidance tab
-                      const canEditFirstVerifier = viewType === 'received' && isSelfVerified && taskType !== 'completed' && taskType !== 'guidance' && taskType !== 'issuedVerification';
-                      return (
-                        <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                          style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden', cursor: canEditFirstVerifier ? 'pointer' : 'default', position: 'relative', zIndex: editingVerifierTaskId === task._id ? 50 : 'auto'}}
-                          onClick={e => {
-                            if (canEditFirstVerifier) {
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setVerifierDropdownPosition({
-                                top: rect.bottom + window.scrollY,
-                                left: rect.left + window.scrollX,
-                              });
-                              setEditingVerifierTaskId(task._id);
-                              setVerifierSearch('');
-                            }
-                          }}
-                        >
-                          <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                            <div className="flex items-center ">
-                              {task.verificationAssignedTo ? (
-                                <>
-                                  <img
-                                    src={task.verificationAssignedTo.photo?.url || defaultProfile}
-                                    alt={`${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`}
-                                    className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
-                                    onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
-                                  />
-                                  <span className="ml-2">
-                                    {task.verificationAssignedTo.firstName} {task.verificationAssignedTo.lastName}
-                                    <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                                      {getUserTaskHours(task._id, task.verificationAssignedTo._id)}h
-                                    </span>
-                                  </span>
-                                </>
-                              ) : (
-                                <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
-                              )}
-                              {canEditFirstVerifier && (
-                                <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" className="ml-1 text-gray-400"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-                              )}
-                            </div>
-                            {/* Dropdown for selecting verifier */}
-                            {editingVerifierTaskId === task._id && canEditFirstVerifier && ReactDOM.createPortal(
-                              <div
-                                ref={verifierDropdownRef}
-                                style={{
-                                  position: 'absolute',
-                                  top: verifierDropdownPosition.top,
-                                  left: verifierDropdownPosition.left,
-                                  minWidth: 200,
-                                  background: '#fff',
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: 8,
-                                  boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                  padding: 8,
-                                  zIndex: 9999,
-                                  maxHeight: 300,
-                                  overflowY: 'auto',
-                                }}
-                              >
-                                {(users.filter(u => u._id !== currentUser?._id && (`${u.firstName} ${u.lastName}`.toLowerCase().includes(verifierSearch.toLowerCase())))).length === 0 ? (
-                                  <div className="text-gray-400 text-sm px-2 py-2">No users found</div>
-                                ) : (
-                                  users.filter(u => u._id !== currentUser?._id && (`${u.firstName} ${u.lastName}`.toLowerCase().includes(verifierSearch.toLowerCase())))
-                                    .map(u => (
-                                    <div
-                                      key={u._id}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 8,
-                                        padding: '6px 8px',
-                                        borderRadius: 6,
-                                        cursor: 'pointer',
-                                        background: task.verificationAssignedTo && task.verificationAssignedTo._id === u._id ? '#f3f4f6' : 'transparent',
-                                        marginBottom: 2,
-                                        transition: 'background 0.15s',
-                                        opacity: verifierLoading ? 0.6 : 1,
-                                      }}
-                                      onClick={async e => {
-                                        e.stopPropagation();
-                                        if (verifierLoading || (task.verificationAssignedTo && task.verificationAssignedTo._id === u._id)) return;
-                                        setVerifierLoading(true);
-                                        try {
-                                          const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verifier`, {
-                                            method: 'PATCH',
-                                            headers: {
-                                              'Content-Type': 'application/json',
-                                              Authorization: `Bearer ${currentUser.token}`,
-                                            },
-                                            body: JSON.stringify({ verificationAssignedTo: u._id }),
-                                          });
-                                          if (!response.ok) throw new Error('Failed to update verifier');
-                                          const updatedTask = await response.json();
-                                          if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
-                                          toast.success('First verifier updated');
-                                          if (refetchTasks) refetchTasks();
-                                        } catch (err) {
-                                          toast.error('Failed to update first verifier');
-                                        }
-                                        setVerifierLoading(false);
-                                        setEditingVerifierTaskId(null);
-                                      }}
-                                      onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                      onMouseLeave={e => e.currentTarget.style.background = (task.verificationAssignedTo && task.verificationAssignedTo._id === u._id) ? '#f3f4f6' : 'transparent'}
-                                    >
-                                      <img src={u.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
-                                      <span style={{fontSize: '14px'}}>{u.firstName} {u.lastName}</span>
-                                      {task.verificationAssignedTo && task.verificationAssignedTo._id === u._id && (
-                                        <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                      )}
-                                    </div>
-                                  ))
-                                )}
-                              </div>,
-                              document.body
-                            )}
-                          </div>
-                        </td>
-                      );
-                    
-                    case 'secondVerificationAssignedTo':
-                      // Only show dropdown if selfVerification is true, viewType is received, user is not the second verifier, first verifier is chosen, and not in completed, issuedVerification, or guidance tab
-                      const isCurrentUserSecondVerifier2 = currentUser?._id === task.secondVerificationAssignedTo?._id;
-                      const canEditSecondVerifier = viewType === 'received' && !!task.selfVerification && !isCurrentUserSecondVerifier2 && !!task.verificationAssignedTo?._id && taskType !== 'completed' && taskType !== 'issuedVerification' && taskType !== 'guidance';
-                      if (!canEditSecondVerifier) {
-                        // Just show the value, no dropdown or dropdown icon
-                        return (
-                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
-                            <div className="overflow-x-auto whitespace-nowrap flex items-center" style={{width: '100%', maxWidth: '100%'}}>
-                              {task.secondVerificationAssignedTo ? (
-                                <>
-                                  <img src={task.secondVerificationAssignedTo.photo?.url || defaultProfile} alt={`${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
-                                  <span className="ml-2">
-                                    {task.secondVerificationAssignedTo.firstName} {task.secondVerificationAssignedTo.lastName}
-                                    <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                                      {getUserTaskHours(task._id, task.secondVerificationAssignedTo._id)}h
-                                    </span>
-                                  </span>
-                                </>
-                              ) : (
-                                <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
-                              )}
-                            </div>
-                          </td>
-                        );
-                      }
-                      // Only render dropdown icon, click handler, and dropdown if canEditSecondVerifier is true
-                      return (
-                        <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
-                          <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                            <div className="flex items-center space-x-0" onClick={e => {
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setVerifierDropdownPosition({
-                                top: rect.bottom + window.scrollY,
-                                left: rect.left + window.scrollX,
-                              });
-                              setEditingVerifierTaskId(task._id + '-second');
-                            }} style={{cursor: 'pointer'}}>
-                              {task.secondVerificationAssignedTo ? (
-                                <>
-                                  <img src={task.secondVerificationAssignedTo.photo?.url || defaultProfile} alt={`${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
-                                  <span className="ml-2">
-                                    {task.secondVerificationAssignedTo.firstName} {task.secondVerificationAssignedTo.lastName}
-                                    <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                                      {getUserTaskHours(task._id, task.secondVerificationAssignedTo._id)}h
-                                    </span>
-                                  </span>
-                                </>
-                              ) : (
-                                <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
-                              )}
-                              <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" className="ml-1 text-gray-400"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-                            </div>
-                            {editingVerifierTaskId === task._id + '-second' && ReactDOM.createPortal(
-                              <div
-                                ref={verifierDropdownRef}
-                                style={{
-                                  position: 'absolute',
-                                  top: verifierDropdownPosition.top,
-                                  left: verifierDropdownPosition.left,
-                                  minWidth: 200,
-                                  background: '#fff',
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: 8,
-                                  boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                  padding: 8,
-                                  zIndex: 9999,
-                                  maxHeight: 300,
-                                  overflowY: 'auto',
-                                }}
-                              >
-                                {(users.filter(u => u._id !== (task.assignedTo?._id) && u._id !== (task.verificationAssignedTo?._id) && (`${u.firstName} ${u.lastName}`.toLowerCase().includes(verifierSearch.toLowerCase())))).length === 0 ? (
-                                  <div className="text-gray-400 text-sm px-2 py-2">No users found</div>
-                                ) : (
-                                  users.filter(u => u._id !== (task.assignedTo?._id) && u._id !== (task.verificationAssignedTo?._id) && (`${u.firstName} ${u.lastName}`.toLowerCase().includes(verifierSearch.toLowerCase())))
-                                    .map(u => {
-                                      // Only allow selection if canEditSecondVerifier
-                                      const canEditSecondVerifierDropdown = viewType === 'received' && !shouldDisableActions?.(task);
-                                      return (
+                                    {dropdownUsers.length === 0 ? (
+                                      <div className="text-gray-400 text-sm px-2 py-2">No users found</div>
+                                    ) : (
+                                      dropdownUsers.map(u => (
                                         <div
                                           key={u._id}
                                           style={{
@@ -1191,16 +1833,15 @@ const AdvancedTaskTable = ({
                                             gap: 8,
                                             padding: '6px 8px',
                                             borderRadius: 6,
-                                            cursor: canEditSecondVerifierDropdown ? 'pointer' : 'not-allowed',
-                                            background: task.secondVerificationAssignedTo && task.secondVerificationAssignedTo._id === u._id ? '#f3f4f6' : 'transparent',
+                                            cursor: 'pointer',
+                                            background: task[colId] && task[colId]._id === u._id ? '#f3f4f6' : 'transparent',
                                             marginBottom: 2,
                                             transition: 'background 0.15s',
                                             opacity: verifierLoading ? 0.6 : 1,
                                           }}
                                           onClick={async e => {
-                                            if (!canEditSecondVerifierDropdown) return;
                                             e.stopPropagation();
-                                            if (verifierLoading || (task.secondVerificationAssignedTo && task.secondVerificationAssignedTo._id === u._id)) return;
+                                            if (verifierLoading || (task[colId] && task[colId]._id === u._id)) return;
                                             setVerifierLoading(true);
                                             try {
                                               const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verifier`, {
@@ -1209,44 +1850,65 @@ const AdvancedTaskTable = ({
                                                   'Content-Type': 'application/json',
                                                   Authorization: `Bearer ${currentUser.token}`,
                                                 },
-                                                body: JSON.stringify({ secondVerificationAssignedTo: u._id }),
+                                                body: JSON.stringify({ [colId]: u._id }),
                                               });
-                                              if (!response.ok) throw new Error('Failed to update second verifier');
+                                              if (!response.ok) throw new Error('Failed to update verifier');
                                               const updatedTask = await response.json();
                                               if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
-                                              toast.success('Second verifier updated');
+                                              toast.success(`${col.label} updated`);
                                               if (refetchTasks) refetchTasks();
                                             } catch (err) {
-                                              toast.error('Failed to update second verifier');
+                                              toast.error(`Failed to update ${col.label.toLowerCase()}`);
                                             }
                                             setVerifierLoading(false);
                                             setEditingVerifierTaskId(null);
                                           }}
                                           onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                          onMouseLeave={e => e.currentTarget.style.background = (task.secondVerificationAssignedTo && task.secondVerificationAssignedTo._id === u._id) ? '#f3f4f6' : 'transparent'}
+                                          onMouseLeave={e => e.currentTarget.style.background = (task[colId] && task[colId]._id === u._id) ? '#f3f4f6' : 'transparent'}
                                         >
                                           <img src={u.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
                                           <span style={{fontSize: '14px'}}>{u.firstName} {u.lastName}</span>
-                                          {task.secondVerificationAssignedTo && task.secondVerificationAssignedTo._id === u._id && (
+                                          {task[colId] && task[colId]._id === u._id && (
                                             <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                                           )}
                                         </div>
-                                      );
-                                    })
+                                      ))
+                                    )}
+                                  </div>,
+                                  document.body
                                 )}
-                              </div>,
-                              document.body
-                            )}
-                          </div>
-                        </td>
-                      );
-                    
-                    case 'guides':
-                      const guideChipsClass = viewType === 'received' ? 'pr-6' : 'pr-0';
-                      const guideChipsMaxWidth = viewType === 'received' ? 'calc(100% - 28px)' : '100%';
-                      return (
-                        <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                          style={{width: (columnWidths[colId] || 200) + 'px', minWidth: (columnWidths[colId] || 200) + 'px', maxWidth: (columnWidths[colId] || 200) + 'px', background: 'white', overflow: 'hidden'}}>
+                              </div>
+                            </td>
+                          );
+                        }
+                        // Otherwise, just show the value
+                        return (
+                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                            style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
+                            <div className="overflow-x-auto whitespace-nowrap flex items-center" style={{width: '100%', maxWidth: '100%'}}>
+                              {task[colId] ? (
+                                <>
+                                  <img src={task[colId].photo?.url || defaultProfile} alt={`${task[colId].firstName} ${task[colId].lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
+                                  <span className="ml-2">
+                                    {task[colId].firstName} {task[colId].lastName}
+                                    <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                                      {getUserTaskHours(task._id, task[colId]._id)}h
+                                    </span>
+                                  </span>
+                                </>
+                              ) : (
+                                <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      }
+                      case 'guides':
+                        const guideChipsClass = viewType === 'received' ? 'pr-6' : 'pr-0';
+                        const guideChipsMaxWidth = viewType === 'received' ? 'calc(100% - 28px)' : '100%';
+                        return (
+                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                            style={{width: (columnWidths[colId] || 200) + 'px', minWidth: (columnWidths[colId] || 200) + 'px', maxWidth: (columnWidths[colId] || 200) + 'px', background: 'white', overflow: 'hidden'}}>
                           <div className="flex items-center relative" style={{width: '100%', maxWidth: '100%'}}>
                             {/* Scrollable chips */}
                             <div className={`flex items-center gap-1 overflow-x-auto whitespace-nowrap ${guideChipsClass}`} style={{maxWidth: guideChipsMaxWidth}}>
@@ -1376,116 +2038,125 @@ const AdvancedTaskTable = ({
                         </td>
                       );
                     
-                    case 'files':
-                      return (
-                        <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
-                          <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                            <div className="flex items-center">
-                              {task.files && task.files.length > 0 ? (
-                                <div className="flex items-center space-x-2">
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.files.length}</span>
-                                  <button onClick={() => handleTaskClick(task)} className="text-blue-600 hover:text-blue-800 text-sm">View</button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center">
-                                  <span className="text-gray-400 text-sm italic">No files</span>
-                                  <button onClick={() => handleTaskClick(task)} className="ml-2 text-blue-600 hover:text-blue-800 text-sm">Upload</button>
-                                </div>
-                              )}
+                      case 'files':
+                        return (
+                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
+                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                              <div className="flex items-center">
+                                {task.files && task.files.length > 0 ? (
+                                  <div className="flex items-center space-x-2">
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.files.length}</span>
+                                    <button onClick={() => handleTaskClick(task)} className="text-blue-600 hover:text-blue-800 text-sm">View</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center">
+                                    <span className="text-gray-400 text-sm italic">No files</span>
+                                    <button onClick={() => handleTaskClick(task)} className="ml-2 text-blue-600 hover:text-blue-800 text-sm">Upload</button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                      );
-                    
-                    case 'comments':
-                      return (
-                        <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
-                          <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.comments ? task.comments.length : 0} </span>
-                              <button onClick={() => { setSelectedTask(task); setShowComments(true); }} className="text-blue-600 hover:text-blue-800 text-sm">View</button>
+                          </td>
+                        );
+                      
+                      case 'comments':
+                        return (
+                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
+                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.comments ? task.comments.length : 0} </span>
+                                <button onClick={() => { setSelectedTask(task); setShowComments(true); }} className="text-blue-600 hover:text-blue-800 text-sm">View</button>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                      );
-                    
-                    default:
-                      return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task[colId]}</span></div></td>;
-                  }
-                })}
-                {(viewType === 'assigned' || viewType === 'admin') && (
-                  <td key="actions" className="px-2 py-1 text-sm font-normal align-middle bg-white">
-                    {(!shouldDisableActions || !shouldDisableActions(task)) && (
-                      <div className="flex items-center gap-0">
-                        <button
-                          onClick={() => onEditTask && onEditTask(task)}
-                          className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                          title="Edit Task"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTask(task)}
-                          className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                          title="Delete Task"
-                        >
-                          Delete
-                        </button>
+                          </td>
+                        );
+                      
+                      default:
+                        let cellValue = task[colId];
+                        if ([
+                          'thirdVerificationAssignedTo',
+                          'fourthVerificationAssignedTo',
+                          'fifthVerificationAssignedTo'
+                        ].includes(colId)) {
+                          cellValue = cellValue ? (cellValue.firstName ? `${cellValue.firstName} ${cellValue.lastName}` : cellValue) : 'NA';
+                        }
+                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{cellValue}</span></div></td>;
+                    }
+                  })}
+                  {(viewType === 'assigned' || viewType === 'admin') && (
+                    <td key="actions" className="px-2 py-1 text-sm font-normal align-middle bg-white">
+                      {(!shouldDisableActions || !shouldDisableActions(task)) && (
+                        <div className="flex items-center gap-0">
+                          <button
+                            onClick={() => onEditTask && onEditTask(task)}
+                            className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
+                            title="Edit Task"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTask(task)}
+                            className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
+                            title="Delete Task"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              )))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* File Upload and Comments Modal */}
+        {selectedTask && (showFileUpload || showComments) && (
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">
+                  {showFileUpload ? 'Task Files' : 'Task Comments'}
+                </h2>
+                <button
+                  onClick={() => {
+                    setSelectedTask(null);
+                    setShowFileUpload(false);
+                    setShowComments(false);
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-6">
+                {showFileUpload ? (
+                  <>
+                    <FileUpload
+                      taskId={selectedTask._id}
+                      onFileUploaded={handleFileUploaded}
+                      onFileDeleted={handleFileDeleted}
+                    />
+                    {selectedTask.files && selectedTask.files.length > 0 && (
+                      <div className="mt-4">
+                        <FileList
+                          taskId={selectedTask._id}
+                          files={selectedTask.files}
+                          onFileDeleted={handleFileDeleted}
+                        />
                       </div>
                     )}
-                  </td>
+                  </>
+                ) : (
+                  <TaskComments taskId={selectedTask._id} />
                 )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* File Upload and Comments Modal */}
-      {selectedTask && (showFileUpload || showComments) && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">
-                {showFileUpload ? 'Task Files' : 'Task Comments'}
-              </h2>
-              <button
-                onClick={() => {
-                  setSelectedTask(null);
-                  setShowFileUpload(false);
-                  setShowComments(false);
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="space-y-6">
-              {showFileUpload ? (
-                <>
-                  <FileUpload
-                    taskId={selectedTask._id}
-                    onFileUploaded={handleFileUploaded}
-                    onFileDeleted={handleFileDeleted}
-                  />
-                  {selectedTask.files && selectedTask.files.length > 0 && (
-                    <div className="mt-4">
-                      <FileList
-                        taskId={selectedTask._id}
-                        files={selectedTask.files}
-                        onFileDeleted={handleFileDeleted}
-                      />
-                    </div>
-                  )}
-                </>
-              ) : (
-                <TaskComments taskId={selectedTask._id} />
-              )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 };
 

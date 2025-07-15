@@ -14,6 +14,11 @@ const columns = [
   { id: 'dueDate', label: 'Due Date' },
   { id: 'assignedBy', label: 'Assigned By' },
   { id: 'assignedTo', label: 'Assigned To' },
+  { id: 'verificationAssignedTo', label: 'Verifier 1' },
+  { id: 'secondVerificationAssignedTo', label: 'Verifier 2' },
+  { id: 'thirdVerificationAssignedTo', label: 'Third Verifier' },
+  { id: 'fourthVerificationAssignedTo', label: 'Fourth Verifier' },
+  { id: 'fifthVerificationAssignedTo', label: 'Fifth Verifier' },
 ];
 
 const TaskVerification = () => {
@@ -97,6 +102,11 @@ const TaskVerification = () => {
                   <td className="px-4 py-2 whitespace-nowrap">{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '-'}</td>
                   <td className="px-4 py-2 whitespace-nowrap">{task.assignedBy?.firstName} {task.assignedBy?.lastName}</td>
                   <td className="px-4 py-2 whitespace-nowrap">{task.assignedTo?.firstName} {task.assignedTo?.lastName}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{task.verificationAssignedTo ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : 'Unassigned'}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : 'Unassigned'}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{task.thirdVerificationAssignedTo ? `${task.thirdVerificationAssignedTo.firstName} ${task.thirdVerificationAssignedTo.lastName}` : 'Unassigned'}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{task.fourthVerificationAssignedTo ? `${task.fourthVerificationAssignedTo.firstName} ${task.fourthVerificationAssignedTo.lastName}` : 'Unassigned'}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{task.fifthVerificationAssignedTo ? `${task.fifthVerificationAssignedTo.firstName} ${task.fifthVerificationAssignedTo.lastName}` : 'Unassigned'}</td>
                   <td className="px-4 py-2 whitespace-nowrap">
                     <button
                       onClick={() => handleAction(task._id, 'approve')}

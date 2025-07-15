@@ -34,6 +34,9 @@ const ALL_COLUMNS = [
   { id: 'assignedTo', label: 'Assigned To' },
   { id: 'verificationAssignedTo', label: 'First Verifier' },
   { id: 'secondVerificationAssignedTo', label: 'Second Verifier' },
+  { id: 'thirdVerificationAssignedTo', label: 'Third Verifier' },
+  { id: 'fourthVerificationAssignedTo', label: 'Fourth Verifier' },
+  { id: 'fifthVerificationAssignedTo', label: 'Fifth Verifier' },
   { id: 'guides', label: 'Guide' },
   { id: 'files', label: 'Files' },
   { id: 'comments', label: 'Comments' },
@@ -258,10 +261,34 @@ const ReceivedTasks = () => {
     let filteredTasks = tasks.filter(task => {
       // Exclude tasks with verificationStatus 'pending'
       if (task.verificationStatus === 'pending') return false;
+
       // For guidance tab, only show tasks where status !== 'completed'
       if (activeTab === 'guidance' && task.status === 'completed') return false;
+
       // For completed tab, only show tasks where assignedTo is current user and status is completed
       if (activeTab === 'completed' && (!task.assignedTo || (task.assignedTo._id !== user._id && task.assignedTo !== user._id || task.status !== 'completed'))) return false;
+
+      // For receivedVerification tab, only show tasks where status is not completed and latest verifier is current user
+      if (activeTab === 'receivedVerification') {
+        if (task.status === 'completed') return false;
+        // Find the latest assigned verifier (from 1st to 5th)
+        const verifierFields = [
+          'verificationAssignedTo',
+          'secondVerificationAssignedTo',
+          'thirdVerificationAssignedTo',
+          'fourthVerificationAssignedTo',
+          'fifthVerificationAssignedTo',
+        ];
+        let latestVerifier = null;
+        for (let i = verifierFields.length - 1; i >= 0; i--) {
+          if (task[verifierFields[i]] && task[verifierFields[i]]._id) {
+            latestVerifier = task[verifierFields[i]]._id;
+            break;
+          }
+        }
+        if (!latestVerifier || String(latestVerifier) !== String(user._id)) return false;
+      }
+
       // Filter by search term
       if (searchTerm) {
         const lowercasedTerm = searchTerm.toLowerCase();
@@ -653,7 +680,7 @@ const ReceivedTasks = () => {
           >
             <option value="createdAt">Received On</option>
             <option value="priority">Priority</option>
-            <option value="status">Status</option>
+            <option value="status">Stages</option>
             <option value="clientName">Client</option>
           </select>
           <select
@@ -689,6 +716,7 @@ const ReceivedTasks = () => {
           setVisibleColumns={setVisibleColumns}
           storageKeyPrefix="receivedtasks"
           refetchTasks={fetchTasks}
+          sortBy={sortBy}
         />
       </ErrorBoundary>
     </div>
