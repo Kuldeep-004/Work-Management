@@ -16,6 +16,8 @@ const Timesheets = () => {
 
   const debounceTimeout = useRef(null);
 
+  // Remove the old fetchData declaration entirely (the one before useCallback)
+  // Use backend /my-tasks endpoint directly
   const fetchData = useCallback(async (date = new Date()) => {
     if (!isAuthenticated() || !user) return;
     setLoading(true);
@@ -28,10 +30,8 @@ const Timesheets = () => {
       if (!timesheetRes.ok || !tasksRes.ok) throw new Error('Failed to fetch initial data');
       const timesheetData = await timesheetRes.json();
       const tasksData = await tasksRes.json();
-      // Filter out tasks that are completed in either status or verificationStatus
-      const filteredTasks = tasksData.filter(task => task.status !== 'completed' && task.verificationStatus !== 'pending');
       setTimesheet(timesheetData);
-      setTasks(filteredTasks);
+      setTasks(tasksData);
     } catch (error) {
       toast.error(error.message || 'Failed to fetch data');
     } finally {
@@ -260,6 +260,14 @@ const Timesheets = () => {
     if (end < start) end += 24 * 60; // handle overnight
     return end - start;
   };
+
+  // Remove userCanSeeTask and fetchRelevantTasks logic
+  // Use backend /my-tasks endpoint directly
+  
+
+  useEffect(() => {
+    fetchData(selectedDate);
+  }, [fetchData, selectedDate]);
 
   if (loading) return <div className="p-8 text-center">Loading...</div>;
 
@@ -555,11 +563,51 @@ const Timesheets = () => {
                         disabled={isSaving || isLocked}
                       >
                         <option value="">Select task</option>
-                        {tasks.map(task => (
-                          <option key={task._id} value={task._id}>
-                            {task.title}
-                          </option>
-                        ))}
+                        {/* Build dropdown options: all allowed tasks, plus the selected one if missing */}
+                        {(() => {
+                          // tasks: allowed tasks for this user
+                          // entry.task: currently selected task (could be object or id)
+                          const selectedTaskId = typeof entry.task === 'object' && entry.task !== null ? entry.task._id : entry.task;
+                          const taskIds = tasks.map(t => t._id);
+                          let options = [...tasks];
+                          // If selected task is not in allowed list, add it
+                          if (selectedTaskId && !taskIds.includes(selectedTaskId)) {
+                            // Try to find the full task object from previous entries or fallback
+                            let selectedTaskObj = null;
+                            if (entry.task && typeof entry.task === 'object') {
+                              selectedTaskObj = entry.task;
+                            } else if (timesheet && timesheet.entries) {
+                              // Look for the task in other entries
+                              for (const e of timesheet.entries) {
+                                if (e.task && typeof e.task === 'object' && e.task._id === selectedTaskId) {
+                                  selectedTaskObj = e.task;
+                                  break;
+                                }
+                              }
+                            }
+                            // Fallback: minimal object
+                            if (!selectedTaskObj) {
+                              selectedTaskObj = { _id: selectedTaskId, title: '(Old/Completed Task)' };
+                            }
+                            options = [...options, selectedTaskObj];
+                          }
+                          // Remove duplicates by _id
+                          const uniqueOptions = Object.values(options.reduce((acc, t) => {
+                            acc[t._id] = t;
+                            return acc;
+                          }, {}));
+                          // Sort: put selected task first if not in allowed, else keep order
+                          uniqueOptions.sort((a, b) => {
+                            if (a._id === selectedTaskId) return -1;
+                            if (b._id === selectedTaskId) return 1;
+                            return 0;
+                          });
+                          return uniqueOptions.map(task => (
+                            <option key={task._id} value={task._id}>
+                              {task.title}
+                            </option>
+                          ));
+                        })()}
                       </select>
                     </div>
                     {/* Work Description */}

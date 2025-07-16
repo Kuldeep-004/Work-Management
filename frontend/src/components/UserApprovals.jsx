@@ -12,7 +12,7 @@ const UserApprovals = () => {
   const [selectedRoles, setSelectedRoles] = useState({});
   const [selectedTeams, setSelectedTeams] = useState({});
 
-  const roles = ['Fresher', 'Team Head', 'Head'];
+  const roles = ['Fresher', 'Senior', 'Team Head'];
 
   useEffect(() => {
     const fetchData = async () => {
@@ -61,17 +61,17 @@ const UserApprovals = () => {
       [userId]: role
     }));
 
-    // If role is Head, find and set Head team
-    if (role === 'Head') {
-      const headTeam = teams.find(team => team.name === 'Head');
-      if (headTeam) {
+    // If role is Team Head, find and set Team Head team
+    if (role === 'Team Head') {
+      const teamHeadTeam = teams.find(team => team.name === 'Team Head');
+      if (teamHeadTeam) {
         setSelectedTeams(prev => ({
           ...prev,
-          [userId]: headTeam._id
+          [userId]: teamHeadTeam._id
         }));
       }
     } else {
-      // Clear team selection if role changes from Head
+      // Clear team selection if role changes from Team Head
       setSelectedTeams(prev => {
         const newTeams = { ...prev };
         delete newTeams[userId];
@@ -89,8 +89,8 @@ const UserApprovals = () => {
           return;
         }
 
-        // For non-Head roles, check if team is selected
-        if (selectedRoles[userId] !== 'Head' && !selectedTeams[userId]) {
+        // For non-Team Head roles, check if team is selected
+        if (selectedRoles[userId] !== 'Team Head' && !selectedTeams[userId]) {
           toast.error('Please select a team before approving');
           return;
         }
@@ -105,7 +105,7 @@ const UserApprovals = () => {
         body: JSON.stringify({ 
           status,
           role: selectedRoles[userId],
-          team: selectedRoles[userId] === 'Head' ? null : selectedTeams[userId]
+          team: selectedRoles[userId] === 'Team Head' ? null : selectedTeams[userId]
         }),
       });
 
@@ -192,7 +192,7 @@ const UserApprovals = () => {
                       <option key={role} value={role}>{role}</option>
                     ))}
                   </select>
-                  {selectedRoles[pendingUser._id] !== 'Head' && (
+                  {selectedRoles[pendingUser._id] !== 'Team Head' && (
                     <select
                       value={selectedTeams[pendingUser._id] || ''}
                       onChange={(e) => setSelectedTeams(prev => ({
@@ -203,7 +203,7 @@ const UserApprovals = () => {
                     >
                       <option value="">Select Team</option>
                       {teams
-                        .filter(team => team.name !== 'Head')
+                        .filter(team => team.name !== 'Team Head')
                         .map(team => (
                           <option key={team._id} value={team._id}>{team.name}</option>
                         ))}
@@ -214,7 +214,7 @@ const UserApprovals = () => {
                   <button
                     onClick={() => handleApproval(pendingUser._id, 'approved')}
                     className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!selectedRoles[pendingUser._id] || (selectedRoles[pendingUser._id] !== 'Head' && !selectedTeams[pendingUser._id])}
+                    disabled={!selectedRoles[pendingUser._id] || (selectedRoles[pendingUser._id] !== 'Team Head' && !selectedTeams[pendingUser._id])}
                   >
                     Approve
                   </button>

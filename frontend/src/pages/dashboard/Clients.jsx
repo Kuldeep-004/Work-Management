@@ -213,7 +213,7 @@ const Clients = () => {
     return null;
   }
 
-  if (!['Admin', 'Head', 'Team Head'].includes(user.role)) {
+  if (!['Admin', 'Team Head', 'Senior'].includes(user.role)) {
     return (
       <div className="p-4">
         <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>

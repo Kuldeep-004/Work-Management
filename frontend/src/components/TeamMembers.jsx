@@ -75,7 +75,9 @@ const TeamMembers = () => {
       return acc;
     }, {
       'Admin': [], // Add Admin team
-      'Head': []  // Add Head section
+      'Team Head': [], // Add Team Head section
+      Senior: [],
+      Fresher: [],
     });
 
     // Then populate the teams with their members
@@ -85,8 +87,10 @@ const TeamMembers = () => {
       // Handle admin users and head users
       if (user.role === 'Admin') {
         teamName = 'Admin';
-      } else if (user.role === 'Head') {
-        teamName = 'Head';
+      } else if (user.role === 'Team Head') {
+        teamName = 'Team Head';
+      } else if (user.role === 'Senior') {
+        teamName = 'Senior';
       } else if (user.team) {
         // For other users, check their team assignment
         const userTeam = teams.find(t => t._id === user.team);
@@ -253,7 +257,7 @@ const TeamMembers = () => {
           <div key={teamName} className="bg-white rounded-lg shadow-md overflow-hidden">
             <div className="w-full flex justify-between items-center px-6 py-4 text-lg font-semibold text-gray-800 bg-gray-50 rounded-t-lg">
               <span>{teamName} ({members.length})</span>
-              {user?.role === 'Admin' && teamName !== 'Admin' && teamName !== 'Head' && members.length === 0 && (
+              {user?.role === 'Admin' && teamName !== 'Admin' && teamName !== 'Team Head' && members.length === 0 && (
                 <button
                   onClick={() => handleDeleteTeam(teamName)}
                   className="ml-4 px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500"

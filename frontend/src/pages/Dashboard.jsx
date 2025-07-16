@@ -51,8 +51,8 @@ const Dashboard = () => {
     );
   }
 
-  // If user is Head
-  if (user?.role === 'Head') {
+  // If user is Team Head
+  if (user?.role === 'Team Head') {
     return (
       <DashboardLayout>
         <Routes>
@@ -73,8 +73,8 @@ const Dashboard = () => {
     );
   }
 
-  // If user is Team Head
-  if (user?.role === 'Team Head') {
+  // If user is Senior
+  if (user?.role === 'Senior') {
     return (
       <DashboardLayout>
         <Routes>

@@ -49,6 +49,7 @@ const ALL_COLUMNS = [
   { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
   { id: 'clientGroup', label: 'Client Group', defaultWidth: 150 },
   { id: 'workType', label: 'Work Type', defaultWidth: 150 },
+  { id: 'workDoneBy', label: 'Work Done', defaultWidth: 120 },
   { id: 'billed', label: 'Internal Works', defaultWidth: 80 },
   { id: 'status', label: 'Stages', defaultWidth: 120 },
   { id: 'priority', label: 'Priority', defaultWidth: 120 },
@@ -213,7 +214,7 @@ const Dashboard = () => {
       setLoading(true);
       setError(null);
       let endpoint = '';
-      if (user.role === 'Admin' || user.role === 'Head' || user.role === 'Team Head') {
+      if (user.role === 'Admin' || user.role === 'Team Head' || user.role === 'Senior') {
         endpoint = 'tasks/all';
       } else {
         endpoint = 'tasks';
@@ -571,6 +572,9 @@ const Dashboard = () => {
             break;
           case 'workType':
             row[col.label] = Array.isArray(task.workType) ? task.workType.join(', ') : task.workType;
+            break;
+          case 'workDoneBy':
+            row[col.label] = task.workDoneBy || '';
             break;
           case 'billed':
             row[col.label] = task.billed ? 'Yes' : 'No';

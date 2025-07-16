@@ -32,31 +32,54 @@ router.get('/current-timeslot', protect, (req, res) => {
   }
 });
 
-// Get user's assigned tasks for timesheet
+// Get user's assigned tasks for timesheet (only latest eligible user)
 router.get('/my-tasks', protect, async (req, res) => {
   try {
+    // Get all tasks where user is assignedTo, any verifier, or a guide
     const tasks = await Task.find({
       $or: [
         { assignedTo: req.user._id },
         { verificationAssignedTo: req.user._id },
         { secondVerificationAssignedTo: req.user._id },
+        { thirdVerificationAssignedTo: req.user._id },
+        { fourthVerificationAssignedTo: req.user._id },
+        { fifthVerificationAssignedTo: req.user._id },
         { guides: req.user._id }
       ],
       status: { $ne: 'completed' }
     })
-    .select('title description clientName clientGroup workType')
+    .select('title description clientName clientGroup workType assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides status')
     .sort({ createdAt: -1 });
-    
-    // Remove duplicates (if any)
-    const uniqueTasks = [];
-    const seen = new Set();
-    for (const task of tasks) {
-      if (!seen.has(task._id.toString())) {
-        uniqueTasks.push(task);
-        seen.add(task._id.toString());
+
+    // Filter: if user is a guide, always include; else apply assignedTo/verifier rule
+    const filteredTasks = tasks.filter(task => {
+      // If user is a guide for this task, always allow
+      if (Array.isArray(task.guides) && task.guides.map(id => id.toString()).includes(req.user._id.toString())) {
+        return true;
       }
-    }
-    res.json(uniqueTasks);
+      // Otherwise, apply assignedTo/verifier rule
+      const verifiers = [
+        task.verificationAssignedTo,
+        task.secondVerificationAssignedTo,
+        task.thirdVerificationAssignedTo,
+        task.fourthVerificationAssignedTo,
+        task.fifthVerificationAssignedTo
+      ];
+      let lastAssignedVerifier = null;
+      for (let i = verifiers.length - 1; i >= 0; i--) {
+        if (verifiers[i]) {
+          lastAssignedVerifier = verifiers[i].toString();
+          break;
+        }
+      }
+      if (!lastAssignedVerifier) {
+        return task.assignedTo && task.assignedTo.toString() === req.user._id.toString();
+      } else {
+        return lastAssignedVerifier === req.user._id.toString();
+      }
+    });
+
+    res.json(filteredTasks);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -293,11 +316,11 @@ router.get('/subordinate/:userId/:date', protect, async (req, res) => {
       case 'Admin':
         hasPermission = true;
         break;
-      case 'Head':
-        hasPermission = subordinate.role === 'Team Head';
-        break;
       case 'Team Head':
-        hasPermission = subordinate.role === 'Fresher' && subordinate.team?.toString() === req.user.team?.toString();
+        hasPermission = subordinate.role === 'Senior';
+        break;
+      case 'Senior':
+        // ... logic for Senior ...
         break;
     }
     

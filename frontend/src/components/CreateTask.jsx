@@ -33,7 +33,8 @@ const CreateTask = ({
     inwardEntryTime: '',
     dueDate: '',
     targetDate: '',
-    billed: false // default to No (Internal Works)
+    billed: false, // default to No (Internal Works)
+    workDoneBy: '' // NEW FIELD
   });
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -273,6 +274,7 @@ const CreateTask = ({
         dueDate: initialData.dueDate ? initialData.dueDate.split('T')[0] : '',
         targetDate: initialData.targetDate ? initialData.targetDate.split('T')[0] : '',
         billed: typeof initialData.billed === 'boolean' ? initialData.billed : true,
+        workDoneBy: initialData.workDoneBy || '' // NEW FIELD
       });
       setClientSearchTerm(initialData.clientName || '');
       const assignedToRaw = Array.isArray(initialData.assignedTo)
@@ -301,7 +303,8 @@ const CreateTask = ({
         inwardEntryTime: time,
         dueDate: '',
         targetDate: '',
-        billed: false
+        billed: false,
+        workDoneBy: '' // NEW FIELD
       });
       setClientSearchTerm('');
       setSelectedUsers([]);
@@ -376,6 +379,10 @@ const CreateTask = ({
       toast.error('Please select whether the task is billed or not');
       return;
     }
+    if (!formData.workDoneBy) {
+      toast.error('Please select Work Done by');
+      return;
+    }
 
     try {
       setUploading(true);
@@ -386,7 +393,8 @@ const CreateTask = ({
         ...formData,
         assignedTo: Array.isArray(formData.assignedTo) ? formData.assignedTo.filter(Boolean) : [formData.assignedTo].filter(Boolean),
         inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
-        billed: formData.billed
+        billed: formData.billed,
+        workDoneBy: formData.workDoneBy // NEW FIELD
       };
 
       let response, updatedTask;
@@ -903,6 +911,23 @@ const CreateTask = ({
                     <option value="" disabled>Select internal works status</option>
                     <option value="yes">Yes</option>
                     <option value="no">No</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Work Done by <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.workDoneBy}
+                    onChange={e => setFormData({ ...formData, workDoneBy: e.target.value })}
+                    className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="" disabled>Select option</option>
+                    <option value="First floor">First floor</option>
+                    <option value="Second floor">Second floor</option>
+                    <option value="Both">Both</option>
                   </select>
                 </div>
 

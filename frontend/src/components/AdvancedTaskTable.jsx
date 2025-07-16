@@ -35,6 +35,7 @@ const ALL_COLUMNS = [
   { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
   { id: 'clientGroup', label: 'Client Group', defaultWidth: 150 },
   { id: 'workType', label: 'Work Type', defaultWidth: 150 },
+  { id: 'workDoneBy', label: 'Work Done', defaultWidth: 120 },
   { id: 'billed', label: 'Internal Works', defaultWidth: 80 },
   { id: 'status', label: 'Stages', defaultWidth: 120 },
   { id: 'priority', label: 'Priority', defaultWidth: 120 },
@@ -776,6 +777,9 @@ const AdvancedTaskTable = ({
                             case 'workType':
                               return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex gap-1">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></div></td>;
                             
+                            case 'workDoneBy':
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.workDoneBy || 'NA'}</span></div></td>;
+                            
                             case 'billed':
                               return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? 'Yes' : 'No'}</span></div></td>;
                             
@@ -1049,16 +1053,24 @@ const AdvancedTaskTable = ({
                               const prevVerifierField = verifierFields[colIdx - 1];
 
                               // Show dropdown if:
-                              // 1. Current user is the assigned verifier for this column (nth)
-                              // 2. OR, current user is the previous verifier and this column is unassigned (N+1th)
-                              const userIsThisVerifier = task[currVerifierField]?._id === currentUser?._id;
-                              const userIsPrevVerifier = colIdx > 0 && task[prevVerifierField]?._id === currentUser?._id && !task[currVerifierField];
-                              const canEditThisVerifier =
+                              // 1. For first verifier: selfVerification must be true (for execution tab)
+                              // 2. For receivedVerification tab: if current user is the first verifier, allow dropdown
+                              // 3. Current user is the assigned verifier for this column (nth)
+                              // 4. OR, current user is the previous verifier and this column is unassigned (N+1th)
+                              let userIsThisVerifier = task[currVerifierField]?._id === currentUser?._id;
+                              let userIsPrevVerifier = colIdx > 0 && task[prevVerifierField]?._id === currentUser?._id && !task[currVerifierField];
+                              let canEditThisVerifier =
                                 viewType === 'received' &&
                                 (userIsThisVerifier || userIsPrevVerifier) &&
                                 taskType !== 'completed' &&
                                 taskType !== 'guidance' &&
                                 taskType !== 'issuedVerification';
+                              // For first verifier, require selfVerification (for execution tab)
+                              if (colId === 'verificationAssignedTo') {
+                                canEditThisVerifier =
+                                  (viewType === 'received' && taskType === 'execution' && !!task.selfVerification)
+                                  || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier);
+                              }
 
                               // Exclude assignedTo and all already assigned verifiers
                               const assignedVerifierIds = getAssignedVerifierIds(task);
@@ -1392,20 +1404,25 @@ const AdvancedTaskTable = ({
                           <td key="actions" className="px-2 py-1 text-sm font-normal align-middle bg-white">
                             {(!shouldDisableActions || !shouldDisableActions(task)) && (
                               <div className="flex items-center gap-0">
-                                <button
-                                  onClick={() => onEditTask && onEditTask(task)}
-                                  className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                                  title="Edit Task"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteTask(task)}
-                                  className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                                  title="Delete Task"
-                                >
-                                  Delete
-                                </button>
+                                {/* Role-based action buttons */}
+                                {['Team Head', 'Admin', 'Senior'].includes(currentUser?.role) && (
+                                  <button
+                                    onClick={() => onEditTask && onEditTask(task)}
+                                    className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
+                                    title="Edit Task"
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                                {['Team Head', 'Admin'].includes(currentUser?.role) && (
+                                  <button
+                                    onClick={() => handleDeleteTask(task)}
+                                    className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
+                                    title="Delete Task"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
                               </div>
                             )}
                           </td>
@@ -1470,6 +1487,9 @@ const AdvancedTaskTable = ({
                       
                       case 'workType':
                         return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex gap-1">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></div></td>;
+                      
+                      case 'workDoneBy':
+                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.workDoneBy || 'NA'}</span></div></td>;
                       
                       case 'billed':
                         return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? 'Yes' : 'No'}</span></div></td>;
@@ -1744,16 +1764,24 @@ const AdvancedTaskTable = ({
                         const prevVerifierField = verifierFields[colIdx - 1];
 
                         // Show dropdown if:
-                        // 1. Current user is the assigned verifier for this column (nth)
-                        // 2. OR, current user is the previous verifier and this column is unassigned (N+1th)
-                        const userIsThisVerifier = task[currVerifierField]?._id === currentUser?._id;
-                        const userIsPrevVerifier = colIdx > 0 && task[prevVerifierField]?._id === currentUser?._id && !task[currVerifierField];
-                        const canEditThisVerifier =
+                        // 1. For first verifier: selfVerification must be true (for execution tab)
+                        // 2. For receivedVerification tab: if current user is the first verifier, allow dropdown
+                        // 3. Current user is the assigned verifier for this column (nth)
+                        // 4. OR, current user is the previous verifier and this column is unassigned (N+1th)
+                        let userIsThisVerifier = task[currVerifierField]?._id === currentUser?._id;
+                        let userIsPrevVerifier = colIdx > 0 && task[prevVerifierField]?._id === currentUser?._id && !task[currVerifierField];
+                        let canEditThisVerifier =
                           viewType === 'received' &&
                           (userIsThisVerifier || userIsPrevVerifier) &&
                           taskType !== 'completed' &&
                           taskType !== 'guidance' &&
                           taskType !== 'issuedVerification';
+                        // For first verifier, require selfVerification (for execution tab)
+                        if (colId === 'verificationAssignedTo') {
+                          canEditThisVerifier =
+                            (viewType === 'received' && taskType === 'execution' && !!task.selfVerification)
+                            || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier);
+                        }
 
                         // Exclude assignedTo and all already assigned verifiers
                         const assignedVerifierIds = getAssignedVerifierIds(task);
@@ -2087,20 +2115,25 @@ const AdvancedTaskTable = ({
                     <td key="actions" className="px-2 py-1 text-sm font-normal align-middle bg-white">
                       {(!shouldDisableActions || !shouldDisableActions(task)) && (
                         <div className="flex items-center gap-0">
-                          <button
-                            onClick={() => onEditTask && onEditTask(task)}
-                            className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                            title="Edit Task"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteTask(task)}
-                            className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                            title="Delete Task"
-                          >
-                            Delete
-                          </button>
+                          {/* Role-based action buttons */}
+                          {['Team Head', 'Admin', 'Senior'].includes(currentUser?.role) && (
+                            <button
+                              onClick={() => onEditTask && onEditTask(task)}
+                              className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
+                              title="Edit Task"
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {['Team Head', 'Admin'].includes(currentUser?.role) && (
+                            <button
+                              onClick={() => handleDeleteTask(task)}
+                              className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
+                              title="Delete Task"
+                            >
+                              Delete
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>

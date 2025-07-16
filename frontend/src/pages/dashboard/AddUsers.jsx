@@ -5,7 +5,7 @@ import defaultProfile from '../../assets/avatar.jpg';
 import { API_BASE_URL } from '../../apiConfig';
 import { CheckIcon } from '@heroicons/react/24/outline';
 
-const rolesList = ['Admin', 'Head', 'Team Head', 'Fresher'];
+const rolesList = ['Admin', 'Team Head', 'Senior', 'Fresher'];
 const role2List = ['None', 'TimeSheet Verifier', 'Task Verifier'];
 
 const AllUsers = () => {
@@ -128,7 +128,7 @@ const AllUsers = () => {
 
       setUsers(prev => prev.map(u =>
         u._id === userId
-          ? { ...u, role: newRole, team: newRole === 'Head' ? null : u.team }
+          ? { ...u, role: newRole, team: newRole === 'Team Head' ? null : u.team }
           : u
       ));
       toast.success('User role updated successfully');
@@ -145,8 +145,8 @@ const AllUsers = () => {
         throw new Error('User not found');
       }
 
-      if (targetUser.role === 'Head') {
-        toast.error('Head role cannot be assigned to a team');
+      if (targetUser.role === 'Team Head') {
+        toast.error('Team Head role cannot be assigned to a team');
         return;
       }
 
@@ -251,7 +251,7 @@ const AllUsers = () => {
     );
   }
 
-  // Sort: Admins first, then Head, then others alphabetically by team, then by name
+  // Sort: Admins first, then Team Head, then others alphabetically by team, then by name
   const sortedUsers = [...users]
     .filter(u => u.status === 'approved')
     .sort((a, b) => {
@@ -259,8 +259,8 @@ const AllUsers = () => {
       if (b.role === 'Admin') return 1;
       const aTeam = getTeamName(a.team);
       const bTeam = getTeamName(b.team);
-      if (aTeam === 'Head') return -1;
-      if (bTeam === 'Head') return 1;
+      if (aTeam === 'Team Head') return -1;
+      if (bTeam === 'Team Head') return 1;
       if (aTeam !== bTeam) return aTeam.localeCompare(bTeam);
       return (a.firstName + a.lastName).localeCompare(b.firstName + b.lastName);
     });
@@ -378,7 +378,7 @@ const AllUsers = () => {
                     value={u.team || ''}
                     onChange={e => handleTeamChange(u._id, e.target.value)}
                     className="px-2 py-1 border border-gray-300 rounded"
-                    disabled={u.role === 'Head'}
+                    disabled={u.role === 'Team Head'}
                   >
                     <option value="">Select Team</option>
                     {teams.map(team => (
