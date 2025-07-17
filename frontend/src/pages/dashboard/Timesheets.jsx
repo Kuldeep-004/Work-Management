@@ -5,6 +5,18 @@ import { API_BASE_URL } from '../../apiConfig';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
+// Utility to normalize timesheet entries so entry.task is always a string
+function normalizeTimesheetTasks(ts) {
+  if (!ts || !ts.entries) return ts;
+  return {
+    ...ts,
+    entries: ts.entries.map(e => ({
+      ...e,
+      task: (e.task && typeof e.task === 'object' && e.task._id) ? e.task._id : e.task
+    }))
+  };
+}
+
 const Timesheets = () => {
   const { user, isAuthenticated } = useAuth();
   const [timesheet, setTimesheet] = useState(null);
@@ -30,7 +42,7 @@ const Timesheets = () => {
       if (!timesheetRes.ok || !tasksRes.ok) throw new Error('Failed to fetch initial data');
       const timesheetData = await timesheetRes.json();
       const tasksData = await tasksRes.json();
-      setTimesheet(timesheetData);
+      setTimesheet(normalizeTimesheetTasks(timesheetData));
       setTasks(tasksData);
     } catch (error) {
       toast.error(error.message || 'Failed to fetch data');
@@ -110,58 +122,74 @@ const Timesheets = () => {
 
   const handleEntryChange = (entryId, field, value) => {
     if (!timesheet) return;
-    const newTimesheet = {
+    // Deep clone entries to avoid reference issues
+    const newEntries = timesheet.entries.map(e => JSON.parse(JSON.stringify(e)));
+    const idx = newEntries.findIndex(e => e._id === entryId);
+    if (idx !== -1) {
+      newEntries[idx][field] = value;
+    }
+    setTimesheet({
       ...timesheet,
-      entries: timesheet.entries.map(e => e._id === entryId ? { ...e, [field]: value } : e)
-    };
-    setTimesheet(newTimesheet);
+      entries: newEntries
+    });
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
     }
-    const entry = newTimesheet.entries.find(e => e._id === entryId);
-    debounceTimeout.current = setTimeout(() => {
-      saveEntry(entry);
-    }, 1000);
+    const entry = newEntries[idx];
+    // Only save if both task and workDescription are filled
+    if ((entry.task && entry.workDescription) || (entry.manualTaskName && entry.workDescription)) {
+      debounceTimeout.current = setTimeout(() => {
+        saveEntry(entry);
+      }, 1000);
+    } else if (field === 'workDescription' || field === 'task') {
+      // Optionally, show a warning if user tries to save incomplete entry
+      // toast('Please select a task and enter a description to save.');
+    }
   };
+
+  // Utility to check for valid MongoDB ObjectId
+  function isValidObjectId(id) {
+    // 24 hex characters
+    return typeof id === 'string' && /^[a-f\d]{24}$/i.test(id);
+  }
 
   const saveEntry = async (entry, returnSaved = false, tempId = null) => {
     if (!entry) return;
-    // Prevent saving if no task is selected
-    if (!entry.task) {
+    // Prevent saving if neither a task nor a manual task is selected
+    const isInternalWorks = entry.task === 'internal-works' || entry.manualTaskName === 'Internal Works';
+    if (!entry.task && !isInternalWorks) {
       toast.error('Please select a task before saving.');
       return;
     }
     try {
       let res;
-      if (entry._id) {
-        // PATCH for existing entry
+      // Determine if this is an internal works entry
+      const payload = {
+        taskId: isInternalWorks ? null : entry.task,
+        manualTaskName: isInternalWorks ? 'Internal Works' : '',
+        workDescription: entry.workDescription,
+        startTime: entry.startTime,
+        endTime: entry.endTime
+      };
+      if (entry._id && isValidObjectId(entry._id)) {
+        // PATCH for existing entry with valid ObjectId
         res = await fetch(`${API_BASE_URL}/api/timesheets/entry/${entry._id}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${user.token}`
           },
-          body: JSON.stringify({
-            taskId: entry.task,
-            workDescription: entry.workDescription,
-            startTime: entry.startTime,
-            endTime: entry.endTime
-          }),
+          body: JSON.stringify(payload),
         });
       } else {
-        // POST for new entry
+        // POST for new entry or temp id
         res = await fetch(`${API_BASE_URL}/api/timesheets/add-entry`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${user.token}`
           },
-          body: JSON.stringify({
-            taskId: entry.task,
-            workDescription: entry.workDescription,
-            startTime: entry.startTime,
-            endTime: entry.endTime
-          }),
+          body: JSON.stringify(payload),
         });
       }
       if (!res.ok) {
@@ -177,7 +205,17 @@ const Timesheets = () => {
         // Fallback: just use the last entry
         return newEntry || updatedTimesheet.entries[updatedTimesheet.entries.length - 1];
       } else {
-        setTimesheet(updatedTimesheet);
+        // Instead of replacing the whole timesheet, update only the relevant entry if possible
+        setTimesheet(ts => {
+          const normUpdated = normalizeTimesheetTasks(updatedTimesheet);
+          if (!ts || !ts.entries) return normUpdated;
+          // Find the updated entry by _id
+          const updatedEntry = normUpdated.entries.find(e => e._id === entry._id);
+          if (!updatedEntry) return normUpdated;
+          // Deep clone all entries, replace only the relevant one
+          const newEntries = ts.entries.map(e => e._id === entry._id ? JSON.parse(JSON.stringify(updatedEntry)) : JSON.parse(JSON.stringify(e)));
+          return { ...ts, ...normUpdated, entries: newEntries };
+        });
       }
     } catch (error) {
       toast.error(error.message);
@@ -189,28 +227,43 @@ const Timesheets = () => {
   const defaultEnd = '10:00 AM';
 
   const handleAddTimeslot = async () => {
-    // Add a new unsaved entry to the timesheet UI
     if (!timesheet) return;
-    const tempId = `temp-${Date.now()}`;
-    const newEntry = {
-      _id: tempId,
-      task: '',
-      workDescription: '',
-      startTime: to24Hour(defaultStart),
-      endTime: to24Hour(defaultEnd),
-      isNew: true
-    };
-    setTimesheet({
-      ...timesheet,
-      entries: [...timesheet.entries, newEntry]
-    });
-    setEntryTimeParts({
-      ...entryTimeParts,
-      [tempId]: {
-        start: split24Hour(to24Hour(defaultStart)),
-        end: split24Hour(to24Hour(defaultEnd))
+    try {
+      const payload = {
+        taskId: '',
+        manualTaskName: '',
+        workDescription: '',
+        startTime: to24Hour(defaultStart),
+        endTime: to24Hour(defaultEnd)
+      };
+      const res = await fetch(`${API_BASE_URL}/api/timesheets/add-entry`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to add timeslot');
       }
-    });
+      const updatedTimesheet = await res.json();
+      setTimesheet(normalizeTimesheetTasks(updatedTimesheet));
+      // Update entryTimeParts for the new entry
+      if (updatedTimesheet.entries && updatedTimesheet.entries.length > 0) {
+        const lastEntry = updatedTimesheet.entries[updatedTimesheet.entries.length - 1];
+        setEntryTimeParts(parts => ({
+          ...parts,
+          [lastEntry._id]: {
+            start: split24Hour(lastEntry.startTime),
+            end: split24Hour(lastEntry.endTime)
+          }
+        }));
+      }
+    } catch (error) {
+      toast.error(error.message);
+    }
   };
 
   const formatTime = (minutes) => `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
@@ -300,7 +353,7 @@ const Timesheets = () => {
         throw new Error(errorData.message || 'Failed to delete entry');
       }
       const updatedTimesheet = await res.json();
-      setTimesheet(updatedTimesheet);
+      setTimesheet(normalizeTimesheetTasks(updatedTimesheet));
       toast.success('Timeslot deleted!');
     } catch (error) {
       toast.error(error.message);
@@ -421,10 +474,18 @@ const Timesheets = () => {
         )}
         {/* Timeslot Entries */}
         <div className="space-y-4 overflow-x-auto scrollbar-hide">
-          {[...(timesheet?.entries || [])].slice().reverse().map((entry) => {
+          {[...(timesheet?.entries || [])].map((entry) => {
             let taskValue = '';
             if (entry?.task) {
-              taskValue = typeof entry.task === 'object' && entry.task !== null ? entry.task._id : entry.task;
+              if (typeof entry.task === 'object' && entry.task !== null && entry.task._id) {
+                taskValue = entry.task._id;
+              } else if (typeof entry.task === 'string') {
+                taskValue = entry.task;
+              } else {
+                taskValue = '';
+              }
+            } else {
+              taskValue = '';
             }
             const key = entry._id;
             const startParts = (entryTimeParts[key] && entryTimeParts[key].start) || split24Hour(entry.startTime);
@@ -444,9 +505,6 @@ const Timesheets = () => {
                 // Prepare entry for saving
                 const updatedEntry = { ...entry, task: value };
                 delete updatedEntry.isNew;
-                if (typeof updatedEntry._id === 'string' && updatedEntry._id.startsWith('temp-')) {
-                  delete updatedEntry._id;
-                }
                 try {
                   const saved = await saveEntry({
                     ...updatedEntry,
@@ -556,6 +614,7 @@ const Timesheets = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Task
                       </label>
+                      {/* Always show dropdown for task selection */}
                       <select
                         value={taskValue}
                         onChange={handleTaskChange}
@@ -563,21 +622,17 @@ const Timesheets = () => {
                         disabled={isSaving || isLocked}
                       >
                         <option value="">Select task</option>
+                        <option value="internal-works">Internal Works</option>
                         {/* Build dropdown options: all allowed tasks, plus the selected one if missing */}
                         {(() => {
-                          // tasks: allowed tasks for this user
-                          // entry.task: currently selected task (could be object or id)
                           const selectedTaskId = typeof entry.task === 'object' && entry.task !== null ? entry.task._id : entry.task;
                           const taskIds = tasks.map(t => t._id);
                           let options = [...tasks];
-                          // If selected task is not in allowed list, add it
-                          if (selectedTaskId && !taskIds.includes(selectedTaskId)) {
-                            // Try to find the full task object from previous entries or fallback
+                          if (selectedTaskId && !taskIds.includes(selectedTaskId) && selectedTaskId !== 'internal-works') {
                             let selectedTaskObj = null;
                             if (entry.task && typeof entry.task === 'object') {
                               selectedTaskObj = entry.task;
                             } else if (timesheet && timesheet.entries) {
-                              // Look for the task in other entries
                               for (const e of timesheet.entries) {
                                 if (e.task && typeof e.task === 'object' && e.task._id === selectedTaskId) {
                                   selectedTaskObj = e.task;
@@ -585,18 +640,15 @@ const Timesheets = () => {
                                 }
                               }
                             }
-                            // Fallback: minimal object
                             if (!selectedTaskObj) {
                               selectedTaskObj = { _id: selectedTaskId, title: '(Old/Completed Task)' };
                             }
                             options = [...options, selectedTaskObj];
                           }
-                          // Remove duplicates by _id
                           const uniqueOptions = Object.values(options.reduce((acc, t) => {
                             acc[t._id] = t;
                             return acc;
                           }, {}));
-                          // Sort: put selected task first if not in allowed, else keep order
                           uniqueOptions.sort((a, b) => {
                             if (a._id === selectedTaskId) return -1;
                             if (b._id === selectedTaskId) return 1;

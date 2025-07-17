@@ -56,8 +56,9 @@ const DashboardLayout = ({ children }) => {
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
-          { id: 'clients', label: 'Clients', icon: BuildingOfficeIcon, path: '/dashboard/clients' },
-          { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' }
+          { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
+          { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' },
+          { id: 'clients', label: 'Clients', icon: BuildingOfficeIcon, path: '/dashboard/clients' }
         );
         break;
       case 'Team Head':
@@ -65,12 +66,11 @@ const DashboardLayout = ({ children }) => {
           { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon, path: '/dashboard' },
           { id: 'received-tasks', label: 'Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
           // { id: 'assigned-tasks', label: 'Task Assigned By Me', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' }, // HIDDEN TEMPORARILY
-          { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
+          { id: 'timesheets', label: 'Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
-          { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' },
-          { id: 'clients', label: 'Clients', icon: BuildingOfficeIcon, path: '/dashboard/clients' }
+          { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' }
         );
         break;
       case 'Fresher':

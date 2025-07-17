@@ -214,7 +214,7 @@ const Dashboard = () => {
       setLoading(true);
       setError(null);
       let endpoint = '';
-      if (user.role === 'Admin' || user.role === 'Team Head' || user.role === 'Senior') {
+      if (user.role === 'Admin' || user.role === 'Senior' || user.role === 'Team Head') {
         endpoint = 'tasks/all';
       } else {
         endpoint = 'tasks';

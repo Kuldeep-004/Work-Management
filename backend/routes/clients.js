@@ -69,7 +69,7 @@ router.delete('/:id', protect, async (req, res) => {
     }
 
     // Check if user has permission to delete
-    if (!['Admin', 'Team Head', 'Senior'].includes(req.user.role)) {
+    if (!['Admin', 'Senior', 'Team Head'].includes(req.user.role)) {
       return res.status(403).json({ msg: 'Not authorized to delete clients' });
     }
 
@@ -131,7 +131,7 @@ router.delete('/groups/:id', protect, async (req, res) => {
       return res.status(404).json({ msg: 'Client group not found' });
     }
     // Check if user has permission to delete
-    if (!['Admin', 'Team Head', 'Senior'].includes(req.user.role)) {
+    if (!['Admin', 'Senior', 'Team Head'].includes(req.user.role)) {
       return res.status(403).json({ msg: 'Not authorized to delete client groups' });
     }
     // Delete all clients in this group

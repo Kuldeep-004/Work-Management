@@ -230,16 +230,19 @@ router.get('/all', protect, async (req, res) => {
         .populate('guides', 'firstName lastName photo')
         .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
         .sort({ createdAt: -1 });
-    } else if (req.user.role === 'Team Head') {
-      // Team Head: see own assigned/received tasks and all tasks assigned by/assigned to any Senior
-      // Get all Seniors
-      const seniors = await User.find({ role: 'Senior', isEmailVerified: true }).select('_id');
-      const seniorIds = seniors.map(u => u._id.toString());
-      seniorIds.push(req.user._id.toString()); // include self
+    } else if (req.user.role === 'Senior') {
+      // Senior: see own assigned/received tasks and all tasks assigned to/assigned by Freshers of their team
+      if (!req.user.team) {
+        return res.status(400).json({ message: 'Senior user does not have a team assigned' });
+      }
+      // Get all Freshers in the same team
+      const freshers = await User.find({ team: req.user.team, role: 'Fresher', isEmailVerified: true }).select('_id');
+      const fresherIds = freshers.map(u => u._id.toString());
+      fresherIds.push(req.user._id.toString()); // include self
       tasks = await Task.find({
         $or: [
-          { assignedTo: { $in: seniorIds } },
-          { assignedBy: { $in: seniorIds } }
+          { assignedTo: { $in: fresherIds } },
+          { assignedBy: { $in: fresherIds } }
         ],
         verificationStatus: { $ne: 'pending' }
       })
@@ -255,19 +258,16 @@ router.get('/all', protect, async (req, res) => {
         .populate('guides', 'firstName lastName photo')
         .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
         .sort({ createdAt: -1 });
-    } else if (req.user.role === 'Senior') {
-      // Senior: see own assigned/received tasks and all tasks assigned to/assigned by Freshers of their team
-      if (!req.user.team) {
-        return res.status(400).json({ message: 'Senior user does not have a team assigned' });
-      }
-      // Get all Freshers in the same team
-      const freshers = await User.find({ team: req.user.team, role: 'Fresher', isEmailVerified: true }).select('_id');
-      const fresherIds = freshers.map(u => u._id.toString());
-      fresherIds.push(req.user._id.toString()); // include self
+    } else if (req.user.role === 'Team Head') {
+      // Team Head: see own assigned/received tasks and all tasks assigned by/assigned to any Senior
+      // Get all Seniors
+      const seniors = await User.find({ role: 'Senior', isEmailVerified: true }).select('_id');
+      const seniorIds = seniors.map(u => u._id.toString());
+      seniorIds.push(req.user._id.toString()); // include self
       tasks = await Task.find({
         $or: [
-          { assignedTo: { $in: fresherIds } },
-          { assignedBy: { $in: fresherIds } }
+          { assignedTo: { $in: seniorIds } },
+          { assignedBy: { $in: seniorIds } }
         ],
         verificationStatus: { $ne: 'pending' }
       })
@@ -1430,11 +1430,11 @@ router.get('/received/completed', protect, async (req, res) => {
 // Get dashboard tasks for Head (see all except tasks involving Admins or other Heads)
 router.get('/head-dashboard', protect, async (req, res) => {
   try {
-    if (req.user.role !== 'Team Head') {
-      return res.status(403).json({ message: 'Only Team Heads can access this endpoint' });
+    if (req.user.role !== 'Senior') {
+      return res.status(403).json({ message: 'Only Seniors can access this endpoint' });
     }
-    // Get all users who are not Admin or Team Head
-    const users = await User.find({ role: { $nin: ['Admin', 'Team Head'] } }).select('_id');
+    // Get all users who are not Admin or Senior
+    const users = await User.find({ role: { $nin: ['Admin', 'Senior'] } }).select('_id');
     const userIds = users.map(u => u._id.toString());
     // Include self
     userIds.push(req.user._id.toString());
@@ -1462,11 +1462,11 @@ router.get('/head-dashboard', protect, async (req, res) => {
 // Get dashboard tasks for Senior (see all tasks for their team members and self)
 router.get('/team-head-dashboard', protect, async (req, res) => {
   try {
-    if (req.user.role !== 'Senior') {
-      return res.status(403).json({ message: 'Only Seniors can access this endpoint' });
+    if (req.user.role !== 'Team Head') {
+      return res.status(403).json({ message: 'Only Team Heads can access this endpoint' });
     }
     if (!req.user.team) {
-      return res.status(400).json({ message: 'Senior user does not have a team assigned' });
+      return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
     }
     // Find all users in the same team
     const teamUsers = await User.find({ team: req.user.team, isEmailVerified: true }).select('_id');

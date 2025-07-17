@@ -316,11 +316,11 @@ router.get('/subordinate/:userId/:date', protect, async (req, res) => {
       case 'Admin':
         hasPermission = true;
         break;
-      case 'Team Head':
-        hasPermission = subordinate.role === 'Senior';
-        break;
       case 'Senior':
-        // ... logic for Senior ...
+        hasPermission = subordinate.role === 'Team Head';
+        break;
+      case 'Team Head':
+        // ... logic for Team Head ...
         break;
     }
     

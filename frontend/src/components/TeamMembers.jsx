@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import defaultProfile from '../assets/avatar.jpg';
 import { API_BASE_URL } from '../apiConfig';
+import { ChevronDownIcon, ChevronUpIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 const TeamMembers = () => {
   const { user } = useAuth();
@@ -12,6 +13,11 @@ const TeamMembers = () => {
   const [error, setError] = useState(null);
   const [showAddTeamModal, setShowAddTeamModal] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
+  const [expandedTeams, setExpandedTeams] = useState({});
+  const [editingTeam, setEditingTeam] = useState(null);
+  const [editedTeamName, setEditedTeamName] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState({ show: false, teamName: '' });
+  const gridRef = useRef(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -35,13 +41,9 @@ const TeamMembers = () => {
 
         const usersData = await usersRes.json();
         const teamsData = await teamsRes.json();
-        
-        // Validate the data structure
         if (!Array.isArray(usersData) || !Array.isArray(teamsData)) {
           throw new Error('Invalid data format received');
         }
-
-        // Filter out any invalid user objects
         const validUsers = usersData.filter(member => 
           member && 
           typeof member === 'object' && 
@@ -49,123 +51,137 @@ const TeamMembers = () => {
           member.lastName && 
           member.email
         );
-
         setUsers(validUsers);
         setTeams(teamsData);
         setError(null);
       } catch (error) {
-        console.error('Error fetching data:', error);
         setError(error.message);
         toast.error('Failed to fetch team members');
       } finally {
         setLoading(false);
       }
     };
-
     if (user && user.token) {
       fetchData();
     }
   }, [user]);
 
-  // Function to group users by their team
+  useEffect(() => {
+    if (Object.values(expandedTeams).some(Boolean)) {
+      const handleClickOutside = (event) => {
+        if (gridRef.current && !gridRef.current.contains(event.target)) {
+          setExpandedTeams({});
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [expandedTeams]);
+
+  // Group users by team (restore old logic)
   const groupUsersByTeam = (usersArray) => {
-    // First, create an object with all teams (including empty ones)
     const allTeams = teams.reduce((acc, team) => {
       acc[team.name] = [];
       return acc;
     }, {
-      'Admin': [], // Add Admin team
-      'Team Head': [], // Add Team Head section
-      Senior: [],
-      Fresher: [],
+      'Admin': [],
+      'Team Head': [],
+      'Senior': [],
+      'Fresher': [],
     });
-
-    // Then populate the teams with their members
     usersArray.forEach(user => {
-      let teamName;
-      
-      // Handle admin users and head users
       if (user.role === 'Admin') {
-        teamName = 'Admin';
+        allTeams['Admin'].push(user);
       } else if (user.role === 'Team Head') {
-        teamName = 'Team Head';
+        allTeams['Team Head'].push(user);
       } else if (user.role === 'Senior') {
-        teamName = 'Senior';
-      } else if (user.team) {
-        // For other users, check their team assignment
-        const userTeam = teams.find(t => t._id === user.team);
-        if (userTeam) {
-          teamName = userTeam.name;
-        }
-      }
-
-      // Only add user to team if they have a valid team assignment or are Admin/Head
-      if (teamName && allTeams[teamName]) {
-        allTeams[teamName].push(user);
+        allTeams['Senior'].push(user);
+      } else if (user.role === 'Fresher') {
+        allTeams['Fresher'].push(user);
       }
     });
-
+    teams.forEach(team => {
+      if (!['Admin', 'Team Head', 'Senior', 'Fresher'].includes(team.name)) {
+        allTeams[team.name] = usersArray.filter(user => user.team === team._id);
+      }
+    });
     return allTeams;
   };
 
-  const handleAddTeam = async (e) => {
-    e.preventDefault();
+  const groupedUsers = groupUsersByTeam(users);
+  const mainTeams = ['Admin', 'Team Head', 'Senior', 'Fresher'];
+  const otherTeams = Object.keys(groupedUsers).filter(teamName => !mainTeams.includes(teamName));
+
+  // Sort users in a team
+  const sortTeamUsers = (users) => {
+    const order = { 'Team Head': 1, 'Senior': 2, 'Fresher': 3 };
+    return [...users].sort((a, b) => {
+      const aOrder = order[a.role] || 99;
+      const bOrder = order[b.role] || 99;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return (a.firstName + a.lastName).localeCompare(b.firstName + b.lastName);
+    });
+  };
+
+  const startEditingTeam = (teamName) => {
+    setEditingTeam(teamName);
+    setEditedTeamName(teamName);
+  };
+  const cancelEditingTeam = () => {
+    setEditingTeam(null);
+    setEditedTeamName('');
+  };
+  const confirmDeleteTeam = (teamName) => {
+    setDeleteConfirm({ show: true, teamName });
+  };
+  const cancelDeleteTeam = () => {
+    setDeleteConfirm({ show: false, teamName: '' });
+  };
+
+  // For static teams, only one can be open at a time
+  const handleStaticTeamToggle = (teamName) => {
+    setExpandedTeams(prev => {
+      const newState = {};
+      if (!prev[teamName]) {
+        newState[teamName] = true;
+      }
+      return newState;
+    });
+  };
+
+  // For custom teams, allow multiple open
+  const handleCustomTeamToggle = (teamName) => {
+    setExpandedTeams(prev => ({ ...prev, [teamName]: !prev[teamName] }));
+  };
+
+  // Save edited team name for custom teams
+  const handleSaveEditTeam = async (oldName) => {
+    const team = teams.find(t => t.name === oldName);
+    if (!team) {
+      toast.error('Team not found');
+      return;
+    }
     try {
-      const response = await fetch(`${API_BASE_URL}/api/teams`, {
-        method: 'POST',
+      const response = await fetch(`${API_BASE_URL}/api/teams/${team._id}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${user.token}`,
         },
-        body: JSON.stringify({ name: newTeamName }),
+        body: JSON.stringify({ name: editedTeamName }),
       });
-
       if (!response.ok) {
-        throw new Error('Failed to create team');
+        throw new Error('Failed to update team name');
       }
-
-      const newTeam = await response.json();
-      // Update teams state with the new team
-      setTeams(prevTeams => [...prevTeams, newTeam]);
-      setShowAddTeamModal(false);
-      setNewTeamName('');
-      toast.success('Team created successfully');
+      const updatedTeam = await response.json();
+      setTeams(prev => prev.map(t => t._id === updatedTeam._id ? updatedTeam : t));
+      setEditingTeam(null);
+      setEditedTeamName('');
+      toast.success('Team name updated');
     } catch (error) {
       toast.error(error.message);
     }
   };
-
-  const handleDeleteTeam = async (teamName) => {
-    try {
-      const team = teams.find(t => t.name === teamName);
-      if (!team) {
-        toast.error('Team not found');
-        return;
-      }
-      const response = await fetch(`${API_BASE_URL}/api/teams/${team._id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to delete team');
-      }
-      setTeams(prev => prev.filter(t => t._id !== team._id));
-      toast.success('Team deleted successfully');
-    } catch (error) {
-      toast.error(error.message);
-    }
-  };
-
-  const groupedUsers = groupUsersByTeam(users);
-
-  // Sort teams to show Admin team first, then other teams alphabetically
-  const sortedTeamEntries = Object.entries(groupedUsers).sort(([teamA], [teamB]) => {
-    if (teamA === 'Admin') return -1;
-    if (teamB === 'Admin') return 1;
-    return teamA.localeCompare(teamB);
-  });
 
   if (loading) {
     return (
@@ -198,13 +214,13 @@ const TeamMembers = () => {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Team Members</h2>
+    <div className="p-8 min-h-screen bg-[#f8f9fa]">
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-3xl font-semibold text-gray-900 tracking-tight">Members</h2>
         {user?.role === 'Admin' && (
           <button
             onClick={() => setShowAddTeamModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg shadow-sm hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 text-sm font-medium"
           >
             Add Team
           </button>
@@ -252,48 +268,166 @@ const TeamMembers = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {sortedTeamEntries.map(([teamName, members]) => (
-          <div key={teamName} className="bg-white rounded-lg shadow-md overflow-hidden">
-            <div className="w-full flex justify-between items-center px-6 py-4 text-lg font-semibold text-gray-800 bg-gray-50 rounded-t-lg">
-              <span>{teamName} ({members.length})</span>
-              {user?.role === 'Admin' && teamName !== 'Admin' && teamName !== 'Team Head' && members.length === 0 && (
-                <button
-                  onClick={() => handleDeleteTeam(teamName)}
-                  className="ml-4 px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500"
-                >
-                  Delete Team
-                </button>
+      {/* Main 4 Teams Row */}
+      <div ref={gridRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        {mainTeams.map((teamName) => {
+          const members = groupedUsers[teamName] || [];
+          const isExpanded = expandedTeams[teamName] || false;
+          return (
+            <div key={teamName} className="relative">
+              <button
+                onClick={() => handleStaticTeamToggle(teamName)}
+                className={`w-full flex justify-between items-center px-4 py-3 text-sm font-medium text-gray-800 bg-white border border-gray-200 rounded-xl shadow-sm transition-all duration-150 ${isExpanded ? 'ring-2 ring-blue-100' : 'hover:shadow-md hover:bg-gray-50'}`}
+                style={{ minHeight: '48px' }}
+              >
+                <span>{teamName} <span className="text-gray-400 font-normal">({members.length})</span></span>
+                {isExpanded ? (
+                  <ChevronUpIcon className="w-5 h-5 text-gray-400" />
+                ) : (
+                  <ChevronDownIcon className="w-5 h-5 text-gray-400" />
+                )}
+              </button>
+              {isExpanded && (
+                <div className="absolute left-0 top-full w-full z-20 bg-white border border-gray-200 shadow-xl rounded-xl mt-2 max-h-80 overflow-y-auto animate-fadeIn p-2">
+                  {members.length > 0 ? (
+                    <div className="space-y-1">
+                      {sortTeamUsers(members).map((member) => (
+                        <div
+                          key={member._id}
+                          className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <img 
+                            src={member.photo?.url || defaultProfile} 
+                            alt={`${member.firstName} ${member.lastName}`}
+                            className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-sm font-medium text-gray-900 truncate">
+                              {member.firstName} {member.lastName}
+                            </h4>
+                            <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                            <p className="text-xs text-gray-400">{member.role}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-400 text-sm text-center py-4">No members in this team</p>
+                  )}
+                </div>
               )}
             </div>
-            <div className="border-t border-gray-200 p-4">
-              <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-1 gap-4">
-                {members.map((member) => (
-                  <div
-                    key={member._id}
-                    className="bg-gray-50 rounded-lg p-4 shadow-sm"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <img 
-                        src={member.photo?.url || defaultProfile} 
-                        alt={`${member.firstName} ${member.lastName}`}
-                        className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-                      />
-                      <div>
-                        <h4 className="text-md font-semibold text-gray-800">
-                          {member.firstName} {member.lastName}
-                        </h4>
-                        <p className="text-sm text-gray-600 break-words">{member.email}</p>
-                        <p className="text-xs text-gray-500 break-words">Role: {member.role}</p>
+          );
+        })}
+      </div>
+      {/* Other Teams */}
+      {otherTeams.length > 0 && (
+        <div className="mt-2">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4 tracking-tight">Teams</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {otherTeams.map((teamName) => {
+              const members = groupedUsers[teamName] || [];
+              const isExpanded = expandedTeams[teamName] || false;
+              const isEditing = editingTeam === teamName;
+              return (
+                <div key={teamName} className="relative">
+                  <div className="w-full flex justify-between items-center px-4 py-3 text-sm font-medium text-gray-800 bg-white border border-gray-200 rounded-xl shadow-sm transition-all duration-150 hover:shadow-md hover:bg-gray-50" style={{ minHeight: '48px' }}>
+                    {isEditing ? (
+                      <div className="flex items-center gap-1 w-full">
+                        <input
+                          type="text"
+                          value={editedTeamName}
+                          autoFocus
+                          onChange={e => setEditedTeamName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleSaveEditTeam(teamName);
+                            if (e.key === 'Escape') cancelEditingTeam();
+                          }}
+                          onBlur={cancelEditingTeam}
+                          className="w-full max-w-[120px] rounded px-2 py-1 border border-blue-300 bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-400 text-sm font-medium text-gray-900 transition"
+                          style={{ minWidth: 0 }}
+                          placeholder="Team name"
+                        />
+                        <button
+                          onClick={cancelEditingTeam}
+                          className="text-gray-400 hover:text-gray-600 p-1 rounded transition flex items-center justify-center"
+                          tabIndex={-1}
+                          type="button"
+                          aria-label="Cancel"
+                          style={{ height: '24px', width: '24px' }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l8 8M6 14L14 6" />
+                          </svg>
+                        </button>
                       </div>
-                    </div>
+                    ) : (
+                      <span
+                        onClick={() => handleCustomTeamToggle(teamName)}
+                        className="flex-1 cursor-pointer truncate"
+                      >
+                        {teamName} <span className="text-gray-400 font-normal">({members.length})</span>
+                      </span>
+                    )}
+                    {user?.role === 'Admin' && (
+                      <div className="flex items-center space-x-2">
+                        {!isEditing ? (
+                          <>
+                            <button onClick={() => { setEditingTeam(teamName); setEditedTeamName(teamName); }} className="text-blue-500 hover:text-blue-700"><PencilIcon className="w-5 h-5" /></button>
+                            <button onClick={() => confirmDeleteTeam(teamName)} className="text-red-500 hover:text-red-700"><TrashIcon className="w-5 h-5" /></button>
+                          </>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
+                  {isExpanded && (
+                    <div className="absolute left-0 top-full w-full z-20 bg-white border border-gray-200 shadow-xl rounded-xl mt-2 max-h-80 overflow-y-auto animate-fadeIn p-2">
+                      {members.length > 0 ? (
+                        <div className="space-y-1">
+                          {sortTeamUsers(members).map((member) => (
+                            <div
+                              key={member._id}
+                              className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              <img 
+                                src={member.photo?.url || defaultProfile} 
+                                alt={`${member.firstName} ${member.lastName}`}
+                                className="w-7 h-7 rounded-full object-cover border border-gray-200"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <h4 className="text-xs font-medium text-gray-900 truncate">
+                                  {member.firstName} {member.lastName}
+                                </h4>
+                                <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                                <p className="text-xs text-gray-400">{member.role}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-400 text-xs text-center py-4">No members in this team</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm.show && (
+        <div className="fixed inset-0 flex items-center justify-center backdrop-blur-sm bg-gray-600/30 z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <h4 className="text-lg font-semibold mb-4">Delete Team</h4>
+            <p>Are you sure you want to delete the team <span className="font-bold">{deleteConfirm.teamName}</span>?</p>
+            <div className="flex justify-end space-x-3 mt-6">
+              <button onClick={cancelDeleteTeam} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">Cancel</button>
+              <button onClick={() => handleDeleteTeam(deleteConfirm.teamName)} className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md">Delete</button>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

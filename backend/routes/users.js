@@ -198,17 +198,17 @@ router.put('/:userId/approval', protect, async (req, res) => {
       }
 
       // Validate role
-      if (!['Fresher', 'Team Head', 'Senior'].includes(role)) {
+      if (!['Fresher', 'Senior', 'Team Head'].includes(role)) { // swapped
         return res.status(400).json({ message: 'Invalid role' });
       }
 
-      // For Team Head role, set team to null
-      if (role === 'Team Head') {
+      // For Senior role, set team to null
+      if (role === 'Senior') { // swapped
         user.team = null;
       } else {
-        // For non-Team Head roles, require team
+        // For non-Senior roles, require team
         if (!team) {
-          return res.status(400).json({ message: 'Team is required for non-Team Head roles' });
+          return res.status(400).json({ message: 'Team is required for non-Senior roles' });
         }
 
         // Validate team
@@ -325,17 +325,15 @@ router.patch('/:userId/update-fields', protect, async (req, res) => {
 
     if (role) {
       updatedFields.role = role;
-      // If role is Team Head, remove team
-      if (role === 'Team Head') {
+      // If role is Senior, remove team
+      if (role === 'Senior') { // swapped
         updatedFields.team = null;
       }
     }
 
     // Handle team update
     if (team !== undefined) {
-      if (user.role === 'Team Head') {
-        return res.status(400).json({ message: 'Team Head role cannot be assigned to a team' });
-      }
+      // No restriction for Team Head or Senior
       updatedFields.team = team;
     }
 

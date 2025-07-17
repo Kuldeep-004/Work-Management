@@ -116,8 +116,8 @@ const SubordinateTimesheets = () => {
   const getRoleColor = (role) => {
     switch (role) {
       case 'Admin': return 'bg-red-100 text-red-800';
-      case 'Team Head': return 'bg-purple-100 text-purple-800';
-      case 'Senior': return 'bg-blue-100 text-blue-800';
+      case 'Senior': return 'bg-purple-100 text-purple-800'; // swapped
+      case 'Team Head': return 'bg-blue-100 text-blue-800'; // swapped
       case 'Fresher': return 'bg-green-100 text-green-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -127,10 +127,10 @@ const SubordinateTimesheets = () => {
     switch (user.role) {
       case 'Admin':
         return 'Viewing all users\' timesheets';
-      case 'Team Head':
-        return 'Viewing Team Head\'s timesheets';
       case 'Senior':
-        return 'Viewing Senior\'s timesheets';
+        return 'Viewing Senior\'s timesheets'; // swapped
+      case 'Team Head':
+        return 'Viewing Team Head\'s timesheets'; // swapped
       default:
         return 'No access to subordinate timesheets';
     }
@@ -215,7 +215,7 @@ const SubordinateTimesheets = () => {
       </div>
     );
   }
-  if (!(user.role === 'Admin' || user.role === 'Team Head' || user.role === 'Senior' || (Array.isArray(user.role2) ? user.role2.includes('TimeSheet Verifier') : user.role2 === 'TimeSheet Verifier'))) {
+  if (!(user.role === 'Admin' || user.role === 'Senior' || user.role === 'Team Head' || (Array.isArray(user.role2) ? user.role2.includes('TimeSheet Verifier') : user.role2 === 'TimeSheet Verifier'))) { // swapped
     return (
       <div className="p-8 text-center">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
