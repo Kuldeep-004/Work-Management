@@ -67,6 +67,7 @@ const DashboardLayout = ({ children }) => {
           { id: 'received-tasks', label: 'Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
           // { id: 'assigned-tasks', label: 'Task Assigned By Me', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' }, // HIDDEN TEMPORARILY
           { id: 'timesheets', label: 'Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
+          { id: 'subordinate-timesheets', label: 'Subordinate Timesheets', icon: ClipboardDocumentListIcon, path: '/dashboard/subordinate-timesheets' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
@@ -96,16 +97,18 @@ const DashboardLayout = ({ children }) => {
         );
         break;
     }
-    // Add Subordinate Timesheets link for TimeSheet Verifier (if not already admin)
-    if (Array.isArray(user.role2) ? user.role2.includes('TimeSheet Verifier') : user.role2 === 'TimeSheet Verifier') {
-      if (user.role !== 'Admin') {
-        menuItems.push({
-          id: 'subordinate-timesheets',
-          label: 'Subordinate Timesheets',
-          icon: ClipboardDocumentListIcon,
-          path: '/dashboard/subordinate-timesheets'
-        });
-      }
+    // Add Subordinate Timesheets link for TimeSheet Verifier (if not already admin or team head)
+    if (
+      (Array.isArray(user.role2) ? user.role2.includes('TimeSheet Verifier') : user.role2 === 'TimeSheet Verifier') &&
+      user.role !== 'Admin' &&
+      user.role !== 'Team Head'
+    ) {
+      menuItems.push({
+        id: 'subordinate-timesheets',
+        label: 'Subordinate Timesheets',
+        icon: ClipboardDocumentListIcon,
+        path: '/dashboard/subordinate-timesheets'
+      });
     }
     // Add Task Verification link for Task Verifier (if not already admin)
     if (Array.isArray(user.role2) ? user.role2.includes('Task Verifier') : user.role2 === 'Task Verifier') {

@@ -235,30 +235,38 @@ router.delete('/entry/:entryId', protect, async (req, res) => {
 // Get subordinates' timesheets based on user role hierarchy
 router.get('/subordinates', protect, async (req, res) => {
   try {
-    // Check if user is Admin or Task Verifier (role2 can be array or string)
-    let isTaskVerifier = false;
+    // Check if user is Admin, TimeSheet Verifier, or Team Head
+    let isTimeSheetVerifier = false;
     if (Array.isArray(req.user.role2)) {
-      isTaskVerifier = req.user.role2.includes('Task Verifier');
+      isTimeSheetVerifier = req.user.role2.includes('TimeSheet Verifier');
     } else {
-      isTaskVerifier = req.user.role2 === 'Task Verifier';
+      isTimeSheetVerifier = req.user.role2 === 'TimeSheet Verifier';
     }
-    if (!(req.user.role === 'Admin' || isTaskVerifier)) {
+    const isAdmin = req.user.role === 'Admin';
+    const isTeamHead = req.user.role === 'Team Head';
+    if (!(isAdmin || isTimeSheetVerifier || isTeamHead)) {
       return res.status(403).json({ message: 'Access denied' });
     }
     const { page = 1, limit = 10, startDate, userId } = req.query;
     let query = { status: { $ne: 'rejected' } };
-    // Always get all users except rejected
-    const subordinates = await User.find(query).select('_id firstName lastName email role team');
-    const subordinateIds = subordinates.map(sub => sub._id);
-    // Ensure the current user is in the list
-    const currentUserInList = subordinates.some(sub => sub._id.toString() === req.user._id.toString());
-    if (!currentUserInList) {
-      const me = await User.findById(req.user._id).select('_id firstName lastName email role team');
-      if (me) {
-        subordinates.unshift(me);
-        subordinateIds.unshift(me._id);
+    let subordinates;
+    // Filtering logic for Team Head
+    if (isTeamHead) {
+      if (!req.user.team) {
+        return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
       }
+      // All users in the same team, except self
+      subordinates = await User.find({
+        ...query,
+        team: req.user.team,
+        _id: { $ne: req.user._id },
+        isEmailVerified: true
+      }).select('_id firstName lastName email role team');
+    } else {
+      // Admins and TimeSheet Verifiers: all users except rejected
+      subordinates = await User.find(query).select('_id firstName lastName email role team');
     }
+    const subordinateIds = subordinates.map(sub => sub._id);
     // If specific user is requested, filter to that user only
     const targetUserIds = userId ? [userId] : subordinateIds;
     if (targetUserIds.length === 0) {
@@ -357,12 +365,27 @@ router.get('/subordinate/:userId/:date', protect, async (req, res) => {
 router.get('/subordinates-list', protect, async (req, res) => {
   try {
     let query = { status: { $ne: 'rejected' } };
-    let subordinates = await User.find(query).select('_id firstName lastName email role team');
-    // Ensure current user is included
-    const currentUserInList = subordinates.some(sub => sub._id.toString() === req.user._id.toString());
-    if (!currentUserInList) {
-      const me = await User.findById(req.user._id).select('_id firstName lastName email role team');
-      if (me) subordinates.unshift(me);
+    let subordinates;
+    const isTeamHead = req.user.role === 'Team Head';
+    const isTimeSheetVerifier = Array.isArray(req.user.role2)
+      ? req.user.role2.includes('TimeSheet Verifier')
+      : req.user.role2 === 'TimeSheet Verifier';
+    if (isTeamHead) {
+      if (!req.user.team) {
+        return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
+      }
+      // All users in the same team, except self
+      subordinates = await User.find({
+        ...query,
+        team: req.user.team,
+        _id: { $ne: req.user._id },
+        isEmailVerified: true
+      }).select('_id firstName lastName email role team');
+    } else if (isTimeSheetVerifier || req.user.role === 'Admin') {
+      // Admins and TimeSheet Verifiers: all users except rejected
+      subordinates = await User.find(query).select('_id firstName lastName email role team');
+    } else {
+      subordinates = [];
     }
     res.json(subordinates);
   } catch (error) {
