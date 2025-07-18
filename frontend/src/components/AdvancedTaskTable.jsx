@@ -564,6 +564,10 @@ const AdvancedTaskTable = ({
   const groupField = (columnOrder.includes('priority') && sortBy === 'priority') ? 'priority'
     : (columnOrder.includes('status') && sortBy === 'status') ? 'status'
     : (columnOrder.includes('clientName') && sortBy === 'clientName') ? 'clientName'
+    : (columnOrder.includes('clientGroup') && sortBy === 'clientGroup') ? 'clientGroup'
+    : (columnOrder.includes('workType') && sortBy === 'workType') ? 'workType'
+    : (columnOrder.includes('workDoneBy') && sortBy === 'workDoneBy') ? 'workDoneBy'
+    : (columnOrder.includes('billed') && sortBy === 'billed') ? 'billed'
     : null;
   const shouldGroup = groupField && sortBy !== 'createdAt';
   let groupedTasks = null;
@@ -571,7 +575,35 @@ const AdvancedTaskTable = ({
     let options = {};
     if (groupField === 'priority') PRIORITY_OPTIONS.forEach(opt => options[opt.value] = opt.label);
     if (groupField === 'status') STATUS_OPTIONS.forEach(opt => options[opt.value] = opt.label);
-    groupedTasks = groupTasksBy(tasks, groupField, options);
+    if (groupField === 'billed') {
+      options[true] = 'Yes';
+      options[false] = 'No';
+    }
+    if (groupField === 'workType') {
+      // For workType, group by first type if array, or by value
+      groupedTasks = {};
+      tasks.forEach(task => {
+        let key = Array.isArray(task.workType) ? (task.workType[0] || 'Unspecified') : (task.workType || 'Unspecified');
+        if (!groupedTasks[key]) groupedTasks[key] = [];
+        groupedTasks[key].push(task);
+      });
+    } else if (groupField === 'workDoneBy') {
+      groupedTasks = {};
+      tasks.forEach(task => {
+        let key = task.workDoneBy || 'Unassigned';
+        if (!groupedTasks[key]) groupedTasks[key] = [];
+        groupedTasks[key].push(task);
+      });
+    } else if (groupField === 'billed') {
+      groupedTasks = {};
+      tasks.forEach(task => {
+        let key = task.billed ? 'Yes' : 'No';
+        if (!groupedTasks[key]) groupedTasks[key] = [];
+        groupedTasks[key].push(task);
+      });
+    } else {
+      groupedTasks = groupTasksBy(tasks, groupField, options);
+    }
   }
 
   // After initializing visibleColumns and columnOrder, add this effect:
@@ -1069,7 +1101,8 @@ const AdvancedTaskTable = ({
                               if (colId === 'verificationAssignedTo') {
                                 canEditThisVerifier =
                                   (viewType === 'received' && taskType === 'execution' && !!task.selfVerification)
-                                  || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier);
+                                  || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier)
+                                  || (viewType === 'received' && taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id);
                               }
 
                               // Exclude assignedTo and all already assigned verifiers
@@ -1780,7 +1813,8 @@ const AdvancedTaskTable = ({
                         if (colId === 'verificationAssignedTo') {
                           canEditThisVerifier =
                             (viewType === 'received' && taskType === 'execution' && !!task.selfVerification)
-                            || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier);
+                            || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier)
+                            || (viewType === 'received' && taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id);
                         }
 
                         // Exclude assignedTo and all already assigned verifiers

@@ -914,140 +914,217 @@ const CreateTask = ({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Work Done by <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.workDoneBy}
-                    onChange={e => setFormData({ ...formData, workDoneBy: e.target.value })}
-                    className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    <option value="" disabled>Select option</option>
-                    <option value="First floor">First floor</option>
-                    <option value="Second floor">Second floor</option>
-                    <option value="Both">Both</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Assign To <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-full">
-                      {isDropdownOpen && (
-                        <div className="absolute z-10 w-full bottom-full mb-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
-                          <div className="sticky top-0 bg-white p-2 border-b">
-                            <input
-                              type="text"
-                              placeholder="Search users..."
-                              value={searchTerm}
-                              onChange={(e) => setSearchTerm(e.target.value)}
-                              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                          <div className="py-1">
-                            {filteredUsers.length > 0 ? (
-                              filteredUsers.map((user) => (
-                                <button
-                                  key={user._id}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isMultiUserAssign) {
-                                      handleAssignedToChange(user._id);
-                                    } else {
-                                      setFormData(prev => ({ ...prev, assignedTo: [user._id] }));
-                                      setSelectedUsers([user]);
-                                      setIsDropdownOpen(false);
-                                    }
-                                  }}
-                                  className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${formData.assignedTo.includes(user._id) ? 'bg-blue-50' : ''}`}
-                                >
-                                  <div className="flex items-center">
-                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium mr-3 overflow-hidden">
-                                      <img 
-                                        src={user.photo?.url || defaultProfile} 
-                                        alt={`${user.firstName} ${user.lastName}`}
-                                        className="w-full h-full object-cover"
-                                      />
-                                    </div>
-                                    <div>
-                                      <div className="font-medium text-gray-900">
-                                        {user.firstName} {user.lastName}
+                {/* Assign To and Team Head in a single row, chips absolutely positioned below Assign To */}
+                <div className="md:col-span-2 flex flex-row md:items-end gap-4">
+                  {/* Assign To */}
+                  <div className="flex-1 relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Assign To <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-full">
+                        {isDropdownOpen && (
+                          <div className="absolute z-10 w-full bottom-full mb-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                            <div className="sticky top-0 bg-white p-2 border-b">
+                              <input
+                                type="text"
+                                placeholder="Search users..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </div>
+                            <div className="py-1">
+                              {filteredUsers.length > 0 ? (
+                                filteredUsers.map((user) => (
+                                  <button
+                                    key={user._id}
+                                    type="button"
+                                    onClick={() => {
+                                      if (isMultiUserAssign) {
+                                        handleAssignedToChange(user._id);
+                                      } else {
+                                        setFormData(prev => ({ ...prev, assignedTo: [user._id] }));
+                                        setSelectedUsers([user]);
+                                        setIsDropdownOpen(false);
+                                      }
+                                    }}
+                                    className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${formData.assignedTo.includes(user._id) ? 'bg-blue-50' : ''}`}
+                                  >
+                                    <div className="flex items-center">
+                                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium mr-3 overflow-hidden">
+                                        <img 
+                                          src={user.photo?.url || defaultProfile} 
+                                          alt={`${user.firstName} ${user.lastName}`}
+                                          className="w-full h-full object-cover"
+                                        />
                                       </div>
-                                      <div className="text-sm text-gray-500">{user.group}</div>
+                                      <div>
+                                        <div className="font-medium text-gray-900">
+                                          {user.firstName} {user.lastName}
+                                        </div>
+                                        <div className="text-sm text-gray-500">{user.group}</div>
+                                      </div>
                                     </div>
-                                  </div>
-                                </button>
-                              ))
-                            ) : (
-                              <div className="px-4 py-2 text-gray-500 text-center">No users found</div>
-                            )}
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="px-4 py-2 text-gray-500 text-center">No users found</div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                          className="w-full flex items-center justify-between border rounded-md px-3 py-2 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <span className="text-gray-700">
+                            {selectedUserDisplay}
+                          </span>
+                          <svg
+                            className={`w-5 h-5 text-gray-400 transition-transform ${isDropdownOpen ? 'transform rotate-180' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                        className="w-full flex items-center justify-between border rounded-md px-3 py-2 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        aria-pressed={isMultiUserAssign}
+                        onClick={() => {
+                          setIsMultiUserAssign(v => {
+                            const next = !v;
+                            if (!next && formData.assignedTo.length > 1) {
+                              setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.slice(0, 1) }));
+                              setSelectedUsers(users.filter(u => u._id === formData.assignedTo[0]));
+                            }
+                            return next;
+                          });
+                        }}
+                        className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiUserAssign ? 'bg-blue-500' : 'bg-gray-200'}`}
+                        tabIndex={0}
                       >
-                        <span className="text-gray-700">
-                          {selectedUserDisplay}
-                        </span>
-                        <svg
-                          className={`w-5 h-5 text-gray-400 transition-transform ${isDropdownOpen ? 'transform rotate-180' : ''}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      aria-pressed={isMultiUserAssign}
-                      onClick={() => {
-                        setIsMultiUserAssign(v => {
-                          const next = !v;
-                          if (!next && formData.assignedTo.length > 1) {
-                            setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.slice(0, 1) }));
-                            setSelectedUsers(users.filter(u => u._id === formData.assignedTo[0]));
-                          }
-                          return next;
-                        });
-                      }}
-                      className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiUserAssign ? 'bg-blue-500' : 'bg-gray-200'}`}
-                      tabIndex={0}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiUserAssign ? 'translate-x-5' : 'translate-x-1'}`}
-                      />
-                    </button>
-                    <span className="ml-2 text-xs text-gray-500">Multiple</span>
-                  </div>
-                  {selectedUsers.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {selectedUsers.map(user => (
                         <span
-                          key={user._id}
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiUserAssign ? 'translate-x-5' : 'translate-x-1'}`}
+                        />
+                      </button>
+                      <span className="ml-2 text-xs text-gray-500">Multiple</span>
+                    </div>
+                    {/* Absolutely position chips below dropdown, not affecting Team Head */}
+                    {selectedUsers.length > 0 && (
+                      <div className="absolute left-0 w-full mt-2 flex flex-wrap gap-2 z-10">
+                        {selectedUsers.map(user => (
+                          <span
+                            key={user._id}
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                          >
+                            {user.firstName} {user.lastName}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isMultiUserAssign) {
+                                  setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.filter(id => id !== user._id) }));
+                                  setSelectedUsers(prev => prev.filter(u => u._id !== user._id));
+                                } else {
+                                  setFormData(prev => ({ ...prev, assignedTo: [] }));
+                                  setSelectedUsers([]);
+                                }
+                              }}
+                              className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* Team Head */}
+                  <div className="flex-1 flex flex-col justify-end">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Team Head</label>
+                    <input
+                      type="text"
+                      value={(() => {
+                        // Find unique team heads for selected users
+                        const heads = [];
+                        selectedUsers.forEach(u => {
+                          if (!u.team) return;
+                          const head = users.find(
+                            x => x.team && x.team.toString() === u.team.toString() && x.role === 'Team Head'
+                          );
+                          if (head && !heads.some(h => h._id === head._id)) heads.push(head);
+                        });
+                        if (heads.length === 0) return '';
+                        return heads.map(h => `${h.firstName} ${h.lastName}`).join(', ');
+                      })()}
+                      className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700"
+                      readOnly
+                      placeholder="Team Head will appear here"
+                    />
+                  </div>
+                </div>
+                {/* Work Done by always on its own row, not affected by chips */}
+                <div
+                  className={`md:col-span-2 ${selectedUsers.length > 0 ? 'mt-10' : 'mt-0'}`}
+                >
+                  <div className="w-48 min-w-[160px]">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Work Done by <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.workDoneBy}
+                      onChange={e => setFormData({ ...formData, workDoneBy: e.target.value })}
+                      className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    >
+                      <option value="" disabled>Select option</option>
+                      <option value="First floor">First floor</option>
+                      <option value="Second floor">Second floor</option>
+                      <option value="Both">Both</option>
+                    </select>
+                  </div>
+                </div>
+                {/* Status in one row, Work Type under Status */}
+                <div className="md:col-span-2 mt-2">
+                  <label className="block text-sm font-medium text-gray-700 ">
+                    Status
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows="3"
+                  />
+                </div>
+                <div className="md:col-span-2 mt-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Work Type <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative flex items-center gap-2">
+                    <div
+                      className="w-full border rounded-md px-3 py-2 bg-white flex flex-wrap gap-2 min-h-[42px] cursor-pointer work-type-dropdown"
+                      onClick={() => setIsWorkTypeDropdownOpen(true)}
+                    >
+                      {formData.workType.length === 0 && (
+                        <span className="text-gray-400">Select or search work type...</span>
+                      )}
+                      {formData.workType.map(type => (
+                        <span
+                          key={type}
+                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-400"
                         >
-                          {user.firstName} {user.lastName}
+                          {type}
+                          {formData.workType.includes(type) && <span className="float-right text-blue-600">✔</span>}
                           <button
                             type="button"
-                            onClick={() => {
-                              if (isMultiUserAssign) {
-                                setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.filter(id => id !== user._id) }));
-                                setSelectedUsers(prev => prev.filter(u => u._id !== user._id));
-                              } else {
-                                setFormData(prev => ({ ...prev, assignedTo: [] }));
-                                setSelectedUsers([]);
-                              }
-                            }}
+                            onClick={e => { e.preventDefault(); e.stopPropagation(); handleWorkTypeChange(type); }}
                             className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200"
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1057,129 +1134,80 @@ const CreateTask = ({
                         </span>
                       ))}
                     </div>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 ">
-                  Status
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  rows="3"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Work Type <span className="text-red-500">*</span>
-                </label>
-                <div className="relative flex items-center gap-2">
-                  <div
-                    className="w-full border rounded-md px-3 py-2 bg-white flex flex-wrap gap-2 min-h-[42px] cursor-pointer work-type-dropdown"
-                    onClick={() => setIsWorkTypeDropdownOpen(true)}
-                  >
-                    {formData.workType.length === 0 && (
-                      <span className="text-gray-400">Select or search work type...</span>
-                    )}
-                    {formData.workType.map(type => (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkTypeFormData({ name: '' });
+                        setIsWorkTypeModalOpen(true);
+                        setIsWorkTypeDropdownOpen(false);
+                      }}
+                      className="ml-2 px-3 py-1 rounded-full text-sm bg-gray-100 text-gray-800 border-2 border-gray-200 hover:bg-gray-200 whitespace-nowrap"
+                    >
+                      + New Work Type
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={isMultiWorkTypeAssign}
+                      onClick={() => {
+                        setIsMultiWorkTypeAssign(v => {
+                          const next = !v;
+                          if (!next && formData.workType.length > 1) {
+                            setFormData(prev => ({ ...prev, workType: prev.workType.slice(0, 1) }));
+                          }
+                          return next;
+                        });
+                      }}
+                      className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiWorkTypeAssign ? 'bg-blue-500' : 'bg-gray-200'}`}
+                      tabIndex={0}
+                    >
                       <span
-                        key={type}
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-400"
-                      >
-                        {type}
-                        {formData.workType.includes(type) && <span className="float-right text-blue-600">✔</span>}
-                        <button
-                          type="button"
-                          onClick={e => { e.preventDefault(); e.stopPropagation(); handleWorkTypeChange(type); }}
-                          className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200"
-                        >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </span>
-                    ))}
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiWorkTypeAssign ? 'translate-x-5' : 'translate-x-1'}`}
+                      />
+                    </button>
+                    <span className="ml-2 text-xs text-gray-500">Multiple</span>
+                    {isWorkTypeDropdownOpen && (
+                      <div className="absolute z-20 w-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto work-type-dropdown">
+                        <div className="sticky top-0 bg-white p-2 border-b">
+                          <input
+                            type="text"
+                            placeholder="Search work type..."
+                            value={workTypeSearchTerm}
+                            onChange={e => setWorkTypeSearchTerm(e.target.value)}
+                            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="py-1">
+                          {filteredWorkTypes.length > 0 ? (
+                            filteredWorkTypes.map(type => (
+                              <button
+                                key={type._id}
+                                type="button"
+                                className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 cursor-pointer ${formData.workType.includes(type.name) ? 'bg-blue-50' : ''}`}
+                                onClick={e => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (isMultiWorkTypeAssign) {
+                                    handleWorkTypeChange(type.name);
+                                  } else {
+                                    setFormData(prev => ({ ...prev, workType: [type.name] }));
+                                    setIsWorkTypeDropdownOpen(false);
+                                  }
+                                }}
+                              >
+                                {type.name}
+                                {formData.workType.includes(type.name) && <span className="float-right text-blue-600">✔</span>}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-4 py-2 text-gray-500">No work types found</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWorkTypeFormData({ name: '' });
-                      setIsWorkTypeModalOpen(true);
-                      setIsWorkTypeDropdownOpen(false);
-                    }}
-                    className="ml-2 px-3 py-1 rounded-full text-sm bg-gray-100 text-gray-800 border-2 border-gray-200 hover:bg-gray-200 whitespace-nowrap"
-                  >
-                    + New Work Type
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={isMultiWorkTypeAssign}
-                    onClick={() => {
-                      setIsMultiWorkTypeAssign(v => {
-                        const next = !v;
-                        if (!next && formData.workType.length > 1) {
-                          setFormData(prev => ({ ...prev, workType: prev.workType.slice(0, 1) }));
-                        }
-                        return next;
-                      });
-                    }}
-                    className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiWorkTypeAssign ? 'bg-blue-500' : 'bg-gray-200'}`}
-                    tabIndex={0}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiWorkTypeAssign ? 'translate-x-5' : 'translate-x-1'}`}
-                    />
-                  </button>
-                  <span className="ml-2 text-xs text-gray-500">Multiple</span>
-                  {isWorkTypeDropdownOpen && (
-                    <div className="absolute z-20 w-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto work-type-dropdown">
-                      <div className="sticky top-0 bg-white p-2 border-b">
-                        <input
-                          type="text"
-                          placeholder="Search work type..."
-                          value={workTypeSearchTerm}
-                          onChange={e => setWorkTypeSearchTerm(e.target.value)}
-                          className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          autoFocus
-                        />
-                      </div>
-                      <div className="py-1">
-                        {filteredWorkTypes.length > 0 ? (
-                          filteredWorkTypes.map(type => (
-                            <button
-                              key={type._id}
-                              type="button"
-                              className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 cursor-pointer ${formData.workType.includes(type.name) ? 'bg-blue-50' : ''}`}
-                              onClick={e => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (isMultiWorkTypeAssign) {
-                                  handleWorkTypeChange(type.name);
-                                } else {
-                                  setFormData(prev => ({ ...prev, workType: [type.name] }));
-                                  setIsWorkTypeDropdownOpen(false);
-                                }
-                              }}
-                            >
-                              {type.name}
-                              {formData.workType.includes(type.name) && <span className="float-right text-blue-600">✔</span>}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-4 py-2 text-gray-500">No work types found</div>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
-
               {/* Enhanced File selection section */}
               <div className="border-t pt-4 mt-4">
                 <div className="flex justify-between items-center mb-4">

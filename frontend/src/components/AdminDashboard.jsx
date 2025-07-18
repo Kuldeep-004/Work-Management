@@ -1052,7 +1052,11 @@ const Dashboard = () => {
             <option value="createdAt">Assigned On</option>
             <option value="priority">Priority</option>
             <option value="status">Stages</option>
-            <option value="clientName">Client</option>
+            <option value="clientName">Client Name</option>
+            <option value="clientGroup">Client Group</option>
+            <option value="workType">Work Type</option>
+            <option value="workDoneBy">Work Done</option>
+            <option value="billed">Internal Works</option>
           </select>
           <select
             className="px-4 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[90px] transition-colors"
