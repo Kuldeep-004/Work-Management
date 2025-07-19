@@ -86,38 +86,21 @@ const AdvancedTaskTable = ({
   shouldDisableActions,
   shouldDisableFileActions,
   taskHours = [],
-  visibleColumns: externalVisibleColumns,
-  setVisibleColumns: setExternalVisibleColumns,
+  visibleColumns,
+  setVisibleColumns,
+  columnWidths,
+  setColumnWidths,
+  columnOrder,
+  setColumnOrder,
   storageKeyPrefix = 'advancedtasktable',
   users = [],
   currentUser = null,
   refetchTasks,
   onEditTask,
-  sortBy // <-- add this prop
+  sortBy
 }) => {
   const { user } = useAuth();
   
-  // Column state management
-  const [internalVisibleColumns, setInternalVisibleColumns] = useState(() => {
-    const userId = user?._id || 'guest';
-    const key = `${storageKeyPrefix}_columns_${userId}`;
-    const saved = localStorage.getItem(key);
-    if (saved) return JSON.parse(saved);
-    return ALL_COLUMNS.map(col => col.id);
-  });
-  const visibleColumns = externalVisibleColumns || internalVisibleColumns;
-  const setVisibleColumns = setExternalVisibleColumns || setInternalVisibleColumns;
-
-  const [columnOrder, setColumnOrder] = useState(() => {
-    const userId = user?._id || 'guest';
-    const key = `${storageKeyPrefix}_column_order_${userId}`;
-    const saved = localStorage.getItem(key);
-    if (saved) return JSON.parse(saved);
-    return ALL_COLUMNS.map(col => col.id);
-  });
-
-  const [columnWidths, setColumnWidths] = useState({});
-
   // Drag and drop state
   const [draggedColumn, setDraggedColumn] = useState(null);
   const [dragOverColumn, setDragOverColumn] = useState(null);
@@ -267,10 +250,10 @@ const AdvancedTaskTable = ({
     const deltaX = e.clientX - resizeStartXRef.current;
     const newWidth = Math.max(80, resizeStartWidthRef.current + deltaX);
     
-    setColumnWidths(prev => ({
-      ...prev,
+    setColumnWidths({
+      ...columnWidths,
       [resizingColumnRef.current]: newWidth
-    }));
+    });
     
     e.preventDefault();
   };
@@ -297,98 +280,6 @@ const AdvancedTaskTable = ({
   const getOrderedVisibleColumns = () => {
     return columnOrder.filter(colId => visibleColumns.includes(colId));
   };
-
-  // Load column widths from localStorage
-  useEffect(() => {
-    const userId = user?._id || 'guest';
-    const key = `${storageKeyPrefix}_column_widths_${userId}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          setColumnWidths(parsed);
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-    if (!saved) {
-      const defaultWidths = {};
-      ALL_COLUMNS.forEach(col => {
-        defaultWidths[col.id] = col.defaultWidth;
-      });
-      setColumnWidths(defaultWidths);
-    }
-  }, [user?._id]);
-
-  // Save to localStorage on every change
-  useEffect(() => {
-    const userId = user?._id || 'guest';
-    const key = `${storageKeyPrefix}_column_widths_${userId}`;
-    if (columnWidths && Object.keys(columnWidths).length > 0) {
-      localStorage.setItem(key, JSON.stringify(columnWidths));
-    }
-  }, [columnWidths, user]);
-
-  // Persist column order to localStorage whenever it changes
-  useEffect(() => {
-    const userId = user?._id || 'guest';
-    const key = `${storageKeyPrefix}_column_order_${userId}`;
-    if (columnOrder && columnOrder.length > 0) {
-      localStorage.setItem(key, JSON.stringify(columnOrder));
-    }
-  }, [columnOrder, user]);
-
-  // Persist visible columns to localStorage
-  useEffect(() => {
-    const userId = user?._id || 'guest';
-    const key = `${storageKeyPrefix}_columns_${userId}`;
-    localStorage.setItem(key, JSON.stringify(visibleColumns));
-  }, [visibleColumns, user]);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (priorityDropdownRef.current && !priorityDropdownRef.current.contains(event.target)) {
-        setEditingPriorityTaskId(null);
-      }
-      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target)) {
-        setEditingStatusTaskId(null);
-      }
-    }
-    if (editingPriorityTaskId || editingStatusTaskId) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [editingPriorityTaskId, editingStatusTaskId]);
-
-  // Add effect to close verifier dropdown on outside click (fix: use capture phase and check for null ref)
-  useEffect(() => {
-    if (!editingVerifierTaskId) return;
-    function handleClickOutside(event) {
-      if (verifierDropdownRef.current && !verifierDropdownRef.current.contains(event.target)) {
-        setEditingVerifierTaskId(null);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside, true); // use capture phase
-    return () => document.removeEventListener('mousedown', handleClickOutside, true);
-  }, [editingVerifierTaskId]);
-
-  // Add at the top, after other useRef/useState:
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (openGuideDropdownTaskId && guideDropdownRef.current && !guideDropdownRef.current.contains(event.target)) {
-        setOpenGuideDropdownTaskId(null);
-      }
-    }
-    if (openGuideDropdownTaskId) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [openGuideDropdownTaskId]);
 
   const handleTaskClick = (task) => {
     setSelectedTask(task);
@@ -661,33 +552,36 @@ const AdvancedTaskTable = ({
                           background: dragOverColumn === colId ? '#f0f6ff' : 'white',
                           boxShadow: dragOverColumn === colId ? 'inset 2px 0 0 0 #60a5fa' : undefined,
                           borderBottom: '1px solid #e5e7eb',
+                          position: 'relative',
                         }}
                         draggable
                         onDragStart={(e) => handleDragStart(e, colId)}
                         onDragOver={(e) => handleDragOver(e, colId)}
                         onDragLeave={handleDragLeave}
                         onDrop={(e) => handleDrop(e, colId)}
-                        onMouseMove={(e) => {
-                          if (isLast) return;
-                          const th = e.currentTarget;
-                          const rect = th.getBoundingClientRect();
-                          if (rect.right - e.clientX < 6) {
-                            th.style.cursor = 'col-resize';
-                          } else {
-                            th.style.cursor = '';
-                          }
-                        }}
-                        onMouseLeave={e => { e.currentTarget.style.cursor = ''; }}
-                        onMouseDown={(e) => {
-                          if (isLast) return;
-                          const th = e.currentTarget;
-                          const rect = th.getBoundingClientRect();
-                          if (rect.right - e.clientX < 6) {
-                            handleResizeStart(e, colId);
-                          }
-                        }}
                       >
                         <span style={{fontWeight: 500}} className="whitespace-nowrap overflow-hidden text-ellipsis block">{col.label}</span>
+                        {!isLast && (
+                          <span
+                            onMouseDown={e => handleResizeStart(e, colId)}
+                            style={{
+                              position: 'absolute',
+                              right: 0,
+                              top: 0,
+                              height: '100%',
+                              width: 8,
+                              cursor: 'col-resize',
+                              zIndex: 10,
+                              userSelect: 'none',
+                              background: 'transparent',
+                              pointerEvents: 'auto',
+                              display: 'block',
+                            }}
+                            onClick={e => e.stopPropagation()}
+                            title="Resize column"
+                            tabIndex={-1}
+                          ></span>
+                        )}
                       </th>
                     );
                   })}
@@ -719,33 +613,36 @@ const AdvancedTaskTable = ({
                               background: dragOverColumn === colId ? '#f0f6ff' : 'white',
                               boxShadow: dragOverColumn === colId ? 'inset 2px 0 0 0 #60a5fa' : undefined,
                               borderBottom: '1px solid #e5e7eb',
+                              position: 'relative',
                             }}
                             draggable
                             onDragStart={(e) => handleDragStart(e, colId)}
                             onDragOver={(e) => handleDragOver(e, colId)}
                             onDragLeave={handleDragLeave}
                             onDrop={(e) => handleDrop(e, colId)}
-                            onMouseMove={(e) => {
-                              if (isLast) return;
-                              const th = e.currentTarget;
-                              const rect = th.getBoundingClientRect();
-                              if (rect.right - e.clientX < 6) {
-                                th.style.cursor = 'col-resize';
-                              } else {
-                                th.style.cursor = '';
-                              }
-                            }}
-                            onMouseLeave={e => { e.currentTarget.style.cursor = ''; }}
-                            onMouseDown={(e) => {
-                              if (isLast) return;
-                              const th = e.currentTarget;
-                              const rect = th.getBoundingClientRect();
-                              if (rect.right - e.clientX < 6) {
-                                handleResizeStart(e, colId);
-                              }
-                            }}
                           >
                             <span style={{fontWeight: 500}} className="whitespace-nowrap overflow-hidden text-ellipsis block">{col.label}</span>
+                            {!isLast && (
+                              <span
+                                onMouseDown={e => handleResizeStart(e, colId)}
+                                style={{
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: 0,
+                                  height: '100%',
+                                  width: 8,
+                                  cursor: 'col-resize',
+                                  zIndex: 10,
+                                  userSelect: 'none',
+                                  background: 'transparent',
+                                  pointerEvents: 'auto',
+                                  display: 'block',
+                                }}
+                                onClick={e => e.stopPropagation()}
+                                title="Resize column"
+                                tabIndex={-1}
+                              ></span>
+                            )}
                           </th>
                         );
                       })}

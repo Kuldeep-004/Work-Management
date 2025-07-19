@@ -33,28 +33,42 @@ const FilterPopup = ({
     { value: 'is_not_empty', label: 'Is Not Empty' },
   ];
 
+  // Local state for editing filters, but only commit to parent on Save
+  const [editingFilters, setEditingFilters] = React.useState([]);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setEditingFilters(filters.map(f => ({ ...f })));
+    }
+  }, [isOpen, filters]);
+
   const handleAddFilter = () => {
-    setFilters([...filters, { column: 'title', operator: 'contains', value: '', saved: false }]);
+    setEditingFilters([...editingFilters, { column: 'title', operator: 'contains', value: '', saved: false }]);
   };
 
   const handleSaveFilter = (index) => {
-    const newFilters = [...filters];
+    const newFilters = [...editingFilters];
     newFilters[index].saved = true;
-    setFilters(newFilters);
+    setEditingFilters(newFilters);
+    // Only update parent with saved filters
+    setFilters(newFilters.filter(f => f.saved));
   };
 
   const handleRemoveFilter = (index) => {
-    setFilters(filters.filter((_, i) => i !== index));
+    const newFilters = editingFilters.filter((_, i) => i !== index);
+    setEditingFilters(newFilters);
+    // Only update parent with saved filters
+    setFilters(newFilters.filter(f => f.saved));
   };
 
   const handleFilterChange = (index, field, value) => {
-    const newFilters = [...filters];
+    const newFilters = [...editingFilters];
     newFilters[index][field] = value;
     if (field === 'column') {
       newFilters[index].value = '';
     }
-    newFilters[index].saved = false; 
-    setFilters(newFilters);
+    newFilters[index].saved = false; // Mark as unsaved if changed
+    setEditingFilters(newFilters);
   };
 
   const renderValueInput = (filter, index) => {
@@ -99,9 +113,8 @@ const FilterPopup = ({
           <XMarkIcon className="h-5 w-5 text-gray-500" />
         </button>
       </div>
-      
       <div className="space-y-3">
-        {filters.map((filter, index) => (
+        {editingFilters.map((filter, index) => (
           <div key={index} className="flex flex-col sm:flex-row gap-2 sm:items-center">
             <span className="text-sm text-gray-600 w-12">{index === 0 ? 'Where' : ''}</span>
             {index > 0 && (
@@ -144,7 +157,6 @@ const FilterPopup = ({
           </div>
         ))}
       </div>
-
       <button onClick={handleAddFilter} className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-800">
         + New Filter
       </button>

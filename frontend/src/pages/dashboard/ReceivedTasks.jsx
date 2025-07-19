@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import FilterPopup from '../../components/FilterPopup';
+import TabBar from '../../components/TabBar';
 import {
   ChartBarIcon,
   UserGroupIcon,
@@ -43,9 +44,47 @@ const ALL_COLUMNS = [
   { id: 'comments', label: 'Comments' },
 ];
 
+const DEFAULT_TAB = () => ({
+  id: Date.now(),
+  title: 'Tab 1',
+  filters: [],
+  sortBy: 'createdAt',
+  sortOrder: 'desc',
+  searchTerm: '',
+  statusFilter: 'all',
+  visibleColumns: ALL_COLUMNS.map(col => col.id),
+  columnOrder: ALL_COLUMNS.map(col => col.id),
+  columnWidths: Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])),
+  activeTab: 'execution',
+});
+
 const ReceivedTasks = () => {
   const { user, isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState('execution');
+  // Tab state
+  const [tabs, setTabs] = useState(() => {
+    const saved = localStorage.getItem('receivedTasksTabs');
+    if (saved) {
+      try {
+        const parsedTabs = JSON.parse(saved);
+        if (Array.isArray(parsedTabs)) {
+          return parsedTabs.map(tab => ({
+            ...DEFAULT_TAB(),
+            ...tab,
+            visibleColumns: tab.visibleColumns !== undefined ? tab.visibleColumns : ALL_COLUMNS.map(col => col.id),
+            columnOrder: tab.columnOrder !== undefined ? tab.columnOrder : ALL_COLUMNS.map(col => col.id),
+            columnWidths: tab.columnWidths !== undefined ? tab.columnWidths : Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])),
+          }));
+        }
+      } catch (e) {}
+    }
+    return [DEFAULT_TAB()];
+  });
+  const [activeTabId, setActiveTabId] = useState(() => {
+    const saved = localStorage.getItem('receivedTasksActiveTabId');
+    if (saved) return Number(saved);
+    return (JSON.parse(localStorage.getItem('receivedTasksTabs'))?.[0]?.id) || DEFAULT_TAB().id;
+  });
+
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,40 +93,52 @@ const ReceivedTasks = () => {
     execution: 0,
     receivedVerification: 0,
     issuedVerification: 0,
-    completed: 0
+    completed: 0,
+    guidance: 0,
   });
-  const [filters, setFilters] = useState([]);
-  const [sortBy, setSortBy] = useState('createdAt');
-  const [sortOrder, setSortOrder] = useState('desc');
   const [isFilterPopupOpen, setIsFilterPopupOpen] = useState(false);
   const filterPopupRef = useRef(null);
   const [clientNames, setClientNames] = useState([]);
   const [clientGroups, setClientGroups] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const columnsDropdownRef = useRef(null);
-  const [visibleColumns, setVisibleColumns] = useState(() => {
-    const userId = user?._id || 'guest';
-    const key = `receivedtasks_columns_${userId}`;
-    const saved = localStorage.getItem(key);
-    if (saved) return JSON.parse(saved);
-    return ALL_COLUMNS.map(col => col.id);
-  });
-  
-  // Add state for task hours
   const [taskHours, setTaskHours] = useState([]);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+
+  // Get active tab object
+  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0];
+
+  // Tab actions
+  const addTab = () => {
+    const newId = Date.now();
+    setTabs([...tabs, { ...DEFAULT_TAB(), id: newId, title: `Tab ${tabs.length + 1}` }]);
+    setActiveTabId(newId);
+  };
+  const closeTab = (id) => {
+    let idx = tabs.findIndex(tab => tab.id === id);
+    if (tabs.length === 1) return; // Don't close last tab
+    const newTabs = tabs.filter(tab => tab.id !== id);
+    setTabs(newTabs);
+    if (activeTabId === id) {
+      setActiveTabId(newTabs[Math.max(0, idx - 1)].id);
+    }
+  };
+  const renameTab = (id, newTitle) => {
+    setTabs(tabs.map(tab => tab.id === id ? { ...tab, title: newTitle } : tab));
+  };
+  const updateActiveTab = (patch) => {
+    setTabs(tabs.map(tab => tab.id === activeTabId ? { ...tab, ...patch } : tab));
+  };
 
   // Move fetchTasks to component scope so it can be used as a prop
   const fetchTasks = async () => {
     try {
       let url;
-      if (activeTab === 'guidance') {
+      if (activeTabObj.activeTab === 'guidance') {
         url = `${API_BASE_URL}/api/tasks/received/guidance`;
       } else {
-        url = `${API_BASE_URL}/api/tasks/received?tab=${activeTab}`;
+        url = `${API_BASE_URL}/api/tasks/received?tab=${activeTabObj.activeTab}`;
       }
       const response = await fetch(url, {
         headers: {
@@ -143,7 +194,8 @@ const ReceivedTasks = () => {
     if (user && user.token) {
       fetchTasks();
     }
-  }, [user, activeTab]);
+    // eslint-disable-next-line
+  }, [user, activeTabObj.activeTab]);
 
   // Fetch task counts for each tab
   useEffect(() => {
@@ -171,36 +223,17 @@ const ReceivedTasks = () => {
 
   useEffect(() => {
     if (user && user._id) {
-      const savedFilters = localStorage.getItem(`receivedTasksFilters_${user._id}`);
-      if (savedFilters) {
-        try {
-          const parsed = JSON.parse(savedFilters);
-          const loadedFilters = (parsed.filters ?? []).map(f => ({ ...f, saved: true }));
-          setFilters(loadedFilters);
-          setSortBy(parsed.sortBy ?? 'createdAt');
-          setSortOrder(parsed.sortOrder ?? 'desc');
-        } catch {
-          setFilters([]);
-          setSortBy('createdAt');
-          setSortOrder('desc');
-        }
-      }
-    }
-  }, [user?._id]);
-
-  useEffect(() => {
-    if (user && user._id) {
-      const savedFilters = filters.filter(f => f.saved);
-      if (savedFilters.length > 0 || sortBy !== 'createdAt' || sortOrder !== 'desc') {
+      const savedFilters = activeTabObj.filters.filter(f => f.saved);
+      if (savedFilters.length > 0 || activeTabObj.sortBy !== 'createdAt' || activeTabObj.sortOrder !== 'desc') {
         localStorage.setItem(
           `receivedTasksFilters_${user._id}`,
-          JSON.stringify({ filters: savedFilters, sortBy, sortOrder })
+          JSON.stringify({ filters: savedFilters, sortBy: activeTabObj.sortBy, sortOrder: activeTabObj.sortOrder })
         );
       } else {
         localStorage.removeItem(`receivedTasksFilters_${user._id}`);
       }
     }
-  }, [filters, sortBy, sortOrder, user]);
+  }, [activeTabObj.filters, activeTabObj.sortBy, activeTabObj.sortOrder, user]);
 
   useEffect(() => {
     const fetchData = async (url, setter) => {
@@ -265,13 +298,13 @@ const ReceivedTasks = () => {
       if (task.verificationStatus === 'pending') return false;
 
       // For guidance tab, only show tasks where status !== 'completed'
-      if (activeTab === 'guidance' && task.status === 'completed') return false;
+      if (activeTabObj.activeTab === 'guidance' && task.status === 'completed') return false;
 
       // For completed tab, only show tasks where assignedTo is current user and status is completed
-      if (activeTab === 'completed' && (!task.assignedTo || (task.assignedTo._id !== user._id && task.assignedTo !== user._id || task.status !== 'completed'))) return false;
+      if (activeTabObj.activeTab === 'completed' && (!task.assignedTo || (task.assignedTo._id !== user._id && task.assignedTo !== user._id || task.status !== 'completed'))) return false;
 
       // For receivedVerification tab, only show tasks where status is not completed and latest verifier is current user
-      if (activeTab === 'receivedVerification') {
+      if (activeTabObj.activeTab === 'receivedVerification') {
         if (task.status === 'completed') return false;
         // Find the latest assigned verifier (from 1st to 5th)
         const verifierFields = [
@@ -292,8 +325,8 @@ const ReceivedTasks = () => {
       }
 
       // Filter by search term
-      if (searchTerm) {
-        const lowercasedTerm = searchTerm.toLowerCase();
+      if (activeTabObj.searchTerm) {
+        const lowercasedTerm = activeTabObj.searchTerm.toLowerCase();
         const matches = (
           (task.title && task.title.toLowerCase().includes(lowercasedTerm)) ||
           (task.description && task.description.toLowerCase().includes(lowercasedTerm)) ||
@@ -310,15 +343,15 @@ const ReceivedTasks = () => {
       }
 
       // Filter by status
-      if (statusFilter !== 'all' && task.status !== statusFilter) {
+      if (activeTabObj.statusFilter !== 'all' && task.status !== activeTabObj.statusFilter) {
         return false;
       }
 
       // Apply advanced filters with AND/OR logic
-      if (!filters.length) return true;
+      if (!activeTabObj.filters.length) return true;
       let result = null;
-      for (let i = 0; i < filters.length; i++) {
-        const filter = filters[i];
+      for (let i = 0; i < activeTabObj.filters.length; i++) {
+        const filter = activeTabObj.filters[i];
         const { column, operator, value } = filter;
         const getTaskValue = (task, column) => {
           const keys = column.split('.');
@@ -384,23 +417,23 @@ const ReceivedTasks = () => {
     });
 
     return filteredTasks.sort((a, b) => {
-      let aValue = a[sortBy];
-      let bValue = b[sortBy];
-      if (sortBy === 'createdAt') {
+      let aValue = a[activeTabObj.sortBy];
+      let bValue = b[activeTabObj.sortBy];
+      if (activeTabObj.sortBy === 'createdAt') {
         aValue = new Date(aValue);
         bValue = new Date(bValue);
-      } else if (sortBy === 'priority') {
+      } else if (activeTabObj.sortBy === 'priority') {
         // Use priority order mapping for priority sorting
         aValue = priorityOrder[aValue] || 999;
         bValue = priorityOrder[bValue] || 999;
         // For priority, descending should show highest priority first (urgent=1, today=2, etc.)
         // So we swap the logic for priority sorting
-        if (aValue < bValue) return sortOrder === 'desc' ? -1 : 1;
-        if (aValue > bValue) return sortOrder === 'desc' ? 1 : -1;
+        if (aValue < bValue) return activeTabObj.sortOrder === 'desc' ? -1 : 1;
+        if (aValue > bValue) return activeTabObj.sortOrder === 'desc' ? 1 : -1;
         return 0;
       }
-      if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+      if (aValue < bValue) return activeTabObj.sortOrder === 'asc' ? -1 : 1;
+      if (aValue > bValue) return activeTabObj.sortOrder === 'asc' ? 1 : -1;
       return 0;
     });
   };
@@ -509,8 +542,14 @@ const ReceivedTasks = () => {
   useEffect(() => {
     const userId = user?._id || 'guest';
     const key = `receivedtasks_columns_${userId}`;
-    localStorage.setItem(key, JSON.stringify(visibleColumns));
-  }, [visibleColumns, user]);
+    localStorage.setItem(key, JSON.stringify(activeTabObj.visibleColumns));
+  }, [activeTabObj.visibleColumns, user]);
+
+  // Persist tabs and activeTabId
+  useEffect(() => {
+    localStorage.setItem('receivedTasksTabs', JSON.stringify(tabs));
+    localStorage.setItem('receivedTasksActiveTabId', activeTabId);
+  }, [tabs, activeTabId]);
 
   if (loading) {
     return (
@@ -532,89 +571,42 @@ const ReceivedTasks = () => {
   }
 
   return (
-    <div className="p-2 sm:p-3 md:p-4">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <h2 className="text-2xl font-bold text-gray-800">Tasks</h2>
-        <button
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          onClick={() => setShowCreateTaskModal(true)}
-        >
-          Create Task
-        </button>
-      </div>
-
+    <div className="p-4">
+      <TabBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onTabClick={setActiveTabId}
+        onAddTab={addTab}
+        onCloseTab={closeTab}
+        onRenameTab={renameTab}
+      />
       <div className="mb-6">
+        {/* Replace nav tabs with a select for activeTab in the current tab */}
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-1 sm:space-x-6 overflow-x-auto scrollbar-hide" aria-label="Tabs">
-            <button
-              onClick={() => setActiveTab('execution')}
-              className={`whitespace-nowrap py-3 px-0 border-b-2 font-medium text-sm sm:px-0 ${
-                activeTab === 'execution'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Tasks For Execution
-              <span className="bg-gray-200 text-gray-800 rounded-full px-2 py-0.5 ml-2 text-xs">
-                {taskCounts.execution}
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab('receivedVerification')}
-              className={`whitespace-nowrap py-3 px-0 border-b-2 font-medium text-sm ${
-                activeTab === 'receivedVerification'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Task Received For Verification
-              <span className="bg-gray-200 text-gray-800 rounded-full px-2 py-0.5 ml-2 text-xs">
-                {taskCounts.receivedVerification}
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab('issuedVerification')}
-              className={`whitespace-nowrap py-3 px-0 border-b-2 font-medium text-sm ${
-                activeTab === 'issuedVerification'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Task Issued For Verification
-              <span className="bg-gray-200 text-gray-800 rounded-full px-2 py-0.5 ml-2 text-xs">
-                {taskCounts.issuedVerification}
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab('guidance')}
-              className={`whitespace-nowrap py-3 px-0 border-b-2 font-medium text-sm ${
-                activeTab === 'guidance'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Task For Guidance
-              <span className="bg-gray-200 text-gray-800 rounded-full px-2 py-0.5 ml-2 text-xs">
-                {taskCounts.guidance}
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab('completed')}
-              className={`whitespace-nowrap py-3 px-0 border-b-2 font-medium text-sm ${
-                activeTab === 'completed'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Completed
-              <span className="bg-gray-200 text-gray-800 rounded-full px-2 py-0.5 ml-2 text-xs">
-                {taskCounts.completed}
-              </span>
-            </button>
+            {['execution', 'receivedVerification', 'issuedVerification', 'guidance', 'completed'].map(tabKey => (
+              <button
+                key={tabKey}
+                onClick={() => updateActiveTab({ activeTab: tabKey })}
+                className={`whitespace-nowrap py-3 px-0 border-b-2 font-medium text-sm sm:px-0 ${
+                  activeTabObj.activeTab === tabKey
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {tabKey === 'execution' && 'Tasks For Execution'}
+                {tabKey === 'receivedVerification' && 'Task Received For Verification'}
+                {tabKey === 'issuedVerification' && 'Task Issued For Verification'}
+                {tabKey === 'guidance' && 'Task For Guidance'}
+                {tabKey === 'completed' && 'Completed'}
+                <span className="bg-gray-200 text-gray-800 rounded-full px-2 py-0.5 ml-2 text-xs">
+                  {taskCounts[tabKey] || 0}
+                </span>
+              </button>
+            ))}
           </nav>
         </div>
       </div>
-      
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex flex-row flex-wrap items-center gap-4 w-full sm:w-auto">
           <div className="relative" ref={filterPopupRef}>
@@ -623,17 +615,17 @@ const ReceivedTasks = () => {
               className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 text-sm"
             >
               <span>Filter</span>
-              {filters.length > 0 && (
+              {activeTabObj.filters.length > 0 && (
                 <span className="bg-blue-100 text-blue-800 text-xs font-semibold ml-2 px-2.5 py-0.5 rounded-full">
-                  {filters.length}
+                  {activeTabObj.filters.length}
                 </span>
               )}
             </button>
             <FilterPopup
               isOpen={isFilterPopupOpen}
               onClose={() => setIsFilterPopupOpen(false)}
-              filters={filters}
-              setFilters={setFilters}
+              filters={activeTabObj.filters}
+              setFilters={filters => updateActiveTab({ filters })}
               users={users}
               clientNames={clientNames}
               clientGroups={clientGroups}
@@ -644,8 +636,8 @@ const ReceivedTasks = () => {
             type="text"
             placeholder="Search tasks..."
             className="w-60 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={activeTabObj.searchTerm}
+            onChange={e => updateActiveTab({ searchTerm: e.target.value })}
           />
           <div className="relative">
             <button
@@ -664,13 +656,14 @@ const ReceivedTasks = () => {
                     <label key={col.id} className="flex items-center space-x-2 mb-1 cursor-pointer hover:bg-blue-50 rounded px-2 py-1 transition-colors">
                       <input
                         type="checkbox"
-                        checked={visibleColumns.includes(col.id)}
+                        checked={activeTabObj.visibleColumns.includes(col.id)}
                         onChange={() => {
-                          setVisibleColumns(cols =>
-                            cols.includes(col.id)
+                          const cols = activeTabObj.visibleColumns;
+                          updateActiveTab({
+                            visibleColumns: cols.includes(col.id)
                               ? cols.filter(c => c !== col.id)
                               : [...cols, col.id]
-                          );
+                          });
                         }}
                         className="accent-blue-500"
                       />
@@ -683,29 +676,41 @@ const ReceivedTasks = () => {
           </div>
           <select
             className="px-3 py-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
+            value={activeTabObj.sortBy}
+            onChange={e => updateActiveTab({ sortBy: e.target.value })}
           >
             <option value="createdAt">Received On</option>
             <option value="priority">Priority</option>
             <option value="status">Stages</option>
-            <option value="clientName">Client</option>
+            <option value="clientName">Client Name</option>
+            <option value="clientGroup">Client Group</option>
+            <option value="workType">Work Type</option>
+            <option value="workDoneBy">Assigned To</option>
+            <option value="billed">Billed</option>
           </select>
           <select
             className="px-3 py-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value)}
+            value={activeTabObj.sortOrder}
+            onChange={e => updateActiveTab({ sortOrder: e.target.value })}
           >
             <option value="asc">Asc</option>
             <option value="desc">Desc</option>
           </select>
+          <button
+            onClick={() => setShowCreateTaskModal(true)}
+            className="ml-0 flex items-center justify-center w-7 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+            title="Create Task"
+            type="button"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          </button>
         </div>
       </div>
       <ErrorBoundary>
-        <AdvancedTaskTable 
+        <AdvancedTaskTable
           tasks={getFilteredAndSortedTasks(tasks)}
           viewType="received"
-          taskType={activeTab}
+          taskType={activeTabObj.activeTab}
           users={users}
           currentUser={user}
           onTaskUpdate={(taskId, updater) => {
@@ -715,16 +720,18 @@ const ReceivedTasks = () => {
           }}
           onTaskDelete={handleDeleteTask}
           onStatusChange={handleStatusChange}
-          shouldDisableActions={(task) => {
-            return false;
-          }}
+          shouldDisableActions={(task) => false}
           shouldDisableFileActions={() => false}
           taskHours={taskHours}
-          visibleColumns={visibleColumns}
-          setVisibleColumns={setVisibleColumns}
+          visibleColumns={activeTabObj.visibleColumns}
+          setVisibleColumns={cols => updateActiveTab({ visibleColumns: cols })}
+          columnOrder={activeTabObj.columnOrder}
+          setColumnOrder={order => updateActiveTab({ columnOrder: order })}
+          columnWidths={activeTabObj.columnWidths}
+          setColumnWidths={widths => updateActiveTab({ columnWidths: widths })}
           storageKeyPrefix="receivedtasks"
           refetchTasks={fetchTasks}
-          sortBy={sortBy}
+          sortBy={activeTabObj.sortBy}
         />
       </ErrorBoundary>
       <CreateTask

@@ -7,24 +7,24 @@ import ErrorBoundary from '../../components/ErrorBoundary';
 import AdvancedTaskTable from '../../components/AdvancedTaskTable';
 
 const ALL_COLUMNS = [
-  { id: 'title', label: 'Title' },
-  { id: 'description', label: 'Description' },
-  { id: 'clientName', label: 'Client Name' },
-  { id: 'clientGroup', label: 'Client Group' },
-  { id: 'workType', label: 'Work Type' },
-  { id: 'billed', label: 'Billed' },
-  { id: 'status', label: 'Task Status' },
-  { id: 'verificationStatus', label: 'Verification Status' },
-  { id: 'priority', label: 'Priority' },
-  { id: 'inwardEntryDate', label: 'Inward Entry Date' },
-  { id: 'dueDate', label: 'Due Date' },
-  { id: 'targetDate', label: 'Target Date' },
-  { id: 'assignedBy', label: 'Assigned By' },
-  { id: 'assignedTo', label: 'Assigned To' },
-  { id: 'verificationAssignedTo', label: 'First Verifier' },
-  { id: 'secondVerificationAssignedTo', label: 'Second Verifier' },
-  { id: 'files', label: 'Files' },
-  { id: 'comments', label: 'Comments' },
+  { id: 'title', label: 'Title', defaultWidth: 256 },
+  { id: 'description', label: 'Description', defaultWidth: 180 },
+  { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
+  { id: 'clientGroup', label: 'Client Group', defaultWidth: 150 },
+  { id: 'workType', label: 'Work Type', defaultWidth: 150 },
+  { id: 'billed', label: 'Billed', defaultWidth: 80 },
+  { id: 'status', label: 'Task Status', defaultWidth: 120 },
+  { id: 'verificationStatus', label: 'Verification Status', defaultWidth: 120 },
+  { id: 'priority', label: 'Priority', defaultWidth: 120 },
+  { id: 'inwardEntryDate', label: 'Inward Entry Date', defaultWidth: 150 },
+  { id: 'dueDate', label: 'Due Date', defaultWidth: 120 },
+  { id: 'targetDate', label: 'Target Date', defaultWidth: 120 },
+  { id: 'assignedBy', label: 'Assigned By', defaultWidth: 150 },
+  { id: 'assignedTo', label: 'Assigned To', defaultWidth: 150 },
+  { id: 'verificationAssignedTo', label: 'First Verifier', defaultWidth: 150 },
+  { id: 'secondVerificationAssignedTo', label: 'Second Verifier', defaultWidth: 150 },
+  { id: 'files', label: 'Files', defaultWidth: 120 },
+  { id: 'comments', label: 'Comments', defaultWidth: 120 },
 ];
 
 const UnBilledTasks = () => {
@@ -45,6 +45,8 @@ const UnBilledTasks = () => {
   const columnsDropdownRef = useRef(null);
   const filterPopupRef = useRef(null);
   const [sortBy, setSortBy] = useState('createdAt');
+  const [columnOrder, setColumnOrder] = useState(() => ALL_COLUMNS.map(col => col.id));
+  const [columnWidths, setColumnWidths] = useState(() => Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])));
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -96,7 +98,11 @@ const UnBilledTasks = () => {
           <option value="createdAt">Assigned On</option>
           <option value="priority">Priority</option>
           <option value="status">Stages</option>
-          <option value="clientName">Client</option>
+          <option value="clientName">Client Name</option>
+          <option value="clientGroup">Client Group</option>
+          <option value="workType">Work Type</option>
+          <option value="workDoneBy">Assigned To</option>
+          <option value="billed">Billed</option>
         </select>
       </div>
       <AdvancedTaskTable
@@ -104,6 +110,10 @@ const UnBilledTasks = () => {
         viewType="unbilled"
         visibleColumns={visibleColumns}
         setVisibleColumns={setVisibleColumns}
+        columnOrder={columnOrder}
+        setColumnOrder={setColumnOrder}
+        columnWidths={columnWidths}
+        setColumnWidths={setColumnWidths}
         currentUser={user}
         sortBy={sortBy}
       />
