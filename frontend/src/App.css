@@ -1,1 +1,6 @@
 @import "tailwindcss";
+
+.drag-row-highlight {
+  background: #e0f2fe !important;
+  box-shadow: 0 2px 8px rgba(96, 165, 250, 0.1);
+}

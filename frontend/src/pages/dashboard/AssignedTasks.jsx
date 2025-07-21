@@ -402,6 +402,8 @@ const AssignedTasks = () => {
       return result;
     });
 
+    if (!activeTabObj.sortBy) return filteredTasks;
+
     return filteredTasks.sort((a, b) => {
       let aValue = a[activeTabObj.sortBy];
       let bValue = b[activeTabObj.sortBy];
@@ -581,6 +583,7 @@ const AssignedTasks = () => {
             value={activeTabObj.sortBy}
             onChange={e => updateActiveTab({ sortBy: e.target.value })}
           >
+            <option value="">None</option>
             <option value="createdAt">Assigned On</option>
             <option value="priority">Priority</option>
             <option value="status">Stages</option>

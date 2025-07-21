@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import TaskList from '../../components/TaskList';
 import { useAuth } from '../../context/AuthContext';
-import { API_BASE_URL } from '../../apiConfig';
+import { API_BASE_URL, fetchTabState, saveTabState } from '../../apiConfig';
 import FilterPopup from '../../components/FilterPopup';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import AdvancedTaskTable from '../../components/AdvancedTaskTable';
@@ -33,20 +33,54 @@ const UnBilledTasks = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [visibleColumns, setVisibleColumns] = useState(() => {
-    const userId = user?._id || 'guest';
-    const key = `unbilledtasks_columns_${userId}`;
-    const saved = localStorage.getItem(key);
-    if (saved) return JSON.parse(saved);
-    return ALL_COLUMNS.map(col => col.id);
-  });
+  const [visibleColumns, setVisibleColumns] = useState(null);
+  const [columnOrder, setColumnOrder] = useState(null);
+  const [columnWidths, setColumnWidths] = useState(null);
+  const [sortBy, setSortBy] = useState(null);
+  const [tableStateLoaded, setTableStateLoaded] = useState(false);
   const [filters, setFilters] = useState([]);
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const columnsDropdownRef = useRef(null);
   const filterPopupRef = useRef(null);
-  const [sortBy, setSortBy] = useState('createdAt');
-  const [columnOrder, setColumnOrder] = useState(() => ALL_COLUMNS.map(col => col.id));
-  const [columnWidths, setColumnWidths] = useState(() => Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])));
+
+  // Fetch full table state from backend on mount
+  useEffect(() => {
+    if (!user?.token) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        const state = await fetchTabState('unbilledTasks', user.token);
+        if (isMounted && state) {
+          setVisibleColumns(Array.isArray(state.visibleColumns) ? state.visibleColumns : ALL_COLUMNS.map(col => col.id));
+          setColumnOrder(Array.isArray(state.columnOrder) ? state.columnOrder : ALL_COLUMNS.map(col => col.id));
+          setColumnWidths(state.columnWidths && typeof state.columnWidths === 'object' ? state.columnWidths : Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])));
+          setSortBy(typeof state.sortBy === 'string' ? state.sortBy : 'createdAt');
+        } else if (isMounted) {
+          setVisibleColumns(ALL_COLUMNS.map(col => col.id));
+          setColumnOrder(ALL_COLUMNS.map(col => col.id));
+          setColumnWidths(Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])));
+          setSortBy('createdAt');
+        }
+      } catch {
+        if (isMounted) {
+          setVisibleColumns(ALL_COLUMNS.map(col => col.id));
+          setColumnOrder(ALL_COLUMNS.map(col => col.id));
+          setColumnWidths(Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])));
+          setSortBy('createdAt');
+        }
+      } finally {
+        if (isMounted) setTableStateLoaded(true);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [user]);
+
+  // Save full table state to backend whenever any part changes (after initial load)
+  useEffect(() => {
+    if (!user?.token || !tableStateLoaded) return;
+    if (!visibleColumns || !columnOrder || !columnWidths) return;
+    saveTabState('unbilledTasks', { visibleColumns, columnOrder, columnWidths, sortBy }, user.token).catch(() => {});
+  }, [visibleColumns, columnOrder, columnWidths, sortBy, user, tableStateLoaded]);
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -69,13 +103,10 @@ const UnBilledTasks = () => {
     if (user && user.token) fetchTasks();
   }, [user]);
 
-  useEffect(() => {
-    const userId = user?._id || 'guest';
-    const key = `unbilledtasks_columns_${userId}`;
-    localStorage.setItem(key, JSON.stringify(visibleColumns));
-  }, [visibleColumns, user]);
-
   if (!isAuthenticated() || user.role !== 'Admin') return null;
+  if (!tableStateLoaded || !visibleColumns || !columnOrder || !columnWidths) {
+    return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div></div>;
+  }
   if (loading) return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div></div>;
   if (error) return <div className="text-red-500 text-center p-4">Error: {error}</div>;
 
@@ -95,6 +126,7 @@ const UnBilledTasks = () => {
           value={sortBy}
           onChange={e => setSortBy(e.target.value)}
         >
+          <option value="">None</option>
           <option value="createdAt">Assigned On</option>
           <option value="priority">Priority</option>
           <option value="status">Stages</option>
@@ -106,7 +138,33 @@ const UnBilledTasks = () => {
         </select>
       </div>
       <AdvancedTaskTable
-        tasks={tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))}
+        tasks={sortBy ? tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))
+                      .sort((a, b) => {
+                        let aValue = a[sortBy];
+                        let bValue = b[sortBy];
+                        if (sortBy === 'createdAt') {
+                          aValue = new Date(aValue);
+                          bValue = new Date(bValue);
+                        } else if (sortBy === 'priority') {
+                          const priorityOrder = {
+                            'urgent': 1,
+                            'today': 2,
+                            'lessThan3Days': 3,
+                            'thisWeek': 4,
+                            'thisMonth': 5,
+                            'regular': 6,
+                            'filed': 7,
+                            'dailyWorksOffice': 8,
+                            'monthlyWorks': 9
+                          };
+                          aValue = priorityOrder[aValue] || 999;
+                          bValue = priorityOrder[bValue] || 999;
+                        }
+                        if (aValue < bValue) return -1;
+                        if (aValue > bValue) return 1;
+                        return 0;
+                      })
+                    : tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))}
         viewType="unbilled"
         visibleColumns={visibleColumns}
         setVisibleColumns={setVisibleColumns}

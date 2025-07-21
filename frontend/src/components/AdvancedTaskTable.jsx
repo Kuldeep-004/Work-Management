@@ -74,6 +74,9 @@ const STATUS_OPTIONS = [
   { value: 'reject', label: 'Reject' },
 ];
 
+// Add at the top, after other useRef/useState:
+const DRAG_ROW_CLASS = 'drag-row-highlight';
+
 const AdvancedTaskTable = ({ 
   tasks, 
   viewType, 
@@ -97,7 +100,9 @@ const AdvancedTaskTable = ({
   currentUser = null,
   refetchTasks,
   onEditTask,
-  sortBy
+  sortBy,
+  tabKey = 'defaultTabKey',
+  tabId,
 }) => {
   const { user } = useAuth();
   
@@ -141,6 +146,17 @@ const AdvancedTaskTable = ({
   // Add at the top, after other useRef/useState:
   const guideDropdownRef = useRef(null);
   const [openGuideDropdownTaskId, setOpenGuideDropdownTaskId] = useState(null);
+
+  // Row drag-and-drop state
+  const [draggedTaskId, setDraggedTaskId] = useState(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState(null);
+  const [dragOverGroupKey, setDragOverGroupKey] = useState(null);
+  const [orderedTasks, setOrderedTasks] = useState(tasks);
+  const [orderLoaded, setOrderLoaded] = useState(false);
+
+  // Add a ref to track the last set of task IDs and grouping
+  const lastTaskIdsRef = useRef([]);
+  const lastGroupFieldRef = useRef(null);
 
   // Helper functions
   const getStatusColor = (status) => {
@@ -452,14 +468,16 @@ const AdvancedTaskTable = ({
   }
 
   // In the main render, before tbody:
-  const groupField = (columnOrder.includes('priority') && sortBy === 'priority') ? 'priority'
+  const groupField = (!sortBy || sortBy === 'none') ? null : (
+    (columnOrder.includes('priority') && sortBy === 'priority') ? 'priority'
     : (columnOrder.includes('status') && sortBy === 'status') ? 'status'
     : (columnOrder.includes('clientName') && sortBy === 'clientName') ? 'clientName'
     : (columnOrder.includes('clientGroup') && sortBy === 'clientGroup') ? 'clientGroup'
     : (columnOrder.includes('workType') && sortBy === 'workType') ? 'workType'
     : (columnOrder.includes('workDoneBy') && sortBy === 'workDoneBy') ? 'workDoneBy'
     : (columnOrder.includes('billed') && sortBy === 'billed') ? 'billed'
-    : null;
+    : null
+  );
   const shouldGroup = groupField && sortBy !== 'createdAt';
   let groupedTasks = null;
   if (shouldGroup) {
@@ -497,27 +515,55 @@ const AdvancedTaskTable = ({
     }
   }
 
-  // After initializing visibleColumns and columnOrder, add this effect:
+  // On mount, fetch columnOrder from backend for this tabKey
   useEffect(() => {
-    // Ensure all columns in ALL_COLUMNS are present in visibleColumns and columnOrder
-    const allIds = ALL_COLUMNS.map(col => col.id);
-    let updated = false;
-    let newVisible = visibleColumns;
-    let newOrder = columnOrder;
-    if (visibleColumns.some(colId => !allIds.includes(colId)) || allIds.some(colId => !visibleColumns.includes(colId))) {
-      newVisible = allIds;
-      updated = true;
+    let isMounted = true;
+    async function fetchColumnOrder() {
+      try {
+        if (!tabKey || !tabId) return;
+        const res = await fetch(`${API_BASE_URL}/api/users/tabstate/columnOrder?tabKey=${tabKey}&tabId=${tabId}`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          let order = data.columnOrder;
+          const allIds = ALL_COLUMNS.map(col => col.id);
+          // Fallback: ensure all columns present
+          if (!order || !Array.isArray(order) || order.some(colId => !allIds.includes(colId)) || allIds.some(colId => !order.includes(colId))) {
+            order = allIds;
+          }
+          if (isMounted) {
+            setColumnOrder(order);
+            setVisibleColumns(order);
+          }
+        }
+      } catch (err) {
+        // fallback: show all columns
+        setColumnOrder(ALL_COLUMNS.map(col => col.id));
+        setVisibleColumns(ALL_COLUMNS.map(col => col.id));
+      }
     }
-    if (columnOrder.some(colId => !allIds.includes(colId)) || allIds.some(colId => !columnOrder.includes(colId))) {
-      newOrder = allIds;
-      updated = true;
-    }
-    if (updated) {
-      setVisibleColumns(newVisible);
-      setColumnOrder(newOrder);
-    }
+    fetchColumnOrder();
+    return () => { isMounted = false; };
     // eslint-disable-next-line
-  }, []);
+  }, [tabKey, tabId]);
+
+  // When columnOrder changes, persist to backend
+  useEffect(() => {
+    if (!columnOrder || !Array.isArray(columnOrder) || columnOrder.length === 0) return;
+    async function saveColumnOrder() {
+      try {
+        if (!tabKey || !tabId) return;
+        await fetch(`${API_BASE_URL}/api/users/tabstate/columnOrder`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+          body: JSON.stringify({ tabKey, columnOrder, tabId }),
+        });
+      } catch (err) {}
+    }
+    saveColumnOrder();
+    // eslint-disable-next-line
+  }, [columnOrder, tabKey, tabId]);
 
   // Helper to get all assigned verifier user IDs for a task
   const getAssignedVerifierIds = (task) => [
@@ -527,6 +573,131 @@ const AdvancedTaskTable = ({
     task.fourthVerificationAssignedTo?._id,
     task.fifthVerificationAssignedTo?._id,
   ].filter(Boolean);
+
+  // Helper: get group key for a task (if grouped)
+  const getGroupKey = (task) => {
+    if (!shouldGroup) return null;
+    if (groupField === 'workType') return Array.isArray(task.workType) ? (task.workType[0] || 'Unspecified') : (task.workType || 'Unspecified');
+    if (groupField === 'workDoneBy') return task.workDoneBy || 'Unassigned';
+    if (groupField === 'billed') return task.billed ? 'Yes' : 'No';
+    return task[groupField];
+  };
+
+  // Refactor the useEffect that fetches and applies task order
+  useEffect(() => {
+    let isMounted = true;
+    // Get current task IDs
+    const currentTaskIds = tasks.map(t => t._id).join(',');
+    // Only fetch and apply order if the set of task IDs or grouping changes
+    if (
+      lastTaskIdsRef.current.join(',') !== currentTaskIds ||
+      lastGroupFieldRef.current !== groupField
+    ) {
+      async function fetchAndApplyOrder() {
+        setOrderLoaded(false);
+        try {
+          if (!tabKey || !tabId) return;
+          const res = await fetch(`${API_BASE_URL}/api/users/tabstate/taskOrder?tabKey=${tabKey}&tabId=${tabId}`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            let orderArr = data.taskOrder;
+            if (orderArr && Array.isArray(orderArr)) {
+              // Use a Set for fast lookup
+              const idToTask = Object.fromEntries(tasks.map(t => [t._id, t]));
+              const orderedSet = new Set(orderArr);
+              let newOrderedTasks = orderArr.map(id => idToTask[id]).filter(Boolean);
+              for (const t of tasks) {
+                if (!orderedSet.has(t._id)) newOrderedTasks.push(t);
+              }
+              // Only update if order actually changed
+              if (isMounted && (newOrderedTasks.length !== orderedTasks.length || newOrderedTasks.some((t, i) => t !== orderedTasks[i]))) {
+                setOrderedTasks(newOrderedTasks);
+              }
+            } else {
+              if (isMounted && tasks !== orderedTasks) setOrderedTasks(tasks);
+            }
+          } else {
+            if (isMounted && tasks !== orderedTasks) setOrderedTasks(tasks);
+          }
+        } catch (err) {
+          if (isMounted && tasks !== orderedTasks) setOrderedTasks(tasks);
+        } finally {
+          if (isMounted) setOrderLoaded(true);
+          lastTaskIdsRef.current = tasks.map(t => t._id);
+          lastGroupFieldRef.current = groupField;
+        }
+      }
+      fetchAndApplyOrder();
+    }
+    // eslint-disable-next-line
+  }, [tasks, shouldGroup, groupField, tabKey, tabId]);
+
+  // Save order to backend
+  const saveOrder = async (newOrder) => {
+    try {
+      if (!tabKey || !tabId) return;
+      await fetch(`${API_BASE_URL}/api/users/tabstate/taskOrder`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({ tabKey, order: newOrder, tabId }),
+      });
+    } catch (err) {}
+  };
+
+  // Drag handlers for rows
+  const handleRowDragStart = (e, taskId) => {
+    setDraggedTaskId(taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', taskId);
+  };
+  const handleRowDragOver = (e, overTaskId) => {
+    e.preventDefault();
+    if (draggedTaskId) {
+      setDragOverTaskId(overTaskId);
+    }
+  };
+  const handleRowDrop = (e, dropTaskId) => {
+    e.preventDefault();
+    if (!draggedTaskId) return;
+    let newOrder = [];
+    const idxFrom = orderedTasks.findIndex(t => t._id === draggedTaskId);
+    const idxTo = orderedTasks.findIndex(t => t._id === dropTaskId);
+    if (idxFrom === -1 || idxTo === -1) return;
+    newOrder = [...orderedTasks];
+    const [removed] = newOrder.splice(idxFrom, 1);
+    newOrder.splice(idxTo, 0, removed);
+    setOrderedTasks(newOrder);
+    saveOrder(newOrder.map(t => t._id));
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+  };
+  const handleRowDragEnd = () => {
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+  };
+
+  // Use orderedTasks instead of tasks in rendering
+  // In grouped mode, group orderedTasks by groupKey
+  let renderGroupedTasks = groupedTasks;
+  if (shouldGroup && orderLoaded) {
+    renderGroupedTasks = {};
+    for (const t of orderedTasks) {
+      const gk = getGroupKey(t);
+      if (!renderGroupedTasks[gk]) renderGroupedTasks[gk] = [];
+      renderGroupedTasks[gk].push(t);
+    }
+  }
+
+  // Prevent rendering table until orderLoaded is true in grouped mode
+  if (shouldGroup && !orderLoaded) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -538,6 +709,7 @@ const AdvancedTaskTable = ({
             {!shouldGroup && (
               <thead className="border-b border-gray-200">
                 <tr>
+                  <th className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none whitespace-nowrap border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>No</th>
                   {getOrderedVisibleColumns().map((colId, idx, arr) => {
                     const col = ALL_COLUMNS.find(c => c.id === colId);
                     if (!col) return null;
@@ -593,12 +765,13 @@ const AdvancedTaskTable = ({
             )}
             <tbody>
               {shouldGroup ? (
-                Object.entries(groupedTasks).map(([group, groupTasks]) => (
+                Object.entries(renderGroupedTasks).map(([group, groupTasks]) => (
                   <React.Fragment key={group}>
                     <tr key={group + '-header'}>
-                      <td colSpan={getOrderedVisibleColumns().length + ((viewType === 'assigned' || viewType === 'admin') ? 1 : 0)} className="bg-gray-100 text-gray-800 font-semibold px-4 py-2 border-t border-b border-gray-300">{group}</td>
+                      <td colSpan={getOrderedVisibleColumns().length + ((viewType === 'assigned' || viewType === 'admin') ? 2 : 1)} className="bg-gray-100 text-gray-800 font-semibold px-4 py-2 border-t border-b border-gray-300">{group}</td>
                     </tr>
                     <tr key={group + '-columns'} className="border-b border-gray-200">
+                      <th className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none whitespace-nowrap border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>No</th>
                       {getOrderedVisibleColumns().map((colId, idx, arr) => {
                         const col = ALL_COLUMNS.find(c => c.id === colId);
                         if (!col) return null;
@@ -650,12 +823,30 @@ const AdvancedTaskTable = ({
                         <th key="actions" className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none">Actions</th>
                       )}
                     </tr>
-                    {groupTasks.map((task) => (
-                      <tr key={task._id} className="border-b border-gray-200 hover:bg-gray-50 transition-none">
-                        {getOrderedVisibleColumns().map((colId, idx, arr) => {
+                    {groupTasks.map((task, idx) => (
+                      <tr
+                        key={task._id}
+                        className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''}`}
+                        draggable
+                        onDragStart={e => handleRowDragStart(e, task._id)}
+                        onDragOver={e => handleRowDragOver(e, task._id)}
+                        onDrop={e => handleRowDrop(e, task._id)}
+                        onDragEnd={handleRowDragEnd}
+                        style={{ opacity: draggedTaskId === task._id ? 0.5 : 1 }}
+                      >
+                        <td
+                          className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-move"
+                          style={{width: '48px', minWidth: '48px', textAlign: 'right'}}
+                          title="Drag to reorder"
+                          draggable
+                          onDragStart={e => handleRowDragStart(e, task._id)}
+                        >
+                          {idx + 1}
+                        </td>
+                        {getOrderedVisibleColumns().map((colId, idx2, arr) => {
                           const col = ALL_COLUMNS.find(c => c.id === colId);
                           if (!col) return null;
-                          const isLast = idx === arr.length - 1;
+                          const isLast = idx2 === arr.length - 1;
                           
                           switch (colId) {
                             case 'title':
@@ -1362,12 +1553,30 @@ const AdvancedTaskTable = ({
                   </React.Fragment>
                 ))
               ) : (
-                tasks.map((task) => (
-                  <tr key={task._id} className="border-b border-gray-200 hover:bg-gray-50 transition-none">
-                    {getOrderedVisibleColumns().map((colId, idx, arr) => {
+                orderedTasks.map((task, idx) => (
+                  <tr
+                    key={task._id}
+                    className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''}`}
+                    draggable
+                    onDragStart={e => handleRowDragStart(e, task._id)}
+                    onDragOver={e => handleRowDragOver(e, task._id)}
+                    onDrop={e => handleRowDrop(e, task._id)}
+                    onDragEnd={handleRowDragEnd}
+                    style={{ opacity: draggedTaskId === task._id ? 0.5 : 1 }}
+                  >
+                    <td
+                      className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-move"
+                      style={{width: '48px', minWidth: '48px', textAlign: 'right'}}
+                      title="Drag to reorder"
+                      draggable
+                      onDragStart={e => handleRowDragStart(e, task._id)}
+                    >
+                      {idx + 1}
+                    </td>
+                    {getOrderedVisibleColumns().map((colId, idx2, arr) => {
                       const col = ALL_COLUMNS.find(c => c.id === colId);
                       if (!col) return null;
-                      const isLast = idx === arr.length - 1;
+                      const isLast = idx2 === arr.length - 1;
                       
                       switch (colId) {
                         case 'title':

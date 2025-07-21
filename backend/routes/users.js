@@ -8,9 +8,26 @@ import { uploadMiddleware } from '../middleware/uploadMiddleware.js';
 import { uploadImage, deleteFile } from '../utils/cloudinary.js';
 import fs from 'fs';
 import { promisify } from 'util';
+import UserTabState from '../models/UserTabState.js';
 
 const unlinkAsync = promisify(fs.unlink);
 const router = express.Router();
+
+// Add this check at the start of all tabstate and user-tab-state routes:
+function validateTabKey(tabKey) {
+  // List of valid tabKeys (add all real page keys here)
+  const validTabKeys = [
+    'adminDashboard',
+    'receivedTasks',
+    'assignedTasks',
+    'billedTasks',
+    'unbilledTasks',
+    // add more as needed
+  ];
+  if (!validTabKeys.includes(tabKey)) {
+    throw new Error('Invalid tabKey');
+  }
+}
 
 // Get all users
 router.get('/', protect, async (req, res) => {
@@ -112,7 +129,6 @@ router.put('/profile', protect, uploadMiddleware, async (req, res) => {
       token
     });
   } catch (error) {
-    console.error('Profile update error:', error);
     res.status(500).json({ message: error.message || 'Error updating profile' });
   }
 });
@@ -144,7 +160,6 @@ router.put('/:userId/team', protect, async (req, res) => {
       team: user.team
     });
   } catch (error) {
-    console.error('Team assignment error:', error);
     res.status(500).json({ message: 'Error assigning team' });
   }
 });
@@ -359,7 +374,6 @@ router.patch('/:userId/update-fields', protect, async (req, res) => {
 
     res.json(updatedUser);
   } catch (error) {
-    console.error('Error updating user fields:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -410,6 +424,163 @@ router.get('/except-me', protect, async (req, res) => {
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+// Get per-user, per-tab state
+router.get('/user-tab-state/:tabKey', protect, async (req, res) => {
+  try {
+    const { tabKey } = req.params;
+    validateTabKey(tabKey);
+    const stateDoc = await UserTabState.findOne({ user: req.user._id, tabKey });
+    res.json(stateDoc ? stateDoc.state : {});
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Set per-user, per-tab state
+router.post('/user-tab-state/:tabKey', protect, async (req, res) => {
+  try {
+    const { tabKey } = req.params;
+    validateTabKey(tabKey);
+    const { state } = req.body;
+    if (typeof state !== 'object') {
+      return res.status(400).json({ message: 'State must be an object' });
+    }
+    const updated = await UserTabState.findOneAndUpdate(
+      { user: req.user._id, tabKey },
+      { state },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    res.json(updated.state);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PATCH: Update task order for a tab (flat array, not per-group)
+router.patch('/tabstate/taskOrder', protect, async (req, res) => {
+  try {
+    const { tabKey, order, tabId } = req.body;
+    validateTabKey(tabKey);
+    if (!tabKey || !Array.isArray(order)) {
+      return res.status(400).json({ message: 'tabKey and order array are required' });
+    }
+    const userId = req.user.id;
+    let userTabState = await UserTabState.findOne({ user: userId, tabKey });
+    if (!userTabState) {
+      return res.status(400).json({ message: 'Tab state must be initialized before updating taskOrder.' });
+    }
+    if (!userTabState.state) userTabState.state = {};
+    // Ensure tabs array exists
+    if (!Array.isArray(userTabState.state.tabs)) {
+      userTabState.state.tabs = [];
+    }
+    // Find or create tab object
+    let tabObj;
+    if (tabId) {
+      tabObj = userTabState.state.tabs.find(t => t.id == tabId);
+      if (!tabObj) {
+        tabObj = { id: tabId };
+        userTabState.state.tabs.push(tabObj);
+      }
+    } else {
+      if (userTabState.state.tabs.length === 0) {
+        tabObj = { id: 'default' };
+        userTabState.state.tabs.push(tabObj);
+      } else {
+        tabObj = userTabState.state.tabs[0];
+      }
+    }
+    // Store taskOrder as a flat array
+    tabObj.taskOrder = order;
+    userTabState.markModified('state.tabs');
+    await userTabState.save();
+    res.json({ success: true, state: userTabState.state });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to update task order' });
+  }
+});
+
+// PATCH: Update column order for a tab
+router.patch('/tabstate/columnOrder', protect, async (req, res) => {
+  try {
+    const { tabKey, columnOrder, tabId } = req.body; // columnOrder: [colId, ...]
+    validateTabKey(tabKey);
+    if (!tabKey || !Array.isArray(columnOrder) || !tabId) {
+      return res.status(400).json({ message: 'tabKey, tabId, and columnOrder array are required' });
+    }
+    const userId = req.user.id;
+
+    // Atomic update using positional operator
+    const result = await UserTabState.findOneAndUpdate(
+      { user: userId, tabKey, "state.tabs.id": tabId },
+      { $set: { "state.tabs.$.columnOrder": columnOrder } },
+      { new: true }
+    );
+
+    if (!result) {
+      return res.status(400).json({ message: 'Tab state or tab not found for updating columnOrder.' });
+    }
+
+    res.json({ success: true, columnOrder });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to update column order' });
+  }
+});
+
+// GET: Get column order for a tab
+router.get('/tabstate/columnOrder', protect, async (req, res) => {
+  try {
+    const { tabKey, tabId } = req.query;
+    if (!tabKey) return res.status(400).json({ message: 'tabKey is required' });
+    validateTabKey(tabKey);
+    const userId = req.user.id;
+    const userTabState = await UserTabState.findOne({ user: userId, tabKey });
+    let columnOrder = null;
+    if (userTabState?.state?.tabs && Array.isArray(userTabState.state.tabs) && userTabState.state.tabs.length > 0) {
+      let tabObj;
+      if (tabId) {
+        tabObj = userTabState.state.tabs.find(t => t.id == tabId);
+      }
+      if (!tabObj) {
+        tabObj = userTabState.state.tabs[0];
+      }
+      columnOrder = tabObj?.columnOrder || null;
+    }
+    res.json({ columnOrder });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to get column order' });
+  }
+});
+
+// GET: Get task order for a tab (flat array, not per-group)
+router.get('/tabstate/taskOrder', protect, async (req, res) => {
+  try {
+    const { tabKey, tabId } = req.query;
+    if (!tabKey) return res.status(400).json({ message: 'tabKey is required' });
+    validateTabKey(tabKey);
+    const userId = req.user.id;
+    const userTabState = await UserTabState.findOne({ user: userId, tabKey });
+    let taskOrder = null;
+    if (userTabState?.state?.tabs && Array.isArray(userTabState.state.tabs) && userTabState.state.tabs.length > 0) {
+      let tabObj;
+      if (tabId) {
+        tabObj = userTabState.state.tabs.find(t => t.id == tabId);
+      }
+      if (!tabObj) {
+        tabObj = userTabState.state.tabs[0];
+      }
+      if (tabObj && Array.isArray(tabObj.taskOrder)) {
+        taskOrder = tabObj.taskOrder;
+      } else {
+        taskOrder = null;
+      }
+    }
+    res.json({ taskOrder });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to get task order' });
   }
 });
 

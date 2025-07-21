@@ -16,7 +16,7 @@ import {
   ChatBubbleLeftIcon,
   AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
-import { API_BASE_URL } from '../../apiConfig';
+import { API_BASE_URL, fetchTabState, saveTabState } from '../../apiConfig';
 
 const ALL_COLUMNS = [
   { id: 'title', label: 'Title' },
@@ -61,29 +61,9 @@ const DEFAULT_TAB = () => ({
 const ReceivedTasks = () => {
   const { user, isAuthenticated } = useAuth();
   // Tab state
-  const [tabs, setTabs] = useState(() => {
-    const saved = localStorage.getItem('receivedTasksTabs');
-    if (saved) {
-      try {
-        const parsedTabs = JSON.parse(saved);
-        if (Array.isArray(parsedTabs)) {
-          return parsedTabs.map(tab => ({
-            ...DEFAULT_TAB(),
-            ...tab,
-            visibleColumns: tab.visibleColumns !== undefined ? tab.visibleColumns : ALL_COLUMNS.map(col => col.id),
-            columnOrder: tab.columnOrder !== undefined ? tab.columnOrder : ALL_COLUMNS.map(col => col.id),
-            columnWidths: tab.columnWidths !== undefined ? tab.columnWidths : Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])),
-          }));
-        }
-      } catch (e) {}
-    }
-    return [DEFAULT_TAB()];
-  });
-  const [activeTabId, setActiveTabId] = useState(() => {
-    const saved = localStorage.getItem('receivedTasksActiveTabId');
-    if (saved) return Number(saved);
-    return (JSON.parse(localStorage.getItem('receivedTasksTabs'))?.[0]?.id) || DEFAULT_TAB().id;
-  });
+  const [tabs, setTabs] = useState([]);
+  const [activeTabId, setActiveTabId] = useState(null);
+  const [tabsLoaded, setTabsLoaded] = useState(false);
 
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
@@ -106,8 +86,8 @@ const ReceivedTasks = () => {
   const [taskHours, setTaskHours] = useState([]);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
 
-  // Get active tab object
-  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0];
+  // Get active tab object (defensive)
+  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0] || DEFAULT_TAB();
 
   // Tab actions
   const addTab = () => {
@@ -128,7 +108,20 @@ const ReceivedTasks = () => {
     setTabs(tabs.map(tab => tab.id === id ? { ...tab, title: newTitle } : tab));
   };
   const updateActiveTab = (patch) => {
-    setTabs(tabs.map(tab => tab.id === activeTabId ? { ...tab, ...patch } : tab));
+    setTabs(tabs.map(tab => {
+      if (tab.id !== activeTabId) return tab;
+      let newTab = { ...tab, ...patch };
+      if (patch.visibleColumns) {
+        // Remove hidden columns from order, add new visible columns at the end
+        const currentOrder = newTab.columnOrder || ALL_COLUMNS.map(col => col.id);
+        const newOrder = currentOrder.filter(colId => patch.visibleColumns.includes(colId));
+        patch.visibleColumns.forEach(colId => {
+          if (!newOrder.includes(colId)) newOrder.push(colId);
+        });
+        newTab.columnOrder = newOrder;
+      }
+      return newTab;
+    }));
   };
 
   // Move fetchTasks to component scope so it can be used as a prop
@@ -220,20 +213,6 @@ const ReceivedTasks = () => {
       fetchTaskCounts();
     }
   }, [user]);
-
-  useEffect(() => {
-    if (user && user._id) {
-      const savedFilters = activeTabObj.filters.filter(f => f.saved);
-      if (savedFilters.length > 0 || activeTabObj.sortBy !== 'createdAt' || activeTabObj.sortOrder !== 'desc') {
-        localStorage.setItem(
-          `receivedTasksFilters_${user._id}`,
-          JSON.stringify({ filters: savedFilters, sortBy: activeTabObj.sortBy, sortOrder: activeTabObj.sortOrder })
-        );
-      } else {
-        localStorage.removeItem(`receivedTasksFilters_${user._id}`);
-      }
-    }
-  }, [activeTabObj.filters, activeTabObj.sortBy, activeTabObj.sortOrder, user]);
 
   useEffect(() => {
     const fetchData = async (url, setter) => {
@@ -416,6 +395,8 @@ const ReceivedTasks = () => {
       return result;
     });
 
+    if (!activeTabObj.sortBy) return filteredTasks;
+
     return filteredTasks.sort((a, b) => {
       let aValue = a[activeTabObj.sortBy];
       let bValue = b[activeTabObj.sortBy];
@@ -539,17 +520,37 @@ const ReceivedTasks = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showColumnDropdown]);
 
+  // Fetch tabs and activeTabId from backend on mount
   useEffect(() => {
-    const userId = user?._id || 'guest';
-    const key = `receivedtasks_columns_${userId}`;
-    localStorage.setItem(key, JSON.stringify(activeTabObj.visibleColumns));
-  }, [activeTabObj.visibleColumns, user]);
+    if (!user?.token) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        const tabStates = await fetchTabState('receivedTasks', user.token);
+        if (isMounted && tabStates && Array.isArray(tabStates.tabs)) {
+          setTabs(tabStates.tabs);
+          setActiveTabId(tabStates.activeTabId);
+        } else if (isMounted) {
+          setTabs([DEFAULT_TAB()]);
+          setActiveTabId(DEFAULT_TAB().id);
+        }
+      } catch {
+        if (isMounted) {
+          setTabs([DEFAULT_TAB()]);
+          setActiveTabId(DEFAULT_TAB().id);
+        }
+      } finally {
+        if (isMounted) setTabsLoaded(true);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [user]);
 
-  // Persist tabs and activeTabId
+  // Save tabs and activeTabId to backend whenever they change
   useEffect(() => {
-    localStorage.setItem('receivedTasksTabs', JSON.stringify(tabs));
-    localStorage.setItem('receivedTasksActiveTabId', activeTabId);
-  }, [tabs, activeTabId]);
+    if (!user?.token || !tabsLoaded) return;
+    saveTabState('receivedTasks', { tabs, activeTabId }, user.token).catch(() => {});
+  }, [tabs, activeTabId, user, tabsLoaded]);
 
   if (loading) {
     return (
@@ -679,6 +680,7 @@ const ReceivedTasks = () => {
             value={activeTabObj.sortBy}
             onChange={e => updateActiveTab({ sortBy: e.target.value })}
           >
+            <option value="">None</option>
             <option value="createdAt">Received On</option>
             <option value="priority">Priority</option>
             <option value="status">Stages</option>
@@ -732,6 +734,8 @@ const ReceivedTasks = () => {
           storageKeyPrefix="receivedtasks"
           refetchTasks={fetchTasks}
           sortBy={activeTabObj.sortBy}
+          tabId={activeTabObj.id}
+          tabKey="receivedTasks"
         />
       </ErrorBoundary>
       <CreateTask

@@ -14,6 +14,7 @@ import clientRoutes from './routes/clients.js';
 import timesheetRoutes from './routes/timesheets.js';
 import notificationRoutes from './routes/notifications.js';
 import Team from './models/Team.js';
+import './models/UserTabState.js';
 
 // Get the directory name
 const __filename = fileURLToPath(import.meta.url);

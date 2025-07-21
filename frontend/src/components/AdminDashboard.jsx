@@ -19,7 +19,7 @@ import FilterPopup from './FilterPopup';
 import PDFColumnSelector from './PDFColumnSelector';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { API_BASE_URL } from '../apiConfig';
+import { API_BASE_URL, fetchTabState, saveTabState } from '../apiConfig';
 import AdvancedTaskTable from './AdvancedTaskTable';
 import CreateTask from './CreateTask';
 import TabBar from './TabBar';
@@ -72,7 +72,7 @@ const ALL_COLUMNS = [
 
 // 1. Add columnOrder to DEFAULT_TAB
 const DEFAULT_TAB = () => ({
-  id: Date.now(),
+  id: String(Date.now()),
   title: 'Tab 1',
   filters: [],
   sortBy: 'createdAt',
@@ -88,31 +88,9 @@ const Dashboard = () => {
   // Helper to get saved columns for the user
   // 2. Remove getSavedVisibleColumns and all per-user localStorage for columns/widths
   // 3. Update tabs state to include columnWidths per tab
-  const [tabs, setTabs] = useState(() => {
-    const saved = localStorage.getItem('adminDashboardTabs');
-    if (saved) {
-      try {
-        const parsedTabs = JSON.parse(saved);
-        if (Array.isArray(parsedTabs)) {
-          // Patch only missing fields, not empty arrays/objects
-          return parsedTabs.map(tab => ({
-            ...DEFAULT_TAB(),
-            ...tab,
-            visibleColumns: tab.visibleColumns !== undefined ? tab.visibleColumns : ALL_COLUMNS.map(col => col.id),
-            columnWidths: tab.columnWidths !== undefined ? tab.columnWidths : Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth])),
-            columnOrder: tab.columnOrder !== undefined ? tab.columnOrder : ALL_COLUMNS.map(col => col.id),
-          }));
-        }
-      } catch (e) {}
-    }
-    return [{ ...DEFAULT_TAB() }];
-  });
-  const [activeTabId, setActiveTabId] = useState(() => {
-    const saved = localStorage.getItem('adminDashboardActiveTabId');
-    if (saved) return Number(saved);
-    return (JSON.parse(localStorage.getItem('adminDashboardTabs'))?.[0]?.id) || DEFAULT_TAB().id;
-  });
-
+  const [tabs, setTabs] = useState([]);
+  const [activeTabId, setActiveTabId] = useState(null);
+  const [tabsLoaded, setTabsLoaded] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -155,13 +133,28 @@ const Dashboard = () => {
   };
 
   // Get active tab object
-  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0];
+  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0] || DEFAULT_TAB();
 
   // Tab actions
-  const addTab = () => {
-    const newId = Date.now();
-    setTabs([...tabs, { ...DEFAULT_TAB(), id: newId, title: `Tab ${tabs.length + 1}` }]);
+  const addTab = async () => {
+    const newId = String(Date.now());
+    const newTabs = [...tabs, { ...DEFAULT_TAB(), id: newId, title: `Tab ${tabs.length + 1}` }];
+    setTabs(newTabs);
     setActiveTabId(newId);
+
+    // Sync with backend
+    try {
+      await fetch(`${API_BASE_URL}/api/users/user-tab-state/adminDashboard`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ state: { tabs: newTabs, activeTabId: newId } }),
+      });
+    } catch (err) {
+      // Optionally handle error
+    }
   };
   const closeTab = (id) => {
     let idx = tabs.findIndex(tab => tab.id === id);
@@ -193,11 +186,39 @@ const Dashboard = () => {
     }));
   };
 
-  // Persist tabs and activeTabId
+  // Fetch tabs and activeTabId from backend on mount
   useEffect(() => {
-    localStorage.setItem('adminDashboardTabs', JSON.stringify(tabs));
-    localStorage.setItem('adminDashboardActiveTabId', activeTabId);
-  }, [tabs, activeTabId]);
+    if (!user?.token) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        const tabStates = await fetchTabState('adminDashboard', user.token);
+        if (isMounted && tabStates && Array.isArray(tabStates.tabs) && tabStates.tabs.length > 0) {
+          setTabs(tabStates.tabs);
+          setActiveTabId(tabStates.activeTabId);
+        } else if (isMounted) {
+          const def = { ...DEFAULT_TAB() };
+          setTabs([def]);
+          setActiveTabId(def.id);
+        }
+      } catch {
+        if (isMounted) {
+          const def = { ...DEFAULT_TAB() };
+          setTabs([def]);
+          setActiveTabId(def.id);
+        }
+      } finally {
+        if (isMounted) setTabsLoaded(true);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [user]);
+
+  // Save tabs and activeTabId to backend whenever they change (after load)
+  useEffect(() => {
+    if (!user?.token || !tabsLoaded) return;
+    saveTabState('adminDashboard', { tabs, activeTabId }, user.token).catch(() => {});
+  }, [tabs, activeTabId, user, tabsLoaded]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -274,7 +295,28 @@ const Dashboard = () => {
       if (!Array.isArray(data)) {
         throw new Error('Invalid response format');
       }
-      setTasks(data);
+      // Fetch saved order for this tab
+      let orderedTasks = data;
+      try {
+        const tabKey = 'adminDashboard';
+        const tabId = activeTabObj.id;
+        const orderRes = await fetch(`${API_BASE_URL}/api/users/tabstate/taskOrder?tabKey=${tabKey}&tabId=${tabId}`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (orderRes.ok) {
+          const orderData = await orderRes.json();
+          const savedOrder = orderData.taskOrder;
+          if (savedOrder && Array.isArray(savedOrder)) {
+            const idToTask = Object.fromEntries(data.map(t => [t._id, t]));
+            orderedTasks = savedOrder.map(id => idToTask[id]).filter(Boolean);
+            // Add any new tasks not in savedOrder
+            for (const t of data) if (!orderedTasks.includes(t)) orderedTasks.push(t);
+          }
+        }
+      } catch (err) {
+        // If order fetch fails, just use default order
+      }
+      setTasks(orderedTasks);
     } catch (error) {
       console.error('Error fetching tasks:', error);
       setError(error.message);
@@ -287,7 +329,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchTasks();
-  }, [user]);
+  }, [activeTabId]);
 
   useEffect(() => {
     // Fetch task hours for all users
@@ -412,6 +454,8 @@ const Dashboard = () => {
       }
       return result;
     });
+
+    if (!activeTabObj.sortBy) return filteredTasks;
 
     return filteredTasks.sort((a, b) => {
       let aValue = a[activeTabObj.sortBy];
@@ -770,24 +814,6 @@ const Dashboard = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?._id]);
 
-  // Save to localStorage on every change
-  useEffect(() => {
-    const userId = user?._id || 'guest';
-    const key = `admindashboard_column_widths_${userId}`;
-    if (activeTabObj.columnWidths && Object.keys(activeTabObj.columnWidths).length > 0) {
-      localStorage.setItem(key, JSON.stringify(activeTabObj.columnWidths));
-    }
-  }, [activeTabObj.columnWidths, user]);
-
-  // Persist column order to localStorage whenever it changes
-  useEffect(() => {
-    const userId = user?._id || 'guest';
-    const key = `admindashboard_column_order_${userId}`;
-    if (activeTabObj.visibleColumns && activeTabObj.visibleColumns.length > 0) {
-      localStorage.setItem(key, JSON.stringify(activeTabObj.visibleColumns));
-    }
-  }, [activeTabObj.visibleColumns, user]);
-
   // Calculate widget numbers before return
   const pendingCount = tasks.filter(t => t.status === 'pending').length;
   const todayCount = tasks.filter(t => {
@@ -799,12 +825,9 @@ const Dashboard = () => {
   const totalCount = tasks.length;
   const urgentCount = tasks.filter(t => t.priority === 'urgent').length;
 
-  if (!user) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
+  // Only render table UI after tabsLoaded and tabs.length > 0
+  if (!tabsLoaded || tabs.length === 0) {
+    return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div></div>;
   }
 
   if (loading) {
@@ -968,6 +991,7 @@ const Dashboard = () => {
           value={activeTabObj.sortBy}
           onChange={e => updateActiveTab({ sortBy: e.target.value })}
         >
+          <option value="">None</option>
           <option value="createdAt">Assigned On</option>
           <option value="priority">Priority</option>
           <option value="status">Stages</option>
@@ -1030,6 +1054,8 @@ const Dashboard = () => {
           refetchTasks={fetchTasks}
           sortBy={activeTabObj.sortBy}
           filters={isFilterPopupOpen ? filterDraft : activeTabObj.filters}
+          tabKey="adminDashboard"
+          tabId={activeTabObj.id}
         />
       </div>
       {/* Edit Task Modal */}
