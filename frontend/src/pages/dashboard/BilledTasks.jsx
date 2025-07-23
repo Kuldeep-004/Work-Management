@@ -31,12 +31,14 @@ const BilledTasks = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [visibleColumns, setVisibleColumns] = useState(null);
-  const [columnOrder, setColumnOrder] = useState(null);
-  const [columnWidths, setColumnWidths] = useState(null);
+  const [visibleColumns, setVisibleColumns] = useState(() => ALL_COLUMNS.map(col => col.id));
+  const [columnOrder, setColumnOrder] = useState(() => ALL_COLUMNS.map(col => col.id));
+  const [columnWidths, setColumnWidths] = useState(() => Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])));
   const [sortBy, setSortBy] = useState("");
   const [tableStateLoaded, setTableStateLoaded] = useState(false);
   const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
+  const [rowOrder, setRowOrder] = useState([]);
+  const tabId = 'billedTasksMain';
 
   // Fetch full table state from backend on mount
   useEffect(() => {
@@ -50,11 +52,13 @@ const BilledTasks = () => {
           setColumnOrder(Array.isArray(state.columnOrder) ? state.columnOrder : ALL_COLUMNS.map(col => col.id));
           setColumnWidths(state.columnWidths && typeof state.columnWidths === 'object' ? state.columnWidths : Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])));
           setSortBy(typeof state.sortBy === 'string' ? state.sortBy : 'createdAt');
+          setRowOrder(Array.isArray(state.rowOrder) ? state.rowOrder : []);
         } else if (isMounted) {
           setVisibleColumns(ALL_COLUMNS.map(col => col.id));
           setColumnOrder(ALL_COLUMNS.map(col => col.id));
           setColumnWidths(Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])));
           setSortBy('createdAt');
+          setRowOrder([]);
         }
       } catch {
         if (isMounted) {
@@ -62,6 +66,7 @@ const BilledTasks = () => {
           setColumnOrder(ALL_COLUMNS.map(col => col.id));
           setColumnWidths(Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])));
           setSortBy('createdAt');
+          setRowOrder([]);
         }
       } finally {
         if (isMounted) setTableStateLoaded(true);
@@ -74,8 +79,31 @@ const BilledTasks = () => {
   useEffect(() => {
     if (!user?.token || !tableStateLoaded) return;
     if (!visibleColumns || !columnOrder || !columnWidths) return;
-    saveTabState('billedTasks', { visibleColumns, columnOrder, columnWidths, sortBy }, user.token).catch(() => {});
-  }, [visibleColumns, columnOrder, columnWidths, sortBy, user, tableStateLoaded]);
+    saveTabState('billedTasks', { visibleColumns, columnOrder, columnWidths, sortBy, rowOrder }, user.token).catch(() => {});
+  }, [visibleColumns, columnOrder, columnWidths, sortBy, rowOrder, user, tableStateLoaded]);
+
+  const applyRowOrder = (tasks, order) => {
+    if (!order || order.length === 0) return tasks;
+    
+    const taskMap = new Map(tasks.map(task => [task._id, task]));
+    const orderedTasks = [];
+    const remainingTasks = new Set(tasks.map(task => task._id));
+    
+    // Add tasks in the specified order
+    order.forEach(id => {
+      if (taskMap.has(id)) {
+        orderedTasks.push(taskMap.get(id));
+        remainingTasks.delete(id);
+      }
+    });
+    
+    // Add any remaining tasks that weren't in the rowOrder
+    remainingTasks.forEach(id => {
+      orderedTasks.push(taskMap.get(id));
+    });
+    
+    return orderedTasks;
+  };
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -86,8 +114,15 @@ const BilledTasks = () => {
           headers: { Authorization: `Bearer ${user.token}` },
         });
         if (!response.ok) throw new Error('Failed to fetch tasks');
-        const data = await response.json();
-        setTasks(data.filter(task => task.billed === true && task.status !== 'completed'));
+        let data = await response.json();
+        data = data.filter(task => task.billed === true && task.status !== 'completed');
+        
+        // Apply row order if available
+        if (rowOrder.length > 0) {
+          data = applyRowOrder(data, rowOrder);
+        }
+        
+        setTasks(data);
       } catch (err) {
         setError(err.message);
         setTasks([]);
@@ -96,7 +131,7 @@ const BilledTasks = () => {
       }
     };
     if (user && user.token) fetchTasks();
-  }, [user]);
+  }, [user, rowOrder]);
 
   if (!isAuthenticated() || user.role !== 'Admin') return null;
   if (!tableStateLoaded || !visibleColumns || !columnOrder || !columnWidths) {
@@ -104,8 +139,6 @@ const BilledTasks = () => {
   }
   if (loading) return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div></div>;
   if (error) return <div className="text-red-500 text-center p-4">Error: {error}</div>;
-
-  const tabId = 'billedTasksMain';
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
@@ -183,7 +216,7 @@ const BilledTasks = () => {
         sortBy={sortBy}
         storageKeyPrefix="billedtasks"
         tabKey="billedTasks"
-        tabId={tabId}
+        tabId="billedTasksMain"
       />
     </div>
   );

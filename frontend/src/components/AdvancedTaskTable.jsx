@@ -105,7 +105,16 @@ const AdvancedTaskTable = ({
   tabId,
 }) => {
   const { user } = useAuth();
-  
+  const [prevColumnOrder, setPrevColumnOrder] = useState([]);
+  const isMounted = useRef(true);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
   // Drag and drop state
   const [draggedColumn, setDraggedColumn] = useState(null);
   const [dragOverColumn, setDragOverColumn] = useState(null);
@@ -159,6 +168,9 @@ const AdvancedTaskTable = ({
   const lastGroupFieldRef = useRef(null);
 
   const isControlled = !!visibleColumns && !!setVisibleColumns;
+
+  // Add a new variable:
+  const isColumnOrderControlled = typeof columnOrder !== 'undefined' && typeof setColumnOrder === 'function';
 
   // Helper functions
   const getStatusColor = (status) => {
@@ -230,11 +242,11 @@ const AdvancedTaskTable = ({
       const newOrder = [...columnOrder];
       const draggedIndex = newOrder.indexOf(draggedColumn);
       const targetIndex = newOrder.indexOf(targetColumnId);
-      
       newOrder.splice(draggedIndex, 1);
       newOrder.splice(targetIndex, 0, draggedColumn);
-      
-      setColumnOrder(newOrder);
+      if (isColumnOrderControlled) {
+        setColumnOrder(newOrder);
+      } // else: do nothing, or use local state if implemented
     }
     setDraggedColumn(null);
     setDragOverColumn(null);
@@ -517,55 +529,155 @@ const AdvancedTaskTable = ({
     }
   }
 
-  // On mount, fetch columnOrder from backend for this tabKey
+  // Wrap the initialization useEffect for columnOrder:
   useEffect(() => {
-    let isMounted = true;
-    async function fetchColumnOrder() {
-      try {
-        if (!tabKey || !tabId) return;
-        const res = await fetch(`${API_BASE_URL}/api/users/tabstate/columnOrder?tabKey=${tabKey}&tabId=${tabId}`, {
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          let order = data.columnOrder;
-          const allIds = ALL_COLUMNS.map(col => col.id);
-          // Fallback: ensure all columns present
-          if (!order || !Array.isArray(order) || order.some(colId => !allIds.includes(colId)) || allIds.some(colId => !order.includes(colId))) {
-            order = allIds;
-          }
-          if (isMounted) {
-            setColumnOrder(order);
-            if (!isControlled) setVisibleColumns(order);
-          }
-        }
-      } catch (err) {
-        // fallback: show all columns
-        setColumnOrder(ALL_COLUMNS.map(col => col.id));
-        if (!isControlled) setVisibleColumns(ALL_COLUMNS.map(col => col.id));
+    if (!isColumnOrderControlled) {
+      if (!columnOrder.length && !visibleColumns.length) {
+        const defaultOrder = ALL_COLUMNS.map(col => col.id);
+        setColumnOrder(defaultOrder);
+        if (!isControlled) setVisibleColumns(defaultOrder);
       }
     }
-    fetchColumnOrder();
-    return () => { isMounted = false; };
-    // eslint-disable-next-line
-  }, [tabKey, tabId]);
+  }, [columnOrder, visibleColumns, isControlled, isColumnOrderControlled]);
 
-  // When columnOrder changes, persist to backend
+  // Wrap the fetchColumnOrder useEffect:
   useEffect(() => {
-    if (!columnOrder || !Array.isArray(columnOrder) || columnOrder.length === 0) return;
-    async function saveColumnOrder() {
-      try {
-        if (!tabKey || !tabId) return;
-        await fetch(`${API_BASE_URL}/api/users/tabstate/columnOrder`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
-          body: JSON.stringify({ tabKey, columnOrder, tabId }),
-        });
-      } catch (err) {}
+    if (!isColumnOrderControlled) {
+      if (!tabKey || !tabId) return;
+      async function fetchColumnOrder() {
+        try {
+          if (!tabKey || !tabId) return;
+          const res = await fetch(`${API_BASE_URL}/api/users/tabstate/columnOrder?tabKey=${tabKey}&tabId=${tabId}`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            let order = data.columnOrder;
+            const allIds = ALL_COLUMNS.map(col => col.id);
+            // Fallback: ensure all columns present
+            if (!order || !Array.isArray(order) || order.some(colId => !allIds.includes(colId)) || allIds.some(colId => !order.includes(colId))) {
+              order = allIds;
+            }
+            if (isMounted.current) {
+              setColumnOrder(order);
+              if (!isControlled && setVisibleColumns) {
+                try {
+                  setVisibleColumns(order);
+                } catch (error) {
+                  console.error('Error setting visible columns:', error);
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching column order:', err);
+          // fallback: show all columns
+          if (isMounted.current) {
+            setColumnOrder(ALL_COLUMNS.map(col => col.id));
+            if (!isControlled && setVisibleColumns) setVisibleColumns(ALL_COLUMNS.map(col => col.id));
+          }
+        }
+      }
+      fetchColumnOrder();
+      return () => { isMounted.current = false; };
     }
-    saveColumnOrder();
     // eslint-disable-next-line
-  }, [columnOrder, tabKey, tabId]);
+  }, [tabKey, tabId, isControlled, isColumnOrderControlled]);
+
+  // Wrap the saveColumnOrder useEffect:
+  useEffect(() => {
+    if (!isColumnOrderControlled) {
+      if (!columnOrder || !Array.isArray(columnOrder) || columnOrder.length === 0) return;
+      async function saveColumnOrder() {
+        try {
+          if (!user?.token) {
+            console.error('Missing authentication token');
+            return;
+          }
+          if (!tabKey || !tabId || !Array.isArray(columnOrder)) {
+            console.error('Invalid column order data:', { tabKey, tabId, columnOrder });
+            return;
+          }
+          const allIds = ALL_COLUMNS.map(col => col.id);
+          if (columnOrder.some(colId => !allIds.includes(colId))) {
+            console.error('Invalid column IDs in order:', columnOrder);
+            return;
+          }
+          const response = await fetch(`${API_BASE_URL}/api/users/tabstate/columnOrder`, {
+            method: 'PATCH',
+            headers: { 
+              'Content-Type': 'application/json', 
+              Authorization: `Bearer ${user.token}` 
+            },
+            body: JSON.stringify({ tabKey, columnOrder, tabId }),
+          });
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+            console.error('Failed to save column order:', errorData);
+            toast.error(errorData.message || 'Failed to save column order');
+            // Fallback: restore previous order if save fails
+            setColumnOrder(prevColumnOrder);
+            if (!isControlled) setVisibleColumns(prevColumnOrder);
+          } else {
+            // Store successful order as previous order
+            setPrevColumnOrder(columnOrder);
+          }
+        } catch (err) {
+          console.error('Error saving column order:', err);
+          toast.error('Failed to save column order');
+          // Fallback: restore previous order if save fails
+          setColumnOrder(prevColumnOrder);
+          if (!isControlled) setVisibleColumns(prevColumnOrder);
+        }
+      }
+      saveColumnOrder();
+    }
+    // eslint-disable-next-line
+  }, [columnOrder, tabKey, tabId, isColumnOrderControlled]);
+
+  // When component mounts, fetch initial column order
+  useEffect(() => {
+    if (!isColumnOrderControlled) {
+      if (!tabKey || !tabId) return;
+      async function fetchColumnOrder() {
+        try {
+          if (!tabKey || !tabId) return;
+          const res = await fetch(`${API_BASE_URL}/api/users/tabstate/columnOrder?tabKey=${tabKey}&tabId=${tabId}`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            let order = data.columnOrder;
+            const allIds = ALL_COLUMNS.map(col => col.id);
+            // Fallback: ensure all columns present
+            if (!order || !Array.isArray(order) || order.some(colId => !allIds.includes(colId)) || allIds.some(colId => !order.includes(colId))) {
+              order = allIds;
+            }
+            if (isMounted.current) {
+              setColumnOrder(order);
+              if (!isControlled && setVisibleColumns) {
+                try {
+                  setVisibleColumns(order);
+                } catch (error) {
+                  console.error('Error setting visible columns:', error);
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching column order:', err);
+          // fallback: show all columns
+          if (isMounted.current) {
+            setColumnOrder(ALL_COLUMNS.map(col => col.id));
+            if (!isControlled && setVisibleColumns) setVisibleColumns(ALL_COLUMNS.map(col => col.id));
+          }
+        }
+      }
+      fetchColumnOrder();
+      return () => { isMounted.current = false; };
+    }
+    // eslint-disable-next-line
+  }, [tabKey, tabId, isControlled, isColumnOrderControlled]);
 
   // Helper to get all assigned verifier user IDs for a task
   const getAssignedVerifierIds = (task) => [
