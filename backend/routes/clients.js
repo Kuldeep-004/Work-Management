@@ -31,7 +31,7 @@ router.get('/', protect, async (req, res) => {
 });
 
 // Create a client
-router.post('/', protect, async (req, res) => {
+router.post('/', protect, checkRole(['Admin', 'Team Head']), async (req, res) => {
   try {
     const { name, group, status, workOffered, priority } = req.body;
 
@@ -95,7 +95,7 @@ router.get('/groups', protect, async (req, res) => {
 });
 
 // Create a client group
-router.post('/groups', protect, async (req, res) => {
+router.post('/groups', protect, checkRole(['Admin', 'Team Head']), async (req, res) => {
   try {
     const { name } = req.body;
 
@@ -159,7 +159,7 @@ router.get('/work-types', protect, async (req, res) => {
 });
 
 // Create a work type
-router.post('/work-types', protect, async (req, res) => {
+router.post('/work-types', protect, checkRole(['Admin', 'Team Head']), async (req, res) => {
   try {
     const { name } = req.body;
 

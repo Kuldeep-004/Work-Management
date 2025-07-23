@@ -70,6 +70,7 @@ const DashboardLayout = ({ children }) => {
           { id: 'subordinate-timesheets', label: 'Subordinate Timesheets', icon: ClipboardDocumentListIcon, path: '/dashboard/subordinate-timesheets' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
+          { id: 'clients', label: 'Clients', icon: BuildingOfficeIcon, path: '/dashboard/clients' },
           { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
           { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' }
         );

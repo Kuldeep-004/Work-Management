@@ -36,6 +36,7 @@ const BilledTasks = () => {
   const [columnWidths, setColumnWidths] = useState(null);
   const [sortBy, setSortBy] = useState("");
   const [tableStateLoaded, setTableStateLoaded] = useState(false);
+  const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
 
   // Fetch full table state from backend on mount
   useEffect(() => {
@@ -104,6 +105,8 @@ const BilledTasks = () => {
   if (loading) return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div></div>;
   if (error) return <div className="text-red-500 text-center p-4">Error: {error}</div>;
 
+  const tabId = 'billedTasksMain';
+
   return (
     <div className="p-4 sm:p-6 md:p-8">
       <h2 className="text-2xl font-bold text-gray-800 mb-6">Billed Tasks</h2>
@@ -115,21 +118,31 @@ const BilledTasks = () => {
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
         />
-        <select
-          className="px-3 py-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-          value={sortBy}
-          onChange={e => setSortBy(e.target.value)}
-        >
-          <option value="">None</option>
-          <option value="createdAt">Assigned On</option>
-          <option value="priority">Priority</option>
-          <option value="status">Stages</option>
-          <option value="clientName">Client Name</option>
-          <option value="clientGroup">Client Group</option>
-          <option value="workType">Work Type</option>
-          <option value="workDoneBy">Assigned To</option>
-          <option value="billed">Billed</option>
-        </select>
+        {/* Replace the old <select> with the dashboard-style Group By dropdown */}
+        <div className="relative flex items-center gap-2">
+          <button
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
+            onClick={() => setShowGroupByDropdown(v => !v)}
+            type="button"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/></svg>
+            <span className="font-semibold">Group By</span>
+          </button>
+          {showGroupByDropdown && (
+            <div className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44 animate-fade-in" style={{minWidth: '160px'}}>
+              <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">Group By</div>
+              <button className={`block w-full text-left px-4 py-2 rounded ${!sortBy || sortBy === '' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy(''); setShowGroupByDropdown(false); }}>None</button>
+              <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'createdAt' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('createdAt'); setShowGroupByDropdown(false); }}>Assigned On</button>
+              <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'priority' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('priority'); setShowGroupByDropdown(false); }}>Priority</button>
+              <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'status' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('status'); setShowGroupByDropdown(false); }}>Stages</button>
+              <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'clientName' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('clientName'); setShowGroupByDropdown(false); }}>Client Name</button>
+              <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'clientGroup' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('clientGroup'); setShowGroupByDropdown(false); }}>Client Group</button>
+              <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'workType' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('workType'); setShowGroupByDropdown(false); }}>Work Type</button>
+              <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'workDoneBy' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('workDoneBy'); setShowGroupByDropdown(false); }}>Assigned To</button>
+              <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('billed'); setShowGroupByDropdown(false); }}>Billed</button>
+            </div>
+          )}
+        </div>
       </div>
       <AdvancedTaskTable
         tasks={sortBy ? tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -170,7 +183,7 @@ const BilledTasks = () => {
         sortBy={sortBy}
         storageKeyPrefix="billedtasks"
         tabKey="billedTasks"
-        // tabId={activeTabObj?.id} // Uncomment and pass if you use tabs here
+        tabId={tabId}
       />
     </div>
   );

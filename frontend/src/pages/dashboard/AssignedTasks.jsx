@@ -593,14 +593,6 @@ const AssignedTasks = () => {
             <option value="workDoneBy">Assigned To</option>
             <option value="billed">Billed</option>
           </select>
-          <select
-            className="px-3 py-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-            value={activeTabObj.sortOrder}
-            onChange={e => updateActiveTab({ sortOrder: e.target.value })}
-          >
-            <option value="asc">Asc</option>
-            <option value="desc">Desc</option>
-          </select>
         </div>
       </div>
       <ErrorBoundary>

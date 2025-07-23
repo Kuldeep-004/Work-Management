@@ -587,8 +587,15 @@ const CreateTask = ({
     ? `${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''} selected`
     : 'Select users';
 
+  // Ensure current user is always in the users list for assignment
+  const usersWithCurrent = useMemo(() => {
+    if (!loggedInUser) return users;
+    if (users.some(u => u._id === loggedInUser._id)) return users;
+    return [loggedInUser, ...users];
+  }, [users, loggedInUser]);
+
   // Filter users based on role-based permissions
-  const filteredUsers = users.filter(user => {
+  const filteredUsers = usersWithCurrent.filter(user => {
     // First filter by search term
     const matchesSearch = `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSearch;
@@ -665,7 +672,7 @@ const CreateTask = ({
     setUploading(false);
   };
 
-  const filteredWorkTypes = useMemo(() => {
+  const filteredWorkTypes   = useMemo(() => {
     if (!workTypeSearchTerm) return workTypes;
     return workTypes.filter(type => type.name.toLowerCase().includes(workTypeSearchTerm.toLowerCase()));
   }, [workTypes, workTypeSearchTerm]);
@@ -687,14 +694,6 @@ const CreateTask = ({
   // Render modal only if isOpen
   return (
     <>
-      {mode === 'create' && (
-        <button
-          onClick={() => onClose('open')}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          Create Task
-        </button>
-      )}
       {isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">

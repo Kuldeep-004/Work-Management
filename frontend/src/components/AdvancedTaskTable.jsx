@@ -158,6 +158,8 @@ const AdvancedTaskTable = ({
   const lastTaskIdsRef = useRef([]);
   const lastGroupFieldRef = useRef(null);
 
+  const isControlled = !!visibleColumns && !!setVisibleColumns;
+
   // Helper functions
   const getStatusColor = (status) => {
     switch (status) {
@@ -534,13 +536,13 @@ const AdvancedTaskTable = ({
           }
           if (isMounted) {
             setColumnOrder(order);
-            setVisibleColumns(order);
+            if (!isControlled) setVisibleColumns(order);
           }
         }
       } catch (err) {
         // fallback: show all columns
         setColumnOrder(ALL_COLUMNS.map(col => col.id));
-        setVisibleColumns(ALL_COLUMNS.map(col => col.id));
+        if (!isControlled) setVisibleColumns(ALL_COLUMNS.map(col => col.id));
       }
     }
     fetchColumnOrder();
