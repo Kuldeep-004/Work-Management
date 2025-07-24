@@ -30,6 +30,7 @@ const ALL_COLUMNS = [
 const UnBilledTasks = () => {
   const { user, isAuthenticated } = useAuth();
   const [tasks, setTasks] = useState([]);
+  const [priorities, setPriorities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -112,23 +113,41 @@ const UnBilledTasks = () => {
   };
 
   useEffect(() => {
-    const fetchTasks = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(`${API_BASE_URL}/api/tasks/all`, {
+
+        // Fetch tasks and rowOrder together
+        const [tasksResponse, tabState] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/tasks/all`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          }),
+          fetchTabState('unbilledTasks', user.token)
+        ]);
+        if (!tasksResponse.ok) throw new Error('Failed to fetch tasks');
+        let tasksData = await tasksResponse.json();
+        tasksData = tasksData.filter(task => task.billed === false && task.status !== 'completed');
+
+        // Get rowOrder from tabState
+        let order = [];
+        if (tabState && Array.isArray(tabState.rowOrder)) {
+          order = tabState.rowOrder;
+        }
+        // Apply row order if available
+        if (order.length > 0) {
+          tasksData = applyRowOrder(tasksData, order);
+        }
+        setTasks(tasksData);
+
+        // Fetch priorities
+        const prioritiesResponse = await fetch(`${API_BASE_URL}/api/priorities`, {
           headers: { Authorization: `Bearer ${user.token}` },
         });
-        if (!response.ok) throw new Error('Failed to fetch tasks');
-        let data = await response.json();
-        data = data.filter(task => task.billed === false && task.status !== 'completed');
-        
-        // Apply row order if available
-        if (rowOrder.length > 0) {
-          data = applyRowOrder(data, rowOrder);
+        if (prioritiesResponse.ok) {
+          const prioritiesData = await prioritiesResponse.json();
+          setPriorities(prioritiesData);
         }
-        
-        setTasks(data);
       } catch (err) {
         setError(err.message);
         setTasks([]);
@@ -136,8 +155,8 @@ const UnBilledTasks = () => {
         setLoading(false);
       }
     };
-    if (user && user.token) fetchTasks();
-  }, [user, rowOrder]);
+    if (user && user.token) fetchData();
+  }, [user]);
 
   if (!isAuthenticated() || user.role !== 'Admin') return null;
   if (!tableStateLoaded || !visibleColumns || !columnOrder || !columnWidths) {
@@ -192,17 +211,11 @@ const UnBilledTasks = () => {
                           aValue = new Date(aValue);
                           bValue = new Date(bValue);
                         } else if (sortBy === 'priority') {
-                          const priorityOrder = {
-                            'urgent': 1,
-                            'today': 2,
-                            'lessThan3Days': 3,
-                            'thisWeek': 4,
-                            'thisMonth': 5,
-                            'regular': 6,
-                            'filed': 7,
-                            'dailyWorksOffice': 8,
-                            'monthlyWorks': 9
-                          };
+                          // Generate priority order dynamically
+                          const priorityOrder = {};
+                          priorities.forEach((priority, index) => {
+                            priorityOrder[priority.name] = priority.order || (priority.isDefault ? index + 1 : index + 100);
+                          });
                           aValue = priorityOrder[aValue] || 999;
                           bValue = priorityOrder[bValue] || 999;
                         }

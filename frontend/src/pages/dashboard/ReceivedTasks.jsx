@@ -82,6 +82,7 @@ const ReceivedTasks = () => {
   const [clientNames, setClientNames] = useState([]);
   const [clientGroups, setClientGroups] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
+  const [priorities, setPriorities] = useState([]);
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const columnsDropdownRef = useRef(null);
   const [taskHours, setTaskHours] = useState([]);
@@ -126,8 +127,26 @@ const ReceivedTasks = () => {
     }));
   };
 
-  // Move fetchTasks to component scope so it can be used as a prop
-  const fetchTasks = async () => {
+  // --- ROW ORDER LOGIC ---
+  const [rowOrder, setRowOrder] = useState([]);
+  const applyRowOrder = (tasks, order) => {
+    if (!order || order.length === 0) return tasks;
+    const taskMap = new Map(tasks.map(task => [task._id, task]));
+    const orderedTasks = [];
+    const remainingTasks = new Set(tasks.map(task => task._id));
+    order.forEach(id => {
+      if (taskMap.has(id)) {
+        orderedTasks.push(taskMap.get(id));
+        remainingTasks.delete(id);
+      }
+    });
+    remainingTasks.forEach(id => {
+      orderedTasks.push(taskMap.get(id));
+    });
+    return orderedTasks;
+  };
+
+  const fetchTasksAndTabState = async () => {
     try {
       let url;
       if (activeTabObj.activeTab === 'guidance') {
@@ -135,21 +154,32 @@ const ReceivedTasks = () => {
       } else {
         url = `${API_BASE_URL}/api/tasks/received?tab=${activeTabObj.activeTab}`;
       }
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to fetch tasks');
+      // Fetch tasks and tab state together
+      const [tasksResponse, tabState] = await Promise.all([
+        fetch(url, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        }),
+        fetchTabState('receivedTasks', user.token)
+      ]);
+      if (!tasksResponse.ok) throw new Error('Failed to fetch tasks');
+      let tasksData = await tasksResponse.json();
+      // Get rowOrder from tabState
+      let order = [];
+      if (tabState && Array.isArray(tabState.rowOrder)) {
+        order = tabState.rowOrder;
+        setRowOrder(order);
       }
-      const data = await response.json();
-      setTasks(data);
+      // Apply row order if available
+      if (order.length > 0) {
+        tasksData = applyRowOrder(tasksData, order);
+      }
+      setTasks(tasksData);
       setError(null);
     } catch (error) {
       console.error('Error fetching tasks:', error);
       setError(error.message);
       toast.error('Failed to fetch tasks');
+      setTasks([]);
     } finally {
       setTasksLoaded(true); // NEW
     }
@@ -191,7 +221,7 @@ const ReceivedTasks = () => {
   useEffect(() => {
     if (user && user.token) {
       setTasksLoaded(false); // NEW: reset before fetching
-      fetchTasks();
+      fetchTasksAndTabState();
     }
     // eslint-disable-next-line
   }, [user, activeTabObj.activeTab]);
@@ -240,6 +270,7 @@ const ReceivedTasks = () => {
       fetchData(`${API_BASE_URL}/api/tasks/unique/client-names`, setClientNames);
       fetchData(`${API_BASE_URL}/api/tasks/unique/client-groups`, setClientGroups);
       fetchData(`${API_BASE_URL}/api/tasks/unique/work-types`, setWorkTypes);
+      fetchData(`${API_BASE_URL}/api/priorities`, setPriorities);
     }
   }, [user]);
 
@@ -265,18 +296,27 @@ const ReceivedTasks = () => {
   const getFilteredAndSortedTasks = (tasks) => {
     if (!Array.isArray(tasks)) return [];
 
-    // Priority order mapping for sorting
-    const priorityOrder = {
-      'urgent': 1,
-      'today': 2,
-      'lessThan3Days': 3,
-      'thisWeek': 4,
-      'thisMonth': 5,
-      'regular': 6,
-      'filed': 7,
-      'dailyWorksOffice': 8,
-      'monthlyWorks': 9
-    };
+    // Priority order mapping for sorting (dynamic from API)
+    const priorityOrder = {};
+    if (priorities.length > 0) {
+      priorities.forEach((priority, index) => {
+        priorityOrder[priority.name] = priority.order || (index + 1);
+      });
+    } else {
+      // Fallback to default priority order if API priorities not loaded
+      const defaultOrder = {
+        'urgent': 1,
+        'today': 2,
+        'lessThan3Days': 3,
+        'thisWeek': 4,
+        'thisMonth': 5,
+        'regular': 6,
+        'filed': 7,
+        'dailyWorksOffice': 8,
+        'monthlyWorks': 9
+      };
+      Object.assign(priorityOrder, defaultOrder);
+    }
 
     let filteredTasks = tasks.filter(task => {
       // Exclude tasks with verificationStatus 'pending'
@@ -555,8 +595,8 @@ const ReceivedTasks = () => {
   // Save tabs and activeTabId to backend whenever they change
   useEffect(() => {
     if (!user?.token || !tabsLoaded) return;
-    saveTabState('receivedTasks', { tabs, activeTabId }, user.token).catch(() => {});
-  }, [tabs, activeTabId, user, tabsLoaded]);
+    saveTabState('receivedTasks', { tabs, activeTabId, rowOrder }, user.token).catch(() => {});
+  }, [tabs, activeTabId, rowOrder, user, tabsLoaded]);
 
   // Combine all loading states
   const isPageLoading = !tabsLoaded || !usersLoaded || !tasksLoaded;
@@ -640,6 +680,7 @@ const ReceivedTasks = () => {
               clientNames={clientNames}
               clientGroups={clientGroups}
               workTypes={workTypes}
+              priorities={priorities}
             />
           </div>
           <input
@@ -727,9 +768,12 @@ const ReceivedTasks = () => {
           users={users}
           currentUser={user}
           onTaskUpdate={(taskId, updater) => {
+            // Update task in the local state
             setTasks(prevTasks => prevTasks.map(task =>
               task._id === taskId ? updater(task) : task
             ));
+            // No need to call fetchTasks here as the AdvancedTaskTable component will
+            // handle refreshing data when needed for priority changes
           }}
           onTaskDelete={handleDeleteTask}
           onStatusChange={handleStatusChange}
@@ -743,7 +787,7 @@ const ReceivedTasks = () => {
           columnWidths={activeTabObj.columnWidths}
           setColumnWidths={widths => updateActiveTab({ columnWidths: widths })}
           storageKeyPrefix="receivedtasks"
-          refetchTasks={fetchTasks}
+          refetchTasks={fetchTasksAndTabState}
           sortBy={activeTabObj.sortBy}
           tabId={activeTabObj.id}
           tabKey="receivedTasks"

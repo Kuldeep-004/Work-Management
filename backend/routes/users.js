@@ -473,29 +473,36 @@ router.patch('/tabstate/taskOrder', protect, async (req, res) => {
       return res.status(400).json({ message: 'Tab state must be initialized before updating taskOrder.' });
     }
     if (!userTabState.state) userTabState.state = {};
-    // Ensure tabs array exists
-    if (!Array.isArray(userTabState.state.tabs)) {
-      userTabState.state.tabs = [];
-    }
-    // Find or create tab object
-    let tabObj;
-    if (tabId) {
-      tabObj = userTabState.state.tabs.find(t => t.id == tabId);
-      if (!tabObj) {
-        tabObj = { id: tabId };
-        userTabState.state.tabs.push(tabObj);
-      }
+    if (tabKey === 'billedTasks' || tabKey === 'unbilledTasks') {
+      userTabState.state.rowOrder = order;
+      // Remove tabs array if it exists
+      if (userTabState.state.tabs) delete userTabState.state.tabs;
+      userTabState.markModified('state.rowOrder');
     } else {
-      if (userTabState.state.tabs.length === 0) {
-        tabObj = { id: 'default' };
-        userTabState.state.tabs.push(tabObj);
-      } else {
-        tabObj = userTabState.state.tabs[0];
+      // Ensure tabs array exists
+      if (!Array.isArray(userTabState.state.tabs)) {
+        userTabState.state.tabs = [];
       }
+      // Find or create tab object
+      let tabObj;
+      if (tabId) {
+        tabObj = userTabState.state.tabs.find(t => t.id == tabId);
+        if (!tabObj) {
+          tabObj = { id: tabId };
+          userTabState.state.tabs.push(tabObj);
+        }
+      } else {
+        if (userTabState.state.tabs.length === 0) {
+          tabObj = { id: 'default' };
+          userTabState.state.tabs.push(tabObj);
+        } else {
+          tabObj = userTabState.state.tabs[0];
+        }
+      }
+      // Store taskOrder as a flat array
+      tabObj.taskOrder = order;
+      userTabState.markModified('state.tabs');
     }
-    // Store taskOrder as a flat array
-    tabObj.taskOrder = order;
-    userTabState.markModified('state.tabs');
     await userTabState.save();
     res.json({ success: true, state: userTabState.state });
   } catch (err) {
@@ -506,26 +513,44 @@ router.patch('/tabstate/taskOrder', protect, async (req, res) => {
 // PATCH: Update column order for a tab
 router.patch('/tabstate/columnOrder', protect, async (req, res) => {
   try {
-    const { tabKey, columnOrder, tabId } = req.body; // columnOrder: [colId, ...]
+    const { tabKey, columnOrder, tabId } = req.body;
     validateTabKey(tabKey);
     if (!tabKey || !Array.isArray(columnOrder) || !tabId) {
       return res.status(400).json({ message: 'tabKey, tabId, and columnOrder array are required' });
     }
     const userId = req.user.id;
-
-    // Atomic update using positional operator
-    const result = await UserTabState.findOneAndUpdate(
-      { user: userId, tabKey, "state.tabs.id": tabId },
-      { $set: { "state.tabs.$.columnOrder": columnOrder } },
-      { new: true }
-    );
-
-    if (!result) {
-      return res.status(400).json({ message: 'Tab state or tab not found for updating columnOrder.' });
+    let userTabState = await UserTabState.findOne({ user: userId, tabKey });
+    if (!userTabState) {
+      // Create new tab state if it doesn't exist
+      userTabState = new UserTabState({
+        user: userId,
+        tabKey,
+        state: {}
+      });
     }
-
+    if (!userTabState.state) userTabState.state = {};
+    if (tabKey === 'billedTasks' || tabKey === 'unbilledTasks') {
+      userTabState.state.columnOrder = columnOrder;
+      // Remove tabs array if it exists
+      if (userTabState.state.tabs) delete userTabState.state.tabs;
+      userTabState.markModified('state.columnOrder');
+    } else {
+      // Initialize state if it doesn't exist
+      if (!userTabState.state.tabs) userTabState.state.tabs = [];
+      // Find the tab or create it if it doesn't exist
+      const tabIndex = userTabState.state.tabs.findIndex(t => t.id === tabId);
+      if (tabIndex >= 0) {
+        // Update existing tab
+        userTabState.state.tabs[tabIndex].columnOrder = columnOrder;
+      } else {
+        // Add new tab
+        userTabState.state.tabs.push({ id: tabId, columnOrder });
+      }
+    }
+    await userTabState.save();
     res.json({ success: true, columnOrder });
   } catch (err) {
+    console.error('Error updating column order:', err);
     res.status(500).json({ message: err.message || 'Failed to update column order' });
   }
 });

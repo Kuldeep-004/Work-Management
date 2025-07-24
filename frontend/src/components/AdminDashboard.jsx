@@ -104,6 +104,7 @@ const Dashboard = () => {
   const [clientNames, setClientNames] = useState([]);
   const [clientGroups, setClientGroups] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
+  const [priorities, setPriorities] = useState([]);
   const [taskHours, setTaskHours] = useState([]);
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const columnsDropdownRef = useRef(null);
@@ -255,6 +256,7 @@ const Dashboard = () => {
       fetchData('tasks/unique/client-names', setClientNames);
       fetchData('tasks/unique/client-groups', setClientGroups);
       fetchData('tasks/unique/work-types', setWorkTypes);
+      fetchData('priorities', setPriorities);
     }
   }, [user]);
 
@@ -314,8 +316,10 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    fetchTasks();
-  }, [activeTabId]);
+    if (tabsLoaded && activeTabId) {
+      fetchTasks();
+    }
+  }, [tabsLoaded, activeTabId]);
 
   useEffect(() => {
     // Fetch task hours for all users
@@ -340,18 +344,11 @@ const Dashboard = () => {
     if (!Array.isArray(tasks)) return [];
     const filters = filtersToUse || activeTabObj.filters;
 
-    // Priority order mapping for sorting
-    const priorityOrder = {
-      'urgent': 1,
-      'today': 2,
-      'lessThan3Days': 3,
-      'thisWeek': 4,
-      'thisMonth': 5,
-      'regular': 6,
-      'filed': 7,
-      'dailyWorksOffice': 8,
-      'monthlyWorks': 9
-    };
+    // Priority order mapping for sorting - generate dynamically from priorities
+    const priorityOrder = {};
+    priorities.forEach((priority, index) => {
+      priorityOrder[priority.name] = priority.order || (priority.isDefault ? index + 1 : index + 100);
+    });
 
     let filteredTasks = tasks.filter(task => {
       // Exclude tasks with verificationStatus 'pending'
@@ -925,6 +922,7 @@ const Dashboard = () => {
             clientNames={clientNames}
             clientGroups={clientGroups}
             workTypes={workTypes}
+            priorities={priorities}
           />
         </div>
         <input

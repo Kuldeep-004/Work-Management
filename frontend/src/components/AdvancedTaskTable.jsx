@@ -107,6 +107,10 @@ const AdvancedTaskTable = ({
   const { user } = useAuth();
   const [prevColumnOrder, setPrevColumnOrder] = useState([]);
   const isMounted = useRef(true);
+  
+  // State for dynamic priorities
+  const [dynamicPriorities, setDynamicPriorities] = useState([]);
+  const [prioritiesLoaded, setPrioritiesLoaded] = useState(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -114,6 +118,47 @@ const AdvancedTaskTable = ({
       isMounted.current = false;
     };
   }, []);
+
+  // Fetch dynamic priorities
+  useEffect(() => {
+    const fetchPriorities = async () => {
+      if (!user?.token) return;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/priorities`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (response.ok) {
+          const priorities = await response.json();
+          setDynamicPriorities(priorities);
+        }
+      } catch (error) {
+        console.error('Error fetching priorities:', error);
+        // Fallback to static priorities if fetch fails
+        setDynamicPriorities([]);
+      } finally {
+        setPrioritiesLoaded(true);
+      }
+    };
+
+    fetchPriorities();
+  }, [user?.token]);
+
+  // Get current priority options (dynamic + static fallback)
+  const getCurrentPriorityOptions = () => {
+    if (!prioritiesLoaded) {
+      return PRIORITY_OPTIONS; // Use static options while loading
+    }
+    
+    if (dynamicPriorities.length > 0) {
+      return dynamicPriorities.map(p => ({
+        value: p.name,
+        label: p.name.charAt(0).toUpperCase() + p.name.slice(1).replace(/([A-Z])/g, ' $1')
+      }));
+    }
+    
+    return PRIORITY_OPTIONS; // Fallback to static if no dynamic priorities
+  };
 
   // Drag and drop state
   const [draggedColumn, setDraggedColumn] = useState(null);
@@ -387,6 +432,18 @@ const AdvancedTaskTable = ({
       if (onTaskUpdate) {
         onTaskUpdate(task._id, () => ({ ...task, priority: updatedTask.priority }));
       }
+      
+      // Update the task in orderedTasks without changing positions
+      const updatedOrderedTasks = orderedTasks.map(t => 
+        t._id === task._id ? { ...t, priority: newPriority } : t
+      );
+      setOrderedTasks(updatedOrderedTasks);
+      
+      // Refresh tasks from backend if refetchTasks is available
+      if (refetchTasks) {
+        refetchTasks();
+      }
+      
       toast.success('Priority updated');
     } catch (error) {
       toast.error(error.message || 'Failed to update priority');
@@ -757,7 +814,10 @@ const AdvancedTaskTable = ({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
         body: JSON.stringify({ tabKey, order: newOrder, tabId }),
       });
-    } catch (err) {}
+      // No refetchTasks here for smooth UI
+    } catch (err) {
+      console.error('Error saving task order:', err);
+    }
   };
 
   // Drag handlers for rows
@@ -782,8 +842,14 @@ const AdvancedTaskTable = ({
     newOrder = [...orderedTasks];
     const [removed] = newOrder.splice(idxFrom, 1);
     newOrder.splice(idxTo, 0, removed);
+    
+    // Update the order in state
     setOrderedTasks(newOrder);
+    
+    // Save the new order to backend
     saveOrder(newOrder.map(t => t._id));
+    
+    // Clear drag states
     setDraggedTaskId(null);
     setDragOverTaskId(null);
   };
@@ -791,6 +857,34 @@ const AdvancedTaskTable = ({
     setDraggedTaskId(null);
     setDragOverTaskId(null);
   };
+  
+  // Add this useEffect to ensure orderedTasks are updated with latest task data while preserving order
+  useEffect(() => {
+    if (!orderedTasks || !tasks || tasks.length === 0) return;
+    
+    // Map of task IDs to updated task data
+    const taskMap = tasks.reduce((map, task) => {
+      map[task._id] = task;
+      return map;
+    }, {});
+    
+    // Update orderedTasks with the latest task data while preserving order
+    const updatedOrderedTasks = orderedTasks.map(task => {
+      if (taskMap[task._id]) {
+        // Preserve the position but update the task data
+        return { ...taskMap[task._id] };
+      }
+      return task;
+    });
+    
+    // Add any new tasks that aren't in orderedTasks yet
+    const orderedTaskIds = new Set(updatedOrderedTasks.map(task => task._id));
+    const newTasks = tasks.filter(task => !orderedTaskIds.has(task._id));
+    
+    if (newTasks.length > 0 || JSON.stringify(updatedOrderedTasks) !== JSON.stringify(orderedTasks)) {
+      setOrderedTasks([...updatedOrderedTasks, ...newTasks]);
+    }
+  }, [tasks]);
 
   // Use orderedTasks instead of tasks in rendering
   // In grouped mode, group orderedTasks by groupKey
@@ -1185,7 +1279,7 @@ const AdvancedTaskTable = ({
                                         zIndex: 9999,
                                       }}
                                     >
-                                      {PRIORITY_OPTIONS.map(opt => (
+                                      {getCurrentPriorityOptions().map(opt => (
                                         <div
                                           key={opt.value}
                                           style={{
@@ -1915,7 +2009,7 @@ const AdvancedTaskTable = ({
                                   zIndex: 9999,
                                 }}
                               >
-                                {PRIORITY_OPTIONS.map(opt => (
+                                {getCurrentPriorityOptions().map(opt => (
                                   <div
                                     key={opt.value}
                                     style={{

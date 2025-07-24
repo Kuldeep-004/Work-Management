@@ -9,14 +9,15 @@ const FilterPopup = ({
   users,
   clientNames,
   clientGroups,
-  workTypes 
+  workTypes,
+  priorities = []
 }) => {
   if (!isOpen) return null;
 
   const filterableColumns = [
     { value: 'title', label: 'Title' },
     { value: 'status', label: 'Status', options: ['yet_to_start', 'in_progress', 'completed'] },
-    { value: 'priority', label: 'Priority', options: ['today', 'lessThan3Days', 'thisWeek', 'thisMonth', 'regular', 'filed', 'dailyWorksOffice', 'monthlyWorks'] },
+    { value: 'priority', label: 'Priority', options: priorities.map(p => p.name) },
     { value: 'assignedTo', label: 'Assigned To', options: users.map(u => ({ value: u._id, label: `${u.firstName} ${u.lastName}` })) },
     { value: 'assignedBy', label: 'Assigned By', options: users.map(u => ({ value: u._id, label: `${u.firstName} ${u.lastName}` })) },
     { value: 'clientName', label: 'Client Name', options: clientNames },

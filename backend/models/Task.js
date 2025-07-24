@@ -51,7 +51,7 @@ const taskSchema = new mongoose.Schema({
   },
   priority: {
     type: String,
-    enum: ['urgent', 'today', 'lessThan3Days', 'thisWeek', 'thisMonth', 'regular', 'filed', 'dailyWorksOffice', 'monthlyWorks'],
+    required: true,
     default: 'regular'
   },
   inwardEntryDate: {

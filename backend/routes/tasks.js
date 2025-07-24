@@ -1,5 +1,6 @@
 import express from 'express';
 import Task from '../models/Task.js';
+import Priority from '../models/Priority.js';
 import User from '../models/User.js';
 import { protect } from '../middleware/authMiddleware.js';
 import mongoose from 'mongoose';
@@ -20,6 +21,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = express.Router();
+
+// Helper function to validate priority - check both static and dynamic priorities
+const isValidPriority = async (priorityName) => {
+  // Default/static priorities that always exist
+  const defaultPriorities = [
+    'urgent', 'today', 'lessThan3Days', 'thisWeek', 'thisMonth', 
+    'regular', 'filed', 'dailyWorksOffice', 'monthlyWorks'
+  ];
+  
+  // Check if it's a default priority
+  if (defaultPriorities.includes(priorityName)) {
+    return true;
+  }
+  
+  // Check if it's a custom priority in database
+  const priority = await Priority.findOne({ name: priorityName, isDefault: false });
+  return !!priority;
+};
 
 // Ensure uploads/audio directory exists
 const uploadsDir = path.join(__dirname, '../uploads');
@@ -632,6 +651,11 @@ router.post('/', protect, canAssignTask, async (req, res) => {
       return res.status(400).json({ message: 'workDoneBy is required and must be one of: First floor, Second floor, Both' });
     }
 
+    // Validate priority
+    if (priority && !(await isValidPriority(priority))) {
+      return res.status(400).json({ message: 'Invalid priority value' });
+    }
+
     const createdTasks = [];
 
     // Fetch assigner details for notification message
@@ -947,18 +971,9 @@ router.patch('/:taskId/priority', protect, async (req, res) => {
     }
 
     const { priority } = req.body;
-    const allowedPriorities = [
-      'urgent',
-      'today',
-      'lessThan3Days',
-      'thisWeek',
-      'thisMonth',
-      'regular',
-      'filed',
-      'dailyWorksOffice',
-      'monthlyWorks'
-    ];
-    if (!allowedPriorities.includes(priority)) {
+
+    // Validate priority dynamically (includes both default and custom priorities)
+    if (!(await isValidPriority(priority))) {
       return res.status(400).json({ message: 'Invalid priority value' });
     }
 

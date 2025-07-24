@@ -21,6 +21,18 @@ const CreateTask = ({
   const [clients, setClients] = useState([]);
   const [clientGroups, setClientGroups] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
+  // Initialize priorities with default values to prevent empty dropdown
+  const [priorities, setPriorities] = useState([
+    { name: 'urgent', isDefault: true },
+    { name: 'today', isDefault: true },
+    { name: 'lessThan3Days', isDefault: true },
+    { name: 'thisWeek', isDefault: true },
+    { name: 'thisMonth', isDefault: true },
+    { name: 'regular', isDefault: true },
+    { name: 'filed', isDefault: true },
+    { name: 'dailyWorksOffice', isDefault: true },
+    { name: 'monthlyWorks', isDefault: true }
+  ]);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -99,7 +111,7 @@ const CreateTask = ({
     return `${displayHour.toString().padStart(2, '0')}:${minutes} ${ampm}`;
   };
 
-  // Fetch clients, client groups, and work types
+  // Fetch clients, client groups, work types, and priorities
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -129,6 +141,40 @@ const CreateTask = ({
         });
         const workTypesData = await workTypesResponse.json();
         setWorkTypes(workTypesData);
+
+        // Fetch priorities and merge with defaults
+        try {
+          const prioritiesResponse = await fetch(`${API_BASE_URL}/api/priorities`, {
+            headers: {
+              Authorization: `Bearer ${loggedInUser.token}`,
+            },
+          });
+          const prioritiesData = await prioritiesResponse.json();
+          
+          // Define default priorities
+          const defaultPriorities = [
+            { name: 'urgent', isDefault: true },
+            { name: 'today', isDefault: true },
+            { name: 'lessThan3Days', isDefault: true },
+            { name: 'thisWeek', isDefault: true },
+            { name: 'thisMonth', isDefault: true },
+            { name: 'regular', isDefault: true },
+            { name: 'filed', isDefault: true },
+            { name: 'dailyWorksOffice', isDefault: true },
+            { name: 'monthlyWorks', isDefault: true }
+          ];
+          
+          // Merge default priorities with custom priorities from API
+          // Filter out any default priorities that might be returned from API to avoid duplicates
+          const customPriorities = prioritiesData.filter(p => !p.isDefault);
+          const allPriorities = [...defaultPriorities, ...customPriorities];
+          
+          setPriorities(allPriorities);
+        } catch (priorityError) {
+          console.error('Error fetching priorities, using defaults:', priorityError);
+          // If priorities API fails, keep the default priorities that are already set
+          // They were initialized in useState, so no need to set them again
+        }
       } catch (error) {
         console.error('Error fetching data:', error);
         toast.error('Failed to fetch required data');
@@ -791,15 +837,11 @@ const CreateTask = ({
                     }
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="urgent">Urgent</option>
-                    <option value="today">Today</option>
-                    <option value="lessThan3Days">&lt; 3 days</option>
-                    <option value="thisWeek">This week</option>
-                    <option value="thisMonth">This month</option>
-                    <option value="regular">Regular</option>
-                    <option value="filed">Filed</option>
-                    <option value="dailyWorksOffice">Daily works office</option>
-                    <option value="monthlyWorks">Monthly works</option>
+                    {priorities.map((priority) => (
+                      <option key={priority._id || priority.name} value={priority.name}>
+                        {priority.name.charAt(0).toUpperCase() + priority.name.slice(1).replace(/([A-Z])/g, ' $1')}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
