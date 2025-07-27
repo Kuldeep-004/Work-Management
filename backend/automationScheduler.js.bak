@@ -1,0 +1,356 @@
+import cron from 'node-cron';
+import Automation from './models/Automation.js';
+import Task from './models/Task.js';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+dotenv.config();
+
+// Connect to MongoDB if not already connected
+if (mongoose.connection.readyState === 0) {
+  mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  });
+}
+
+// Run every minute
+cron.schedule('* * * * *', async () => {
+  const now = new Date();
+  const dayOfMonth = now.getDate();
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  const currentTimeString = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+  
+  try {
+    // Get automations that trigger on day of month
+    const monthlyAutomations = await Automation.find({ 
+      triggerType: 'dayOfMonth',
+      dayOfMonth: dayOfMonth
+    });
+    
+    // Get automations that trigger on specific date and time
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    
+    // This will be more lenient by matching automations scheduled within the last few minutes
+    // to avoid missing any due to slight timing differences
+    const fiveMinutesAgo = new Date(now);
+    fiveMinutesAgo.setMinutes(now.getMinutes() - 5);
+    
+    // Find dateTime automations that should run now
+    const dateTimeAutomations = await Automation.find({
+      triggerType: 'dateAndTime',
+      specificDate: {
+        $gte: todayStart,
+        $lte: todayEnd
+      },
+      specificTime: {
+        $lte: currentTimeString
+      }
+    });
+    
+    // Also find any past date automations that may have been missed
+    const missedAutomations = await Automation.find({
+      triggerType: 'dateAndTime',
+      specificDate: {
+        $lt: todayStart
+      }
+    });
+    
+    const automations = [...monthlyAutomations, ...dateTimeAutomations, ...missedAutomations];
+    
+    console.log(`[AutomationScheduler] Found ${monthlyAutomations.length} monthly automations for day ${dayOfMonth}`);
+    console.log(`[AutomationScheduler] Found ${dateTimeAutomations.length} date-time automations for today`);
+    console.log(`[AutomationScheduler] Found ${missedAutomations.length} missed date-time automations from past days`);
+    for (const automation of automations) {
+      // Skip if no task templates are defined
+      if (!automation.taskTemplate || !Array.isArray(automation.taskTemplate) || automation.taskTemplate.length === 0) {
+        console.warn(`[AutomationScheduler] Skipping automation ${automation._id}: no task templates defined.`);
+        continue;
+      }
+      
+      let totalTasksCreated = 0;
+      
+      // Process each task template in the array
+      for (const template of automation.taskTemplate) {
+        const {
+          title,
+          description,
+          clientName,
+          clientGroup,
+          workType,
+          assignedTo,
+          priority,
+          inwardEntryDate,
+          inwardEntryTime,
+          dueDate,
+          targetDate,
+          verificationAssignedTo,
+          billed,
+          workDoneBy
+        } = template || {};
+        
+        if (!title || !clientName || !clientGroup || !workType || !assignedTo || !priority || !inwardEntryDate || !workDoneBy) {
+          console.warn(`[AutomationScheduler] Skipping template in automation ${automation._id}: missing required fields.`);
+          continue;
+        }
+
+        let combinedInwardEntryDate = null;
+        if (inwardEntryDate && inwardEntryTime) {
+          const [year, month, day] = inwardEntryDate.split('-');
+          const [hours, minutes] = inwardEntryTime.split(':');
+          combinedInwardEntryDate = new Date(year, month - 1, day, hours, minutes);
+        } else if (inwardEntryDate) {
+          combinedInwardEntryDate = new Date(inwardEntryDate);
+        }
+        
+        // Ensure assignedTo is always an array
+        let assignedToArray = Array.isArray(assignedTo) ? assignedTo : [assignedTo];
+        // Filter out invalid IDs
+        assignedToArray = assignedToArray.filter(id => {
+          try {
+            mongoose.Types.ObjectId(id);
+            return true;
+          } catch {
+            console.error(`[AutomationScheduler] Invalid assignedTo ID skipped: ${id}`);
+            return false;
+          }
+        });
+        
+        if (assignedToArray.length === 0) {
+          console.warn(`[AutomationScheduler] No valid assignedTo IDs for template in automation ${automation._id}`);
+          continue;
+        }
+        
+        let templateCreatedCount = 0;
+        for (let userId of assignedToArray) {
+          try {
+            userId = mongoose.Types.ObjectId(userId);
+          } catch {
+            console.error(`[AutomationScheduler] Invalid assignedTo ID: ${userId}`);
+            continue;
+          }
+          
+          let verificationAssignedToId = verificationAssignedTo;
+          if (verificationAssignedToId) {
+            try {
+              verificationAssignedToId = mongoose.Types.ObjectId(verificationAssignedToId);
+            } catch {
+              verificationAssignedToId = undefined;
+            }
+          }
+          
+          let assignedById = automation.createdBy;
+          try {
+            assignedById = mongoose.Types.ObjectId(assignedById);
+          } catch {
+            assignedById = undefined;
+          }
+          
+          const task = new Task({
+            title,
+            description,
+            clientName,
+            clientGroup,
+            workType,
+            assignedTo: userId,
+            assignedBy: assignedById,
+            priority,
+            inwardEntryDate: combinedInwardEntryDate || new Date(),
+            dueDate: dueDate ? new Date(dueDate) : new Date(),
+            targetDate: targetDate ? new Date(targetDate) : new Date(),
+            verificationAssignedTo: verificationAssignedToId,
+            billed: billed !== undefined ? billed : true,
+            selfVerification: false,
+            verificationStatus: 'completed',
+            status: 'yet_to_start', // Make sure we set the correct status
+            workDoneBy
+          });
+          
+          try {
+            const savedTask = await task.save();
+            automation.tasks.push(savedTask._id);
+            templateCreatedCount++;
+          } catch (err) {
+            console.error(`[AutomationScheduler] Automation task creation error for automation ${automation._id}:`, err);
+          }
+        }
+        
+        totalTasksCreated += templateCreatedCount;
+        console.log(`[AutomationScheduler] Automation ${automation._id}, template "${title}": Created ${templateCreatedCount} tasks.`);
+      }
+      
+      // For dayOfMonth automations, save them for next month
+      if (automation.triggerType === 'dayOfMonth' || !automation.triggerType) {
+        await automation.save();
+        console.log(`[AutomationScheduler] Monthly automation ${automation._id}: Created ${totalTasksCreated} tasks total.`);
+      } 
+      // For dateAndTime automations, delete them after execution since they're one-time
+      else if (automation.triggerType === 'dateAndTime') {
+        if (totalTasksCreated > 0) {
+          console.log(`[AutomationScheduler] One-time automation ${automation._id}: Created ${totalTasksCreated} tasks total. Deleting automation.`);
+          await Automation.deleteOne({ _id: automation._id });
+        } else {
+          console.log(`[AutomationScheduler] One-time automation ${automation._id}: No tasks were created! Will try again next minute.`);
+          // Don't delete the automation if no tasks were created, so we can retry
+        }
+      }
+    }
+    console.log(`[AutomationScheduler] Finished automation cycle at ${new Date().toISOString()}`);
+  } catch (err) {
+    console.error('[AutomationScheduler] Error:', err);
+  }
+});
+
+// Function to manually trigger automation checks (useful for debugging)
+export const runAutomationCheck = async () => {
+  const now = new Date();
+  console.log(`[AutomationScheduler] Manual check triggered at ${now.toISOString()}`);
+  
+  try {
+    // Find all dateTime automations that need to be processed
+    const overdueAutomations = await Automation.find({
+      triggerType: 'dateAndTime',
+      specificDate: { $lte: now }
+    });
+    
+    console.log(`[AutomationScheduler] Found ${overdueAutomations.length} overdue dateAndTime automations`);
+    
+    let processedCount = 0;
+    
+    // Process them as usual
+    for (const automation of overdueAutomations) {
+      // Skip if no task templates are defined
+      if (!automation.taskTemplate || !Array.isArray(automation.taskTemplate) || automation.taskTemplate.length === 0) {
+        console.warn(`[AutomationScheduler] Skipping automation ${automation._id}: no task templates defined.`);
+        continue;
+      }
+      
+      let totalTasksCreated = 0;
+      
+      // Process each task template in the array
+      for (const template of automation.taskTemplate) {
+        const {
+          title,
+          description,
+          clientName,
+          clientGroup,
+          workType,
+          assignedTo,
+          priority,
+          inwardEntryDate,
+          inwardEntryTime,
+          dueDate,
+          targetDate,
+          verificationAssignedTo,
+          billed,
+          workDoneBy
+        } = template || {};
+        
+        if (!title || !clientName || !clientGroup || !workType || !assignedTo || !priority || !inwardEntryDate || !workDoneBy) {
+          console.warn(`[AutomationScheduler] Skipping template in automation ${automation._id}: missing required fields.`);
+          continue;
+        }
+
+        let combinedInwardEntryDate = null;
+        if (inwardEntryDate && inwardEntryTime) {
+          const [year, month, day] = inwardEntryDate.split('-');
+          const [hours, minutes] = inwardEntryTime.split(':');
+          combinedInwardEntryDate = new Date(year, month - 1, day, hours, minutes);
+        } else if (inwardEntryDate) {
+          combinedInwardEntryDate = new Date(inwardEntryDate);
+        }
+        
+        // Ensure assignedTo is always an array
+        let assignedToArray = Array.isArray(assignedTo) ? assignedTo : [assignedTo];
+        // Filter out invalid IDs
+        assignedToArray = assignedToArray.filter(id => {
+          try {
+            mongoose.Types.ObjectId(id);
+            return true;
+          } catch {
+            console.error(`[AutomationScheduler] Invalid assignedTo ID skipped: ${id}`);
+            return false;
+          }
+        });
+        
+        if (assignedToArray.length === 0) {
+          console.warn(`[AutomationScheduler] No valid assignedTo IDs for template in automation ${automation._id}`);
+          continue;
+        }
+        
+        let templateCreatedCount = 0;
+        for (let userId of assignedToArray) {
+          try {
+            userId = mongoose.Types.ObjectId(userId);
+          } catch {
+            console.error(`[AutomationScheduler] Invalid assignedTo ID: ${userId}`);
+            continue;
+          }
+          
+          let verificationAssignedToId = verificationAssignedTo;
+          if (verificationAssignedToId) {
+            try {
+              verificationAssignedToId = mongoose.Types.ObjectId(verificationAssignedToId);
+            } catch {
+              verificationAssignedToId = undefined;
+            }
+          }
+          
+          let assignedById = automation.createdBy;
+          try {
+            assignedById = mongoose.Types.ObjectId(assignedById);
+          } catch {
+            assignedById = undefined;
+          }
+          
+          const task = new Task({
+            title,
+            description,
+            clientName,
+            clientGroup,
+            workType,
+            assignedTo: userId,
+            assignedBy: assignedById,
+            priority,
+            inwardEntryDate: combinedInwardEntryDate || new Date(),
+            dueDate: dueDate || new Date(),
+            targetDate: targetDate || new Date(),
+            verificationAssignedTo: verificationAssignedToId,
+            billed: billed !== undefined ? billed : true,
+            selfVerification: false,
+            verificationStatus: 'completed',
+            status: 'yet_to_start', // Ensure status is set correctly
+            workDoneBy
+          });
+          
+          try {
+            const savedTask = await task.save();
+            automation.tasks.push(savedTask._id);
+            templateCreatedCount++;
+          } catch (err) {
+            console.error(`[AutomationScheduler] Automation task creation error for automation ${automation._id}:`, err);
+          }
+        }
+        
+        totalTasksCreated += templateCreatedCount;
+        console.log(`[AutomationScheduler] Automation ${automation._id}, template "${title}": Created ${templateCreatedCount} tasks.`);
+      }
+      
+      if (totalTasksCreated > 0) {
+        console.log(`[AutomationScheduler] One-time automation ${automation._id}: Created ${totalTasksCreated} tasks total. Deleting automation.`);
+        await Automation.deleteOne({ _id: automation._id });
+        processedCount++;
+      } else {
+        console.log(`[AutomationScheduler] One-time automation ${automation._id}: No tasks were created! Check for issues.`);
+      }
+    }
+    
+    return { success: true, processedCount };
+  } catch (err) {
+    console.error('[AutomationScheduler] Error during manual check:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+console.log('[AutomationScheduler] Scheduler started.');

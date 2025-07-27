@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import AutomationTask from './AutomationTask';
+import AutomationPopup from './AutomationPopup';
+import AutomationsModal from './AutomationsModal';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import {
@@ -83,7 +86,7 @@ const DEFAULT_TAB = () => ({
   columnOrder: ALL_COLUMNS.map(col => col.id),
 });
 
-const Dashboard = () => {
+const AdminDashboard = () => {
   const { user } = useAuth();
   // Helper to get saved columns for the user
   // 2. Remove getSavedVisibleColumns and all per-user localStorage for columns/widths
@@ -115,6 +118,31 @@ const Dashboard = () => {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [automationModalOpen, setAutomationModalOpen] = useState(false);
+  const [showAutomationsModal, setShowAutomationsModal] = useState(false);
+  const [selectedAutomation, setSelectedAutomation] = useState(null);
+  const [automationTasks, setAutomationTasks] = useState([]);
+  const [showAddAutomationTask, setShowAddAutomationTask] = useState(false);
+  // Handler for Automation submit
+  const handleAutomationSubmit = (data) => {
+    setAutomationModalOpen(false);
+  };
+
+  // Fetch tasks for selected automation
+  useEffect(() => {
+    if (!selectedAutomation || !user?.token) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/automations/${selectedAutomation._id}/tasks`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        const data = await res.json();
+        setAutomationTasks(Array.isArray(data) ? data : []);
+      } catch {
+        setAutomationTasks([]);
+      }
+    })();
+  }, [selectedAutomation, user, API_BASE_URL]);
   // 8. Remove columnWidths, columnOrder, setColumnWidths, setColumnOrder from top-level state (move to per-tab)
   // const [columnWidths, setColumnWidths] = useState({});
   // const [columnOrder, setColumnOrder] = useState(() => ALL_COLUMNS.map(col => col.id));
@@ -614,140 +642,250 @@ const Dashboard = () => {
     return entry ? entry.totalHours : 0;
   };
 
-  const filteredAndSortedTasks = getFilteredAndSortedTasks();
+  const filteredAndSortedTasks = getFilteredAndSortedTasks(tasks);
 
   // PDF export handler
   const handleDownloadPDF = (selectedColumns) => {
-    const filteredTasks = getFilteredAndSortedTasks();
+    const filteredTasks = getFilteredAndSortedTasks(tasks);
     
     // Get the selected column definitions
     const selectedColumnDefs = ALL_COLUMNS.filter(col => selectedColumns.includes(col.id));
     
-    // Prepare data based on selected columns
-    const data = filteredTasks.map(task => {
-      const row = {};
-      selectedColumnDefs.forEach(col => {
-        switch (col.id) {
-          case 'title':
-            row[col.label] = task.title;
-            break;
-          case 'description':
-            row[col.label] = task.description;
-            break;
-          case 'clientName':
-            row[col.label] = task.clientName;
-            break;
-          case 'clientGroup':
-            row[col.label] = task.clientGroup;
-            break;
-          case 'workType':
-            row[col.label] = Array.isArray(task.workType) ? task.workType.join(', ') : task.workType;
-            break;
-          case 'workDoneBy':
-            row[col.label] = task.workDoneBy || '';
-            break;
-          case 'billed':
-            row[col.label] = task.billed ? 'Yes' : 'No';
-            break;
-          case 'status':
-            row[col.label] = task.status;
-            break;
-          case 'priority':
-            row[col.label] = task.priority;
-            break;
-          case 'selfVerification':
-            row[col.label] = task.selfVerification ? '✔' : '✖';
-            break;
-          case 'inwardEntryDate':
-            row[col.label] = task.inwardEntryDate ? formatDateTime(task.inwardEntryDate) : '';
-            break;
-          case 'dueDate':
-            row[col.label] = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '';
-            break;
-          case 'targetDate':
-            row[col.label] = task.targetDate ? new Date(task.targetDate).toLocaleDateString() : '';
-            break;
-          case 'assignedBy':
-            row[col.label] = task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : '';
-            break;
-          case 'assignedTo':
-            row[col.label] = Array.isArray(task.assignedTo)
-              ? task.assignedTo.map(u => `${u.firstName} ${u.lastName}`).join(', ')
-              : (task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : '');
-            break;
-          case 'verificationAssignedTo':
-            row[col.label] = task.verificationAssignedTo ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : '';
-            break;
-          case 'secondVerificationAssignedTo':
-            row[col.label] = task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : '';
-            break;
-          case 'guides':
-            row[col.label] = task.guides ? task.guides.map(g => g.name).join(', ') : '';
-            break;
-          case 'files':
-            row[col.label] = task.files && task.files.length > 0 ? task.files.map(f => f.originalName || f.originalname).join(', ') : '';
-            break;
-          case 'comments':
-            row[col.label] = task.comments ? task.comments.length : 0;
-            break;
-          default:
-            row[col.label] = '';
-        }
-      });
-      return row;
-    });
-
     // Create PDF
     const doc = new jsPDF();
     
-    // Add title
-    doc.setFontSize(16);
-    doc.text('Tasks Dashboard Report', 14, 20);
-    doc.setFontSize(10);
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
-    doc.text(`Total Tasks: ${filteredTasks.length}`, 14, 37);
-
-    // Prepare table data
+    // Set up table headers
     const headers = selectedColumnDefs.map(col => col.label);
-    const tableData = data.map(row => selectedColumnDefs.map(col => row[col.label]));
-
-    // Add table
+    
+    // Prepare data for PDF
+    const tableData = [];
+    
+    // Process tasks based on grouping - use active tab's sort field as grouping
+    const groupBy = activeTabObj.sortBy; 
+    if (groupBy && groupBy !== '') {
+      // Group the tasks by the selected field
+      const groupedTasks = {};
+      filteredTasks.forEach(task => {
+        let groupKey;
+        switch (groupBy) {
+          case 'clientName':
+            groupKey = task.clientName || 'Unassigned';
+            break;
+          case 'clientGroup':
+            groupKey = task.clientGroup || 'Unassigned';
+            break;
+          case 'workType':
+            groupKey = Array.isArray(task.workType) 
+              ? (task.workType[0] || 'Unspecified') 
+              : (task.workType || 'Unspecified');
+            break;
+          case 'workDoneBy':
+            groupKey = task.workDoneBy || 'Unassigned';
+            break;
+          case 'billed':
+            groupKey = task.billed ? 'Yes' : 'No';
+            break;
+          default:
+            groupKey = task[groupBy] || 'Unassigned';
+        }
+        
+        if (!groupedTasks[groupKey]) {
+          groupedTasks[groupKey] = [];
+        }
+        groupedTasks[groupKey].push(task);
+      });
+      
+      // Process each group
+      Object.entries(groupedTasks).forEach(([groupKey, groupTasks], groupIndex) => {
+        // Add a group header
+        if (groupIndex > 0) {
+          tableData.push(Array(headers.length).fill('')); // Empty row between groups
+        }
+        
+        // Create a group header row
+        tableData.push([{
+          content: `${groupBy.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}: ${groupKey}`,
+          colSpan: headers.length,
+          styles: { fillColor: [220, 220, 220], fontStyle: 'bold', halign: 'left' }
+        }]);
+        
+        // Add each task as a row
+        groupTasks.forEach(task => {
+          const row = [];
+          selectedColumnDefs.forEach(col => {
+            let value = '';
+            
+            // Extract value based on column type
+            switch (col.id) {
+              case 'title':
+                value = task.title || '';
+                break;
+              case 'description':
+                value = task.description || '';
+                break;
+              case 'clientName':
+                value = task.clientName || '';
+                break;
+              case 'clientGroup':
+                value = task.clientGroup || '';
+                break;
+              case 'workType':
+                value = Array.isArray(task.workType) ? task.workType.join(', ') : (task.workType || '');
+                break;
+              case 'workDoneBy':
+                value = task.workDoneBy || '';
+                break;
+              case 'billed':
+                value = task.billed ? 'Yes' : 'No';
+                break;
+              case 'status':
+                value = task.status || '';
+                break;
+              case 'priority':
+                value = task.priority || '';
+                break;
+              case 'selfVerification':
+                value = task.selfVerification ? '✓' : '✗';
+                break;
+              case 'inwardEntryDate':
+                value = task.inwardEntryDate ? formatDateTime(task.inwardEntryDate) : '';
+                break;
+              case 'dueDate':
+                value = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '';
+                break;
+              case 'targetDate':
+                value = task.targetDate ? new Date(task.targetDate).toLocaleDateString() : '';
+                break;
+              case 'assignedBy':
+                value = task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : '';
+                break;
+              case 'assignedTo':
+                value = Array.isArray(task.assignedTo)
+                  ? task.assignedTo.map(u => `${u.firstName} ${u.lastName}`).join(', ')
+                  : (task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : '');
+                break;
+              case 'verificationAssignedTo':
+                value = task.verificationAssignedTo ? 
+                  `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : '';
+                break;
+              case 'secondVerificationAssignedTo':
+                value = task.secondVerificationAssignedTo ? 
+                  `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : '';
+                break;
+              case 'guides':
+                value = task.guides ? task.guides.map(g => g.name).join(', ') : '';
+                break;
+              case 'files':
+                value = task.files && task.files.length > 0 ? 
+                  task.files.map(f => f.originalName || f.originalname).join(', ') : '';
+                break;
+              case 'comments':
+                value = task.comments ? task.comments.length.toString() : '0';
+                break;
+              default:
+                value = '';
+            }
+            
+            row.push(value);
+          });
+          
+          tableData.push(row);
+        });
+      });
+    } else {
+      // No grouping, just add all tasks as rows
+      filteredTasks.forEach(task => {
+        const row = [];
+        selectedColumnDefs.forEach(col => {
+          let value = '';
+          
+          // Extract value based on column type
+          switch (col.id) {
+            case 'title':
+              value = task.title || '';
+              break;
+            case 'description':
+              value = task.description || '';
+              break;
+            case 'clientName':
+              value = task.clientName || '';
+              break;
+            case 'clientGroup':
+              value = task.clientGroup || '';
+              break;
+            case 'workType':
+              value = Array.isArray(task.workType) ? task.workType.join(', ') : (task.workType || '');
+              break;
+            case 'workDoneBy':
+              value = task.workDoneBy || '';
+              break;
+            case 'billed':
+              value = task.billed ? 'Yes' : 'No';
+              break;
+            case 'status':
+              value = task.status || '';
+              break;
+            case 'priority':
+              value = task.priority || '';
+              break;
+            case 'selfVerification':
+              value = task.selfVerification ? '✓' : '✗';
+              break;
+            case 'inwardEntryDate':
+              value = task.inwardEntryDate ? formatDateTime(task.inwardEntryDate) : '';
+              break;
+            case 'dueDate':
+              value = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '';
+              break;
+            case 'targetDate':
+              value = task.targetDate ? new Date(task.targetDate).toLocaleDateString() : '';
+              break;
+            case 'assignedBy':
+              value = task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : '';
+              break;
+            case 'assignedTo':
+              value = Array.isArray(task.assignedTo)
+                ? task.assignedTo.map(u => `${u.firstName} ${u.lastName}`).join(', ')
+                : (task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : '');
+              break;
+            case 'verificationAssignedTo':
+              value = task.verificationAssignedTo ? 
+                `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : '';
+              break;
+            case 'secondVerificationAssignedTo':
+              value = task.secondVerificationAssignedTo ? 
+                `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : '';
+              break;
+            case 'guides':
+              value = task.guides ? task.guides.map(g => g.name).join(', ') : '';
+              break;
+            case 'files':
+              value = task.files && task.files.length > 0 ? 
+                task.files.map(f => f.originalName || f.originalname).join(', ') : '';
+              break;
+            case 'comments':
+              value = task.comments ? task.comments.length.toString() : '0';
+              break;
+            default:
+              value = '';
+          }
+          
+          row.push(value);
+        });
+        
+        tableData.push(row);
+      });
+    }
+    
+    // Generate PDF with autotable
     doc.autoTable({
       head: [headers],
       body: tableData,
-      startY: 45,
+      theme: 'striped',
       styles: {
         fontSize: 8,
         cellPadding: 2,
-      },
-      headStyles: {
-        fillColor: [59, 130, 246], // Blue color
-        textColor: 255,
-        fontStyle: 'bold',
-      },
-      alternateRowStyles: {
-        fillColor: [248, 250, 252], // Light gray
-      },
-      columnStyles: {
-        0: { cellWidth: 30 }, // Title
-        1: { cellWidth: 40 }, // Description
-        2: { cellWidth: 25 }, // Client Name
-        3: { cellWidth: 25 }, // Client Group
-        4: { cellWidth: 25 }, // Work Type
-        5: { cellWidth: 15 }, // Billed
-        6: { cellWidth: 20 }, // Task Status
-        7: { cellWidth: 25 }, // Priority
-        8: { cellWidth: 15 }, // Self Verification
-        9: { cellWidth: 25 }, // Inward Entry Date
-        10: { cellWidth: 25 }, // Due Date
-        11: { cellWidth: 20 }, // Target Date
-        12: { cellWidth: 25 }, // Assigned By
-        13: { cellWidth: 30 }, // Assigned To
-        14: { cellWidth: 25 }, // First Verifier
-        15: { cellWidth: 25 }, // Second Verifier
-        16: { cellWidth: 30 }, // Guide
-        17: { cellWidth: 30 }, // Files
-        18: { cellWidth: 15 }, // Comments
+        overflow: 'linebreak'
       },
       didDrawPage: function (data) {
         // Add page number
@@ -760,7 +898,8 @@ const Dashboard = () => {
       },
     });
 
-    doc.save('tasks_dashboard.pdf');
+    // Save the PDF with a name based on active tab
+    doc.save(`tasks_${activeTabObj?.activeTab || 'dashboard'}.pdf`);
   };
 
   const handlePDFButtonClick = () => {
@@ -1003,6 +1142,15 @@ const Dashboard = () => {
         >
           Download
         </button>
+        {/* Automation Button - left of the + button */}
+        <button
+          onClick={() => setShowAutomationsModal(true)}
+          className="ml-0 flex items-center justify-center cursor-pointer w-28 h-9 rounded-lg bg-purple-600 hover:bg-purple-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm mr-2"
+          title="Automation"
+          type="button"
+        >
+          Automation
+        </button>
         <button
           onClick={() => setCreateModalOpen(true)}
           className="ml-0 flex items-center justify-center w-8 h-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
@@ -1068,6 +1216,165 @@ const Dashboard = () => {
           onSubmit={handleTaskSubmit}
         />
       )}
+      {/* Automations Modal */}
+      {showAutomationsModal && (
+        <AutomationsModal
+          isOpen={showAutomationsModal}
+          onClose={() => { setShowAutomationsModal(false); setSelectedAutomation(null); }}
+          onSelectAutomation={auto => { setSelectedAutomation(auto); setShowAutomationsModal(false); }}
+          user={user}
+          API_BASE_URL={API_BASE_URL}
+        />
+      )}
+
+      {/* Automation's Tasks Modal */}
+      {selectedAutomation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl min-h-[320px] flex flex-col">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">{selectedAutomation.name}</h2>
+                <div className="text-xs text-gray-500 mt-1">{selectedAutomation.description}</div>
+                <div className="flex items-center mt-2">
+                  <div className="text-xs px-2 py-1 bg-blue-100 text-blue-700 font-medium rounded-full">
+                    Day: {selectedAutomation.dayOfMonth}
+                  </div>
+                  {Array.isArray(selectedAutomation.taskTemplate) && (
+                    <div className="text-xs px-2 py-1 bg-green-100 text-green-700 font-medium rounded-full ml-2">
+                      {selectedAutomation.taskTemplate.length} {selectedAutomation.taskTemplate.length === 1 ? 'template' : 'templates'}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => setSelectedAutomation(null)} className="text-gray-400 hover:text-gray-700 text-xl">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-md font-semibold text-gray-800">Task Templates</h3>
+                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                  {Array.isArray(selectedAutomation.taskTemplate) ? selectedAutomation.taskTemplate.length : 0} templates
+                </span>
+              </div>
+              
+              {Array.isArray(selectedAutomation.taskTemplate) && selectedAutomation.taskTemplate.length > 0 ? (
+                <ul className="space-y-2 mt-2">
+                  {selectedAutomation.taskTemplate.map((template, idx) => (
+                    <li key={idx} className="py-3 px-4 flex items-center justify-between bg-yellow-50 border-l-4 border-yellow-400 rounded-md hover:bg-yellow-100 transition-colors shadow-sm">
+                      <div className="flex-1">
+                        <span className="font-medium text-gray-800">{template.title || 'Scheduled Task'}</span>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Created on {new Date().toLocaleDateString()}
+                        </div>
+                      </div>
+                      <button 
+                        className="text-red-500 hover:text-red-700 text-xs bg-white hover:bg-red-50 border border-red-200 px-3 py-1 rounded-md transition-colors flex items-center"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Are you sure you want to delete this template: ${template.title}?`)) {
+                            try {
+                              // Create a new array without this template
+                              const updatedTemplates = selectedAutomation.taskTemplate.filter((_, i) => i !== idx);
+                              
+                              // Update the automation with the new templates array
+                              const response = await fetch(`${API_BASE_URL}/api/automations/${selectedAutomation._id}`, {
+                                method: 'PUT',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  Authorization: `Bearer ${user.token}`,
+                                },
+                                body: JSON.stringify({ taskTemplate: updatedTemplates }),
+                              });
+                              
+                              if (!response.ok) {
+                                throw new Error('Failed to delete template');
+                              }
+                              
+                              // Update local state
+                              const updatedAutomation = await response.json();
+                              setSelectedAutomation(updatedAutomation);
+                              toast.success('Task template deleted successfully');
+                            } catch (error) {
+                              toast.error(error.message || 'Failed to delete template');
+                              console.error('Error deleting template:', error);
+                            }
+                          }
+                        }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Delete
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-100 shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <p className="text-sm text-gray-500 font-medium">No task templates in this automation yet.</p>
+                  <p className="text-xs text-gray-400 mt-2">Add a template using the button below.</p>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setShowAddAutomationTask(true)}
+              className="bg-blue-600 text-white rounded-md py-2.5 font-semibold hover:bg-blue-700 transition w-full flex items-center justify-center shadow-sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Add New Task Template
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add Task to Automation Modal */}
+      {showAddAutomationTask && selectedAutomation && (
+        <AutomationTask
+          users={users}
+          mode="create"
+          initialData={null}
+          isOpen={showAddAutomationTask}
+          onClose={() => setShowAddAutomationTask(false)}
+          automationId={selectedAutomation._id}
+          onSubmit={(taskTemplate) => {
+            // After adding a template, fetch the updated automation with all templates
+            (async () => {
+              try {
+                // Fetch the updated automation
+                const res = await fetch(`${API_BASE_URL}/api/automations/${selectedAutomation._id}`, {
+                  headers: { Authorization: `Bearer ${user.token}` },
+                });
+                const updatedAutomation = await res.json();
+                if (updatedAutomation && updatedAutomation._id) {
+                  setSelectedAutomation(updatedAutomation);
+                }
+                
+                // Also update task list if needed
+                const tasksRes = await fetch(`${API_BASE_URL}/api/automations/${selectedAutomation._id}/tasks`, {
+                  headers: { Authorization: `Bearer ${user.token}` },
+                });
+                const tasksData = await tasksRes.json();
+                setAutomationTasks(Array.isArray(tasksData) ? tasksData : []);
+              } catch (error) {
+                console.error("Error fetching updated automation:", error);
+              }
+            })();
+            setShowAddAutomationTask(false);
+          }}
+        />
+      )}
+      {/* PDF Column Selector Modal */}
+      <PDFColumnSelector
+        isOpen={showPDFColumnSelector}
+        onClose={() => setShowPDFColumnSelector(false)}
+        onDownload={handleDownloadPDF}
+        availableColumns={ALL_COLUMNS}
+      />
+
       {/* File Upload and Comments Modal */}
       {selectedTask && (showFileUpload || showComments) && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
@@ -1116,4 +1423,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default AdminDashboard;

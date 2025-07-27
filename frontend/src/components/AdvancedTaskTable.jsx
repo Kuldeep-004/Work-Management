@@ -167,6 +167,10 @@ const AdvancedTaskTable = ({
   const [resizingColumn, setResizingColumn] = useState(null);
   const [resizeStartX, setResizeStartX] = useState(0);
   const [resizeStartWidth, setResizeStartWidth] = useState(0);
+  
+  // Group drag and drop state
+  const [draggedGroup, setDraggedGroup] = useState(null);
+  const [dragOverGroup, setDragOverGroup] = useState(null);
 
   // Use refs to track resizing state for event handlers
   const isResizingRef = useRef(false);
@@ -839,9 +843,51 @@ const AdvancedTaskTable = ({
     const idxFrom = orderedTasks.findIndex(t => t._id === draggedTaskId);
     const idxTo = orderedTasks.findIndex(t => t._id === dropTaskId);
     if (idxFrom === -1 || idxTo === -1) return;
-    newOrder = [...orderedTasks];
-    const [removed] = newOrder.splice(idxFrom, 1);
-    newOrder.splice(idxTo, 0, removed);
+    
+    // Get the group keys for the dragged task and drop target
+    if (shouldGroup) {
+      const draggedTask = orderedTasks[idxFrom];
+      const dropTask = orderedTasks[idxTo];
+      const draggedGroupKey = getGroupKey(draggedTask);
+      const dropGroupKey = getGroupKey(dropTask);
+      
+      // Only allow reordering within the same group
+      if (draggedGroupKey !== dropGroupKey) {
+        console.log('Cannot reorder tasks between different groups');
+        setDraggedTaskId(null);
+        setDragOverTaskId(null);
+        return;
+      }
+      
+      // For grouped view, we need to keep tasks within their respective groups
+      // First, collect all tasks by their group
+      const tasksByGroup = {};
+      orderedTasks.forEach(task => {
+        const groupKey = getGroupKey(task);
+        if (!tasksByGroup[groupKey]) tasksByGroup[groupKey] = [];
+        tasksByGroup[groupKey].push(task);
+      });
+      
+      // Then reorganize within the specific group
+      const groupTasks = tasksByGroup[draggedGroupKey];
+      const groupIdxFrom = groupTasks.findIndex(t => t._id === draggedTaskId);
+      const groupIdxTo = groupTasks.findIndex(t => t._id === dropTaskId);
+      
+      // Reorder within the group
+      const [groupRemoved] = groupTasks.splice(groupIdxFrom, 1);
+      groupTasks.splice(groupIdxTo, 0, groupRemoved);
+      
+      // Reconstruct the full task order, preserving group order
+      newOrder = [];
+      Object.values(tasksByGroup).forEach(tasks => {
+        newOrder.push(...tasks);
+      });
+    } else {
+      // For ungrouped view, simple reordering
+      newOrder = [...orderedTasks];
+      const [removed] = newOrder.splice(idxFrom, 1);
+      newOrder.splice(idxTo, 0, removed);
+    }
     
     // Update the order in state
     setOrderedTasks(newOrder);
@@ -856,6 +902,54 @@ const AdvancedTaskTable = ({
   const handleRowDragEnd = () => {
     setDraggedTaskId(null);
     setDragOverTaskId(null);
+  };
+
+  // New function for handling group drag and drop
+  const handleGroupDrop = (fromGroup, toGroup) => {
+    if (!shouldGroup || !fromGroup || !toGroup || fromGroup === toGroup) return;
+
+    // First, collect all tasks by their group
+    const tasksByGroup = {};
+    const groupOrder = [];
+    
+    // Extract current group order
+    Object.entries(renderGroupedTasks).forEach(([group, _]) => {
+      groupOrder.push(group);
+    });
+    
+    // Find the positions of the groups
+    const fromIndex = groupOrder.indexOf(fromGroup);
+    const toIndex = groupOrder.indexOf(toGroup);
+    
+    if (fromIndex === -1 || toIndex === -1) return;
+    
+    // Rearrange the group order
+    const newGroupOrder = [...groupOrder];
+    const [removed] = newGroupOrder.splice(fromIndex, 1);
+    newGroupOrder.splice(toIndex, 0, removed);
+    
+    // Reorganize tasks according to the new group order
+    let newOrderedTasks = [];
+    
+    // First, group all tasks
+    orderedTasks.forEach(task => {
+      const groupKey = getGroupKey(task);
+      if (!tasksByGroup[groupKey]) tasksByGroup[groupKey] = [];
+      tasksByGroup[groupKey].push(task);
+    });
+    
+    // Then rebuild the task order based on the new group order
+    newGroupOrder.forEach(group => {
+      if (tasksByGroup[group]) {
+        newOrderedTasks = [...newOrderedTasks, ...tasksByGroup[group]];
+      }
+    });
+    
+    // Update the task order
+    setOrderedTasks(newOrderedTasks);
+    
+    // Save the new order to backend
+    saveOrder(newOrderedTasks.map(t => t._id));
   };
   
   // Add this useEffect to ensure orderedTasks are updated with latest task data while preserving order
@@ -975,8 +1069,48 @@ const AdvancedTaskTable = ({
               {shouldGroup ? (
                 Object.entries(renderGroupedTasks).map(([group, groupTasks]) => (
                   <React.Fragment key={group}>
-                    <tr key={group + '-header'}>
-                      <td colSpan={getOrderedVisibleColumns().length + ((viewType === 'assigned' || viewType === 'admin') ? 2 : 1)} className="bg-gray-100 text-gray-800 font-semibold px-4 py-2 border-t border-b border-gray-300">{group}</td>
+                    <tr 
+                      key={group + '-header'} 
+                      className={`group-header ${dragOverGroup === group && draggedGroup ? 'bg-blue-100' : ''} cursor-grab`}
+                      draggable={true}
+                      onDragStart={(e) => {
+                        setDraggedGroup(group);
+                        e.dataTransfer.setData('text/plain', group);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (draggedGroup && draggedGroup !== group) {
+                          setDragOverGroup(group);
+                        }
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverGroup === group) {
+                          setDragOverGroup(null);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedGroup && draggedGroup !== group) {
+                          handleGroupDrop(draggedGroup, group);
+                        }
+                        setDraggedGroup(null);
+                        setDragOverGroup(null);
+                      }}
+                      onDragEnd={() => {
+                        setDraggedGroup(null);
+                        setDragOverGroup(null);
+                      }}
+                    >
+                      <td colSpan={getOrderedVisibleColumns().length + ((viewType === 'assigned' || viewType === 'admin') ? 2 : 1)} 
+                          className={`bg-gray-100 text-gray-800 font-semibold px-4 py-2 border-t border-b border-gray-300 ${draggedGroup === group ? 'opacity-50' : ''}`}>
+                        <div className="flex items-center">
+                          <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                          </svg>
+                          {group}
+                        </div>
+                      </td>
                     </tr>
                     <tr key={group + '-columns'} className="border-b border-gray-200">
                       <th className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none whitespace-nowrap border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>No</th>

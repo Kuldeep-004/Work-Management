@@ -56,7 +56,6 @@ const taskSchema = new mongoose.Schema({
   },
   inwardEntryDate: {
     type: Date,
-    required: true
   },
   dueDate: {
     type: Date,

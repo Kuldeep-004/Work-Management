@@ -82,17 +82,14 @@ router.patch('/mark-all-read', protect, async (req, res) => {
   }
 });
 
-// Delete notification (soft delete)
+// Delete notification (permanent delete)
 router.delete('/:id', protect, async (req, res) => {
   try {
-    const notification = await Notification.findOneAndUpdate(
+    const notification = await Notification.findOneAndDelete(
       {
         _id: req.params.id,
-        recipient: req.user._id,
-        isDeleted: false
-      },
-      { isDeleted: true },
-      { new: true }
+        recipient: req.user._id
+      }
     );
 
     if (!notification) {

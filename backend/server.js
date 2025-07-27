@@ -14,8 +14,11 @@ import clientRoutes from './routes/clients.js';
 import timesheetRoutes from './routes/timesheets.js';
 import notificationRoutes from './routes/notifications.js';
 import priorityRoutes from './routes/priorities.js';
+import automationsRouter from './routes/automations.js';
 import Team from './models/Team.js';
 import './models/UserTabState.js';
+// Import automation scheduler to ensure it runs when the server starts
+import './automationScheduler.js';
 
 // Get the directory name
 const __filename = fileURLToPath(import.meta.url);
@@ -66,6 +69,7 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/timesheets', timesheetRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/priorities', priorityRoutes);
+app.use('/api/automations', automationsRouter);
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/haacas13')
