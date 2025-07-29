@@ -33,11 +33,19 @@ router.post('/', protect, async (req, res) => {
       return res.status(400).json({ message: 'specificDate and specificTime are required for dateAndTime trigger type' });
     }
     
+    // Monthly or yearly-based recurrences
+    if (['quarterly', 'halfYearly', 'yearly'].includes(triggerType) && !dayOfMonth) {
+      return res.status(400).json({ message: `dayOfMonth is required for ${triggerType} trigger type` });
+    }
+    
+    const { monthOfYear } = req.body;
+    
     const automation = new Automation({
       name,
       description,
       triggerType,
-      dayOfMonth: triggerType === 'dayOfMonth' ? dayOfMonth : undefined,
+      dayOfMonth: ['dayOfMonth', 'quarterly', 'halfYearly', 'yearly'].includes(triggerType) ? dayOfMonth : undefined,
+      monthOfYear: ['quarterly', 'halfYearly', 'yearly'].includes(triggerType) ? monthOfYear : undefined,
       specificDate: triggerType === 'dateAndTime' ? specificDate : undefined,
       specificTime: triggerType === 'dateAndTime' ? specificTime : undefined,
       createdBy: req.user._id,
@@ -68,26 +76,35 @@ router.put('/:id', protect, async (req, res) => {
     if (!automation) return res.status(404).json({ message: 'Automation not found' });
     
     // Only allow updating certain fields
-    const { name, description, triggerType, dayOfMonth, specificDate, specificTime, taskTemplate } = req.body;
+    const { name, description, triggerType, dayOfMonth, monthOfYear, specificDate, specificTime, taskTemplate } = req.body;
     
     if (name !== undefined) automation.name = name;
     if (description !== undefined) automation.description = description;
     if (triggerType !== undefined) automation.triggerType = triggerType;
     
     // Update trigger-specific fields based on trigger type
-    if (triggerType === 'dayOfMonth' && dayOfMonth !== undefined) {
-      automation.dayOfMonth = dayOfMonth;
-      // Clear date and time fields if changing to dayOfMonth
-      automation.specificDate = undefined;
-      automation.specificTime = undefined;
-    } else if (triggerType === 'dateAndTime') {
+    if (['dayOfMonth', 'quarterly', 'halfYearly', 'yearly'].includes(triggerType || automation.triggerType)) {
+      if (dayOfMonth !== undefined) automation.dayOfMonth = dayOfMonth;
+      
+      // Set monthOfYear for quarterly, halfYearly, yearly types
+      if (['quarterly', 'halfYearly', 'yearly'].includes(triggerType || automation.triggerType)) {
+        if (monthOfYear !== undefined) automation.monthOfYear = monthOfYear;
+      }
+      
+      // Clear date and time fields when changing to a time-based type
+      if (triggerType && ['dayOfMonth', 'quarterly', 'halfYearly', 'yearly'].includes(triggerType)) {
+        automation.specificDate = undefined;
+        automation.specificTime = undefined;
+      }
+    } else if (triggerType === 'dateAndTime' || automation.triggerType === 'dateAndTime') {
       if (specificDate !== undefined) automation.specificDate = specificDate;
       if (specificTime !== undefined) automation.specificTime = specificTime;
-      // Clear dayOfMonth field if changing to dateAndTime
-      automation.dayOfMonth = undefined;
-    } else if (dayOfMonth !== undefined && automation.triggerType === 'dayOfMonth') {
-      // If not changing trigger type but updating dayOfMonth
-      automation.dayOfMonth = dayOfMonth;
+      
+      // Clear dayOfMonth and monthOfYear when changing to dateAndTime type
+      if (triggerType === 'dateAndTime') {
+        automation.dayOfMonth = undefined;
+        automation.monthOfYear = undefined;
+      }
     }
     
     if (taskTemplate !== undefined) automation.taskTemplate = taskTemplate;

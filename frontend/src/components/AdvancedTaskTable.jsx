@@ -29,7 +29,7 @@ function formatDateTime(date) {
   });
 }
 
-const ALL_COLUMNS = [
+const BASE_COLUMNS = [
   { id: 'title', label: 'Title', defaultWidth: 256 },
   { id: 'description', label: 'Status', defaultWidth: 180 },
   { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
@@ -55,6 +55,19 @@ const ALL_COLUMNS = [
   { id: 'comments', label: 'Comments', defaultWidth: 120 },
 ];
 
+// Add verification column only for receivedVerification tab
+const getColumnsForTaskType = (taskType) => {
+  const columns = [...BASE_COLUMNS];
+  
+  if (taskType === 'receivedVerification') {
+    // Insert verification column after priority
+    const priorityIndex = columns.findIndex(col => col.id === 'priority');
+    columns.splice(priorityIndex + 1, 0, { id: 'verification', label: 'Verifications', defaultWidth: 130 });
+  }
+  
+  return columns;
+};
+
 const PRIORITY_OPTIONS = [
   { value: 'urgent', label: 'Urgent' },
   { value: 'today', label: 'Today' },
@@ -65,6 +78,13 @@ const PRIORITY_OPTIONS = [
   { value: 'filed', label: 'Filed' },
   { value: 'dailyWorksOffice', label: 'Daily works office' },
   { value: 'monthlyWorks', label: 'Monthly works' },
+];
+
+const VERIFICATION_OPTIONS = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'accepted', label: 'Accepted' },
+  { value: 'next verification', label: 'Next Verification' },
 ];
 
 const STATUS_OPTIONS = [
@@ -103,10 +123,14 @@ const AdvancedTaskTable = ({
   sortBy,
   tabKey = 'defaultTabKey',
   tabId,
+  allColumns, // Accept allColumns prop
 }) => {
   const { user } = useAuth();
   const [prevColumnOrder, setPrevColumnOrder] = useState([]);
   const isMounted = useRef(true);
+  
+  // Get columns based on task type, or use provided allColumns
+  const ALL_COLUMNS = allColumns || getColumnsForTaskType(taskType);
   
   // State for dynamic priorities
   const [dynamicPriorities, setDynamicPriorities] = useState([]);
@@ -189,6 +213,9 @@ const AdvancedTaskTable = ({
   const [editingPriorityTaskId, setEditingPriorityTaskId] = useState(null);
   const [priorityLoading, setPriorityLoading] = useState(false);
   const priorityDropdownRef = useRef(null);
+  const [editingVerificationTaskId, setEditingVerificationTaskId] = useState(null);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const verificationDropdownRef = useRef(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const [editingStatusTaskId, setEditingStatusTaskId] = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -255,6 +282,21 @@ const AdvancedTaskTable = ({
         return 'bg-teal-100 text-teal-800 border border-teal-200';
       case 'monthlyWorks':
         return 'bg-slate-100 text-slate-600 border border-slate-200';
+      default:
+        return 'bg-gray-100 text-gray-800 border border-gray-200';
+    }
+  };
+
+  const getVerificationColor = (verification) => {
+    switch (verification) {
+      case 'pending':
+        return 'bg-gray-100 text-gray-800 border border-gray-200';
+      case 'rejected':
+        return 'bg-red-100 text-red-800 border border-red-200';
+      case 'accepted':
+        return 'bg-green-100 text-green-800 border border-green-200';
+      case 'next verification':
+        return 'bg-blue-100 text-blue-800 border border-blue-200';
       default:
         return 'bg-gray-100 text-gray-800 border border-gray-200';
     }
@@ -357,7 +399,14 @@ const AdvancedTaskTable = ({
 
   // Get ordered columns based on current order and visibility
   const getOrderedVisibleColumns = () => {
-    return columnOrder.filter(colId => visibleColumns.includes(colId));
+    const orderedColumns = columnOrder.filter(colId => visibleColumns.includes(colId));
+    
+    // Filter out verification column for tabs other than receivedVerification
+    if (taskType !== 'receivedVerification') {
+      return orderedColumns.filter(colId => colId !== 'verification');
+    }
+    
+    return orderedColumns;
   };
 
   const handleTaskClick = (task) => {
@@ -454,6 +503,82 @@ const AdvancedTaskTable = ({
     }
     setPriorityLoading(false);
     setEditingPriorityTaskId(null);
+  };
+
+  // Get filtered verification options based on current verifier
+  const getVerificationOptions = (task, currentUser) => {
+    if (!currentUser) return VERIFICATION_OPTIONS;
+    
+    // Find which verifier the current user is
+    const verifierFields = [
+      'verificationAssignedTo',
+      'secondVerificationAssignedTo', 
+      'thirdVerificationAssignedTo',
+      'fourthVerificationAssignedTo',
+      'fifthVerificationAssignedTo'
+    ];
+    
+    let currentVerifierIndex = -1;
+    verifierFields.forEach((field, idx) => {
+      if (task[field]?._id === currentUser._id) {
+        currentVerifierIndex = idx;
+      }
+    });
+    
+    // If user is the 5th (last) verifier, remove "next verification" option
+    if (currentVerifierIndex === 4) { // 5th verifier (0-indexed)
+      return VERIFICATION_OPTIONS.filter(opt => opt.value !== 'next verification');
+    }
+    
+    return VERIFICATION_OPTIONS;
+  };
+
+  const handleVerificationChange = async (task, newVerification) => {
+    console.log('Starting verification update for task:', task._id, 'new verification:', newVerification);
+    setVerificationLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verification`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ verification: newVerification }),
+      });
+      
+      console.log('Verification update response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update verification');
+      }
+      
+      const updatedTask = await response.json();
+      
+      console.log('Updated task received:', updatedTask);
+      
+      if (onTaskUpdate) {
+        onTaskUpdate(task._id, () => updatedTask);
+      }
+      
+      // Update the task in orderedTasks without changing positions
+      const updatedOrderedTasks = orderedTasks.map(t => 
+        t._id === task._id ? { ...t, ...updatedTask } : t
+      );
+      setOrderedTasks(updatedOrderedTasks);
+      
+      // Refresh tasks from backend if refetchTasks is available
+      if (refetchTasks) {
+        refetchTasks();
+      }
+      
+      toast.success('Verification updated');
+    } catch (error) {
+      console.error('Error updating verification:', error);
+      toast.error(error.message || 'Failed to update verification');
+    }
+    setVerificationLoading(false);
+    setEditingVerificationTaskId(null);
   };
 
   const handleStatusChangeLocal = async (task, newStatus) => {
@@ -1446,8 +1571,100 @@ const AdvancedTaskTable = ({
                                     document.body
                                   )}
                                 </td>
-                              );
-                            
+                              );            
+                              
+                            case 'verification':
+                              // Allow any user to edit verification in received tasks page
+                              const canEditVerification = viewType === 'received';
+                              return (
+                                <td
+                                  key={colId}
+                                  className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                                  style={{
+                                    width: (columnWidths[colId] || 130) + 'px',
+                                    minWidth: (columnWidths[colId] || 130) + 'px',
+                                    maxWidth: (columnWidths[colId] || 130) + 'px',
+                                    background: 'white',
+                                    overflow: 'visible',
+                                    cursor: canEditVerification ? 'pointer' : 'default',
+                                    position: 'relative',
+                                    zIndex: editingVerificationTaskId === task._id ? 50 : 'auto',
+                                  }}
+                                  onClick={e => {
+                                    if (canEditVerification) {
+                                      e.stopPropagation();
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setDropdownPosition({
+                                        top: rect.bottom + window.scrollY,
+                                        left: rect.left + window.scrollX,
+                                      });
+                                      setEditingVerificationTaskId(task._id);
+                                    }
+                                  }}
+                                >
+                                  <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getVerificationColor(task.verification || 'pending')}`}>
+                                      {VERIFICATION_OPTIONS.find(opt => opt.value === (task.verification || 'pending'))?.label || (task.verification || 'pending')}
+                                    </span>
+                                  </div>
+                                  {/* Show dropdown as portal if open and canEditVerification */}
+                                  {editingVerificationTaskId === task._id && canEditVerification && ReactDOM.createPortal(
+                                    <div
+                                      ref={verificationDropdownRef}
+                                      style={{
+                                        position: 'absolute',
+                                        top: dropdownPosition.top,
+                                        left: dropdownPosition.left,
+                                        minWidth: 160,
+                                        background: '#fff',
+                                        border: '1px solid #e5e7eb',
+                                        borderRadius: 8,
+                                        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                                        padding: 8,
+                                        zIndex: 9999,
+                                      }}
+                                    >
+                                      {getVerificationOptions(task, currentUser).map(opt => (
+                                        <div
+                                          key={opt.value}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 8,
+                                            padding: '5px 12px',
+                                            borderRadius: 6,
+                                            cursor: 'pointer',
+                                            background: (task.verification || 'pending') === opt.value ? '#f3f4f6' : 'transparent',
+                                            marginBottom: 2,
+                                            transition: 'background 0.15s',
+                                            opacity: verificationLoading ? 0.6 : 1,
+                                          }}
+                                          onClick={e => {
+                                            e.stopPropagation();
+                                            if (!verificationLoading && (task.verification || 'pending') !== opt.value) {
+                                              handleVerificationChange(task, opt.value);
+                                            }
+                                            setEditingVerificationTaskId(null);
+                                          }}
+                                          onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                                          onMouseLeave={e => e.currentTarget.style.background = (task.verification || 'pending') === opt.value ? '#f3f4f6' : 'transparent'}
+                                        >
+                                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getVerificationColor(opt.value)}`}>
+                                            {opt.label}
+                                          </span>
+                                          {(task.verification || 'pending') === opt.value && (
+                                            <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>,
+                                    document.body
+                                  )}
+                                </td>
+                              );            
+                              
                             case 'selfVerification':
                               const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
                               return (
@@ -1527,12 +1744,43 @@ const AdvancedTaskTable = ({
                                 taskType !== 'completed' &&
                                 taskType !== 'guidance' &&
                                 taskType !== 'issuedVerification';
+                              
                               // For first verifier, require selfVerification (for execution tab)
                               if (colId === 'verificationAssignedTo') {
                                 canEditThisVerifier =
                                   (viewType === 'received' && taskType === 'execution' && !!task.selfVerification)
                                   || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier)
                                   || (viewType === 'received' && taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id);
+                              }
+                              
+                              // NEW: For receivedVerification tab, handle verification status logic
+                              if (taskType === 'receivedVerification') {
+                                // Always allow current verifier to reassign themselves
+                                if (userIsThisVerifier) {
+                                  canEditThisVerifier = true;
+                                }
+                                // For "next verification", allow assigning the next verifier in sequence
+                                else if (task.verification === 'next verification') {
+                                  // Find current verifier
+                                  let currentVerifierIndex = -1;
+                                  verifierFields.forEach((field, idx) => {
+                                    if (task[field]?._id === currentUser?._id) {
+                                      currentVerifierIndex = idx;
+                                    }
+                                  });
+                                  
+                                  // Only allow dropdown for the next verifier after current verifier
+                                  const nextVerifierIndex = currentVerifierIndex + 1;
+                                  if (colIdx === nextVerifierIndex && nextVerifierIndex < verifierFields.length) {
+                                    canEditThisVerifier = true;
+                                  } else {
+                                    canEditThisVerifier = false;
+                                  }
+                                }
+                                // For other verification statuses, don't allow next verifier assignment
+                                else if (!userIsThisVerifier) {
+                                  canEditThisVerifier = false;
+                                }
                               }
 
                               // Exclude assignedTo and all already assigned verifiers
@@ -2178,6 +2426,98 @@ const AdvancedTaskTable = ({
                           </td>
                         );
                       
+                      case 'verification':
+                        // Allow any user to edit verification in received tasks page
+                        const canEditVerification = viewType === 'received';
+                        return (
+                          <td
+                            key={colId}
+                            className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
+                            style={{
+                              width: (columnWidths[colId] || 130) + 'px',
+                              minWidth: (columnWidths[colId] || 130) + 'px',
+                              maxWidth: (columnWidths[colId] || 130) + 'px',
+                              background: 'white',
+                              overflow: 'visible',
+                              cursor: canEditVerification ? 'pointer' : 'default',
+                              position: 'relative',
+                              zIndex: editingVerificationTaskId === task._id ? 50 : 'auto',
+                            }}
+                            onClick={e => {
+                              if (canEditVerification) {
+                                e.stopPropagation();
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setDropdownPosition({
+                                  top: rect.bottom + window.scrollY,
+                                  left: rect.left + window.scrollX,
+                                });
+                                setEditingVerificationTaskId(task._id);
+                              }
+                            }}
+                          >
+                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getVerificationColor(task.verification || 'pending')}`}>
+                                {VERIFICATION_OPTIONS.find(opt => opt.value === (task.verification || 'pending'))?.label || (task.verification || 'pending')}
+                              </span>
+                            </div>
+                            {/* Show dropdown as portal if open and canEditVerification */}
+                            {editingVerificationTaskId === task._id && canEditVerification && ReactDOM.createPortal(
+                              <div
+                                ref={verificationDropdownRef}
+                                style={{
+                                  position: 'absolute',
+                                  top: dropdownPosition.top,
+                                  left: dropdownPosition.left,
+                                  minWidth: 160,
+                                  background: '#fff',
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: 8,
+                                  boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                                  padding: 8,
+                                  zIndex: 9999,
+                                }}
+                              >
+                                {getVerificationOptions(task, currentUser).map(opt => (
+                                  <div
+                                    key={opt.value}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      padding: '5px 12px',
+                                      borderRadius: 6,
+                                      cursor: 'pointer',
+                                      background: (task.verification || 'pending') === opt.value ? '#f3f4f6' : 'transparent',
+                                      marginBottom: 2,
+                                      transition: 'background 0.15s',
+                                      opacity: verificationLoading ? 0.6 : 1,
+                                    }}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      if (!verificationLoading && (task.verification || 'pending') !== opt.value) {
+                                        handleVerificationChange(task, opt.value);
+                                      }
+                                      setEditingVerificationTaskId(null);
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                                    onMouseLeave={e => e.currentTarget.style.background = (task.verification || 'pending') === opt.value ? '#f3f4f6' : 'transparent'}
+                                  >
+                                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getVerificationColor(opt.value)}`}>
+                                      {opt.label}
+                                    </span>
+                                    {(task.verification || 'pending') === opt.value && (
+                                      <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>,
+                              document.body
+                            )}
+                          </td>
+                        );
+                      
                       case 'selfVerification':
                         const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
                         return (
@@ -2257,12 +2597,43 @@ const AdvancedTaskTable = ({
                           taskType !== 'completed' &&
                           taskType !== 'guidance' &&
                           taskType !== 'issuedVerification';
+                        
                         // For first verifier, require selfVerification (for execution tab)
                         if (colId === 'verificationAssignedTo') {
                           canEditThisVerifier =
                             (viewType === 'received' && taskType === 'execution' && !!task.selfVerification)
                             || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier)
                             || (viewType === 'received' && taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id);
+                        }
+                        
+                        // NEW: For receivedVerification tab, handle verification status logic
+                        if (taskType === 'receivedVerification') {
+                          // Always allow current verifier to reassign themselves
+                          if (userIsThisVerifier) {
+                            canEditThisVerifier = true;
+                          }
+                          // For "next verification", allow assigning the next verifier in sequence
+                          else if (task.verification === 'next verification') {
+                            // Find current verifier
+                            let currentVerifierIndex = -1;
+                            verifierFields.forEach((field, idx) => {
+                              if (task[field]?._id === currentUser?._id) {
+                                currentVerifierIndex = idx;
+                              }
+                            });
+                            
+                            // Only allow dropdown for the next verifier after current verifier
+                            const nextVerifierIndex = currentVerifierIndex + 1;
+                            if (colIdx === nextVerifierIndex && nextVerifierIndex < verifierFields.length) {
+                              canEditThisVerifier = true;
+                            } else {
+                              canEditThisVerifier = false;
+                            }
+                          }
+                          // For other verification statuses, don't allow next verifier assignment
+                          else if (!userIsThisVerifier) {
+                            canEditThisVerifier = false;
+                          }
                         }
 
                         // Exclude assignedTo and all already assigned verifiers

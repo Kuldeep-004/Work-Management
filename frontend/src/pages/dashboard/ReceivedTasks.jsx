@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { API_BASE_URL, fetchTabState, saveTabState } from '../../apiConfig';
 
+// All columns including verification - this will be used for dropdown and column management
 const ALL_COLUMNS = [
   { id: 'title', label: 'Title' },
   { id: 'description', label: 'Description' },
@@ -28,6 +29,7 @@ const ALL_COLUMNS = [
   { id: 'billed', label: 'Internal Works' },
   { id: 'status', label: 'Task Status' },
   { id: 'priority', label: 'Priority' },
+  { id: 'verification', label: 'Verifications', defaultWidth: 130 },
   { id: 'selfVerification', label: 'Self Verification' },
   { id: 'inwardEntryDate', label: 'Inward Entry Date' },
   { id: 'dueDate', label: 'Due Date' },
@@ -44,19 +46,21 @@ const ALL_COLUMNS = [
   { id: 'comments', label: 'Comments' },
 ];
 
-const DEFAULT_TAB = () => ({
-  id: Date.now(),
-  title: 'Tab 1',
-  filters: [],
-  sortBy: 'createdAt',
-  sortOrder: 'desc',
-  searchTerm: '',
-  statusFilter: 'all',
-  visibleColumns: ALL_COLUMNS.map(col => col.id),
-  columnOrder: ALL_COLUMNS.map(col => col.id),
-  columnWidths: Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])),
-  activeTab: 'execution',
-});
+const DEFAULT_TAB = (taskType = 'execution') => {
+  return {
+    id: Date.now(),
+    title: 'Tab 1',
+    filters: [],
+    sortBy: 'createdAt',
+    sortOrder: 'desc',
+    searchTerm: '',
+    statusFilter: 'all',
+    visibleColumns: ALL_COLUMNS.map(col => col.id),
+    columnOrder: ALL_COLUMNS.map(col => col.id),
+    columnWidths: Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])),
+    activeTab: taskType,
+  };
+};
 
 const ReceivedTasks = () => {
   const { user, isAuthenticated } = useAuth();
@@ -95,7 +99,8 @@ const ReceivedTasks = () => {
   // Tab actions
   const addTab = () => {
     const newId = Date.now();
-    setTabs([...tabs, { ...DEFAULT_TAB(), id: newId, title: `Tab ${tabs.length + 1}` }]);
+    const currentTaskType = activeTabObj.activeTab || 'execution';
+    setTabs([...tabs, { ...DEFAULT_TAB(currentTaskType), id: newId, title: `Tab ${tabs.length + 1}` }]);
     setActiveTabId(newId);
   };
   const closeTab = (id) => {
@@ -114,6 +119,7 @@ const ReceivedTasks = () => {
     setTabs(tabs.map(tab => {
       if (tab.id !== activeTabId) return tab;
       let newTab = { ...tab, ...patch };
+      
       if (patch.visibleColumns) {
         // Remove hidden columns from order, add new visible columns at the end
         const currentOrder = newTab.columnOrder || ALL_COLUMNS.map(col => col.id);
@@ -574,16 +580,51 @@ const ReceivedTasks = () => {
       try {
         const tabStates = await fetchTabState('receivedTasks', user.token);
         if (isMounted && tabStates && Array.isArray(tabStates.tabs)) {
-          setTabs(tabStates.tabs);
+          // Migrate existing tabs to include verification column if missing
+          const migratedTabs = tabStates.tabs.map(tab => {
+            const updatedTab = { ...tab };
+            
+            // Ensure verification column is in visibleColumns if not present
+            if (!updatedTab.visibleColumns.includes('verification')) {
+              // Insert verification column after priority in visibleColumns
+              const priorityIndex = updatedTab.visibleColumns.findIndex(colId => colId === 'priority');
+              if (priorityIndex !== -1) {
+                updatedTab.visibleColumns.splice(priorityIndex + 1, 0, 'verification');
+              } else {
+                updatedTab.visibleColumns.push('verification');
+              }
+            }
+            
+            // Ensure verification column is in columnOrder if not present
+            if (!updatedTab.columnOrder.includes('verification')) {
+              const priorityIndex = updatedTab.columnOrder.findIndex(colId => colId === 'priority');
+              if (priorityIndex !== -1) {
+                updatedTab.columnOrder.splice(priorityIndex + 1, 0, 'verification');
+              } else {
+                updatedTab.columnOrder.push('verification');
+              }
+            }
+            
+            // Ensure verification column has width setting
+            if (!updatedTab.columnWidths.verification) {
+              updatedTab.columnWidths.verification = 130;
+            }
+            
+            return updatedTab;
+          });
+          
+          setTabs(migratedTabs);
           setActiveTabId(tabStates.activeTabId);
         } else if (isMounted) {
-          setTabs([DEFAULT_TAB()]);
-          setActiveTabId(DEFAULT_TAB().id);
+          const defaultTab = DEFAULT_TAB();
+          setTabs([defaultTab]);
+          setActiveTabId(defaultTab.id);
         }
       } catch {
         if (isMounted) {
-          setTabs([DEFAULT_TAB()]);
-          setActiveTabId(DEFAULT_TAB().id);
+          const defaultTab = DEFAULT_TAB();
+          setTabs([defaultTab]);
+          setActiveTabId(defaultTab.id);
         }
       } finally {
         if (isMounted) setTabsLoaded(true);
@@ -791,6 +832,7 @@ const ReceivedTasks = () => {
           sortBy={activeTabObj.sortBy}
           tabId={activeTabObj.id}
           tabKey="receivedTasks"
+          allColumns={ALL_COLUMNS}
         />
       </ErrorBoundary>
       <CreateTask

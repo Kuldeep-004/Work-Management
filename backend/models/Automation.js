@@ -3,8 +3,9 @@ import mongoose from 'mongoose';
 const automationSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: { type: String },
-  triggerType: { type: String, enum: ['dayOfMonth', 'dateAndTime'], required: true, default: 'dayOfMonth' },
-  dayOfMonth: { type: Number },
+  triggerType: { type: String, enum: ['dayOfMonth', 'dateAndTime', 'quarterly', 'halfYearly', 'yearly'], required: true, default: 'dayOfMonth' },
+  dayOfMonth: { type: Number }, // For dayOfMonth, yearly, halfYearly, quarterly
+  monthOfYear: { type: Number }, // For yearly, halfYearly, quarterly (1-12 for yearly, 1&7 for halfYearly, 1&4&7&10 for quarterly)
   specificDate: { type: Date },
   specificTime: { type: String }, // Time in 24-hour format (HH:MM)
   tasks: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Task' }],

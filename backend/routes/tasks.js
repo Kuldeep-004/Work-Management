@@ -221,7 +221,7 @@ router.get('/', protect, async (req, res) => {
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy createdAt updatedAt files comments billed selfVerification')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -247,7 +247,7 @@ router.get('/all', protect, async (req, res) => {
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
         .populate('guides', 'firstName lastName photo')
-        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
         .sort({ createdAt: -1 });
     } else if (req.user.role === 'Senior') {
       // Senior: see own assigned/received tasks and all tasks assigned to/assigned by Freshers of their team
@@ -275,7 +275,7 @@ router.get('/all', protect, async (req, res) => {
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
         .populate('guides', 'firstName lastName photo')
-        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
         .sort({ createdAt: -1 });
     } else if (req.user.role === 'Team Head') {
       // Team Head: see own assigned/received tasks and all tasks assigned by/assigned to any Senior
@@ -300,7 +300,7 @@ router.get('/all', protect, async (req, res) => {
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
         .populate('guides', 'firstName lastName photo')
-        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
         .sort({ createdAt: -1 });
     } else {
       return res.status(403).json({ message: 'You are not authorized to access all tasks' });
@@ -336,7 +336,7 @@ router.get('/for-verification', protect, async (req, res) => {
         .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
         .populate('originalAssignee', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
-        .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
+        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
         .sort({ createdAt: -1 });
       res.json(tasks);
       return;
@@ -361,7 +361,7 @@ router.get('/for-verification', protect, async (req, res) => {
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('originalAssignee', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     // Filter: if user is first verifier, exclude tasks with status 'first_verified'
     const filteredTasks = tasks.filter(task => {
@@ -394,7 +394,7 @@ router.get('/under-verification', protect, async (req, res) => {
       .populate('originalAssignee', 'firstName lastName photo')
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments billed selfVerification')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -431,7 +431,7 @@ router.get('/type/:type', protect, async (req, res) => {
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments billed selfVerification')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -478,7 +478,7 @@ router.get('/assigned', protect, async (req, res) => {
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -572,7 +572,7 @@ router.get('/received', protect, async (req, res) => {
       .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description clientName clientGroup workType workDoneBy status priority inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+      .select('title description clientName clientGroup workType workDoneBy status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -595,7 +595,7 @@ router.get('/received/guidance', protect, async (req, res) => {
       .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description clientName clientGroup workType workDoneBy status priority inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+      .select('title description clientName clientGroup workType workDoneBy status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -807,105 +807,7 @@ router.patch('/:taskId/status', protect, async (req, res) => {
   }
 });
 
-// Add new route for updating verification status
-router.patch('/:taskId/verification', protect, async (req, res) => {
-  try {
-    const task = await Task.findById(req.params.taskId);
-    if (!task) {
-      return res.status(404).json({ message: 'Task not found' });
-    }
 
-    const { verificationStatus, verifierId } = req.body;
-    if (!['pending', 'executed', 'first_verified', 'completed', 'rejected'].includes(verificationStatus)) {
-      return res.status(400).json({ message: 'Invalid verification status value' });
-    }
-
-    // Check if user is authorized to update verification status
-    const isAssignee = task.assignedTo.toString() === req.user._id.toString();
-    const isFirstVerifier = task.verificationAssignedTo?.toString() === req.user._id.toString();
-    const isSecondVerifier = task.secondVerificationAssignedTo?.toString() === req.user._id.toString();
-    const isThirdVerifier = task.thirdVerificationAssignedTo?.toString() === req.user._id.toString();
-    const isFourthVerifier = task.fourthVerificationAssignedTo?.toString() === req.user._id.toString();
-    const isFifthVerifier = task.fifthVerificationAssignedTo?.toString() === req.user._id.toString();
-
-    if (!isAssignee && !isFirstVerifier && !isSecondVerifier && !isThirdVerifier && !isFourthVerifier && !isFifthVerifier) {
-      return res.status(403).json({ message: 'Not authorized to update verification status' });
-    }
-
-    // Handle different verification statuses
-    switch (verificationStatus) {
-      case 'executed':
-        if (!isAssignee) {
-          return res.status(403).json({ message: 'Only assignee can mark task as executed' });
-        }
-        if (!verifierId) {
-          return res.status(400).json({ message: 'Verifier ID is required for executed status' });
-        }
-        // Update task with verifier assignment
-        task.verificationAssignedTo = verifierId;
-        task.verificationStatus = 'executed';
-        task.status = 'in_progress'; // Keep task in progress while being verified
-        break;
-
-      case 'first_verified':
-        if (!isFirstVerifier) {
-          return res.status(403).json({ message: 'Only first verifier can perform first verification' });
-        }
-        if (!verifierId) {
-          return res.status(400).json({ message: 'Second verifier ID is required for first verification' });
-        }
-        // Assign second verifier and update status
-        task.secondVerificationAssignedTo = verifierId;
-        task.verificationStatus = 'first_verified';
-        break;
-
-      case 'rejected':
-        if (!isFirstVerifier && !isSecondVerifier && !isThirdVerifier && !isFourthVerifier && !isFifthVerifier) {
-          return res.status(403).json({ message: 'Only verifiers can reject the task' });
-        }
-        // Reset verification status and remove verifiers
-        task.verificationStatus = 'pending';
-        task.verificationAssignedTo = null;
-        task.secondVerificationAssignedTo = null;
-        task.thirdVerificationAssignedTo = null;
-        task.fourthVerificationAssignedTo = null;
-        task.fifthVerificationAssignedTo = null;
-        task.status = 'in_progress';
-        break;
-
-      case 'completed':
-        if (!isFirstVerifier && !isSecondVerifier && !isThirdVerifier && !isFourthVerifier && !isFifthVerifier) {
-          return res.status(403).json({ message: 'Only verifiers can complete the task' });
-        }
-        // Mark the task as verified/completed instead of deleting
-        task.verificationStatus = 'completed';
-        task.status = 'completed';
-        break;
-
-      default:
-        break;
-    }
-
-    // Always save the task after updating verification status
-    await task.save();
-
-    // Fetch the updated task with all populated fields
-    const updatedTask = await Task.findById(task._id)
-      .populate('assignedTo', 'firstName lastName photo')
-      .populate('assignedBy', 'firstName lastName photo')
-      .populate('verificationAssignedTo', 'firstName lastName photo')
-      .populate('secondVerificationAssignedTo', 'firstName lastName photo')
-      .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
-      .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
-      .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
-      .populate('originalAssignee', 'firstName lastName photo');
-
-    res.json(updatedTask);
-  } catch (error) {
-    console.error('Error updating verification status:', error);
-    res.status(500).json({ message: error.message });
-  }
-});
 
 // Controller for updating task description
 async function updateTaskDescription(req, res) {
@@ -1001,6 +903,100 @@ router.patch('/:taskId/priority', protect, async (req, res) => {
     console.error('Error updating task priority:', error);
     res.status(500).json({ 
       message: 'Error updating task priority',
+      error: error.message 
+    });
+  }
+});
+
+// PATCH /:taskId/verification
+router.patch('/:taskId/verification', protect, async (req, res) => {
+  try {
+    console.log('Updating verification for task:', req.params.taskId, 'new verification:', req.body.verification);
+    
+    const task = await Task.findById(req.params.taskId)
+      .populate('assignedTo', 'firstName lastName photo')
+      .populate('assignedBy', 'firstName lastName photo')
+      .populate('verificationAssignedTo', 'firstName lastName photo')
+      .populate('secondVerificationAssignedTo', 'firstName lastName photo')
+      .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
+      .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
+      .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
+      .populate('files.uploadedBy', 'firstName lastName photo')
+      .populate('comments.createdBy', 'firstName lastName photo');
+
+    if (!task) {
+      console.log('Task not found:', req.params.taskId);
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    const { verification } = req.body;
+
+    // Validate verification value
+    const validVerifications = ['pending', 'rejected', 'accepted', 'next verification'];
+    if (!validVerifications.includes(verification)) {
+      console.log('Invalid verification value:', verification);
+      return res.status(400).json({ message: 'Invalid verification value' });
+    }
+
+    console.log('Current verification:', task.verification, 'New verification:', verification);
+    
+    // Handle different verification statuses
+    if (verification === 'rejected') {
+      // Check if there are any comments on the task
+      if (!task.comments || task.comments.length === 0) {
+        return res.status(400).json({ 
+          message: 'Please add a comment before rejecting the task' 
+        });
+      }
+      
+      // Clear all verifiers and set status back to pending
+      task.verificationAssignedTo = undefined;
+      task.secondVerificationAssignedTo = undefined;
+      task.thirdVerificationAssignedTo = undefined;
+      task.fourthVerificationAssignedTo = undefined;
+      task.fifthVerificationAssignedTo = undefined;
+      task.verification = 'pending';
+      task.status = 'yet_to_start';
+    } else if (verification === 'accepted') {
+      // Clear all verifiers and send task back to executor
+      task.verificationAssignedTo = undefined;
+      task.secondVerificationAssignedTo = undefined;
+      task.thirdVerificationAssignedTo = undefined;
+      task.fourthVerificationAssignedTo = undefined;
+      task.fifthVerificationAssignedTo = undefined;
+      task.verification = 'pending';
+      // Keep status as is - task goes back to executor for execution
+    } else {
+      // For 'pending' and 'next verification', just update the verification field
+      task.verification = verification;
+    }
+    
+    await task.save();
+
+    console.log('Verification updated successfully');
+
+    // Fetch the updated task with all populated fields
+    const updatedTask = await Task.findById(task._id)
+      .populate('assignedTo', 'firstName lastName photo')
+      .populate('assignedBy', 'firstName lastName photo')
+      .populate('verificationAssignedTo', 'firstName lastName photo')
+      .populate('secondVerificationAssignedTo', 'firstName lastName photo')
+      .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
+      .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
+      .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
+      .populate('files.uploadedBy', 'firstName lastName photo')
+      .populate('comments.createdBy', 'firstName lastName photo');
+
+    if (!updatedTask) {
+      throw new Error('Failed to fetch updated task');
+    }
+
+    console.log('Updated task verification:', updatedTask.verification);
+    res.json(updatedTask);
+  } catch (error) {
+    console.error('Error updating task verification:', error);
+    res.status(500).json({ 
+      message: 'Error updating task verification',
       error: error.message 
     });
   }
@@ -1434,7 +1430,7 @@ router.get('/received/completed', protect, async (req, res) => {
       .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
       .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
-      .select('title description clientName clientGroup workType workDoneBy status priority inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
+      .select('title description clientName clientGroup workType workDoneBy status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -1465,7 +1461,7 @@ router.get('/head-dashboard', protect, async (req, res) => {
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy createdAt updatedAt files comments billed selfVerification')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -1500,7 +1496,7 @@ router.get('/team-head-dashboard', protect, async (req, res) => {
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description status priority inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy createdAt updatedAt files comments billed selfVerification')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType workDoneBy assignedTo assignedBy createdAt updatedAt files comments billed selfVerification')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -1550,6 +1546,13 @@ router.patch('/:taskId/verifier', protect, async (req, res) => {
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
     }
+    
+    // Check if verification status is "next verification" and change it to "pending"
+    if (task.verification === 'next verification') {
+      task.verification = 'pending';
+      console.log('Changed verification from "next verification" to "pending" after assigning verifier');
+    }
+    
     // Allow any authenticated user to update any verifier
     if (verificationAssignedTo) {
       task.verificationAssignedTo = verificationAssignedTo;

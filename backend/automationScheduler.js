@@ -49,6 +49,48 @@ export const runAutomationCheck = async (isManual = true) => {
       ]
     });
     
+    // Get quarterly automations for the current day and month (if applicable)
+    // Quarters are: Q1 (Jan), Q2 (Apr), Q3 (Jul), Q4 (Oct)
+    const quarterlyMonths = [0, 3, 6, 9]; // Jan, Apr, Jul, Oct (0-indexed)
+    const quarterlyAutomations = quarterlyMonths.includes(currentMonth) ? await Automation.find({
+      triggerType: 'quarterly',
+      dayOfMonth: dayOfMonth,
+      monthOfYear: currentMonth + 1, // Convert to 1-indexed for storage
+      // Check if it hasn't been run in the current quarter
+      $or: [
+        { lastRunMonth: { $exists: false } },
+        { lastRunMonth: { $ne: currentMonth } },
+        { lastRunYear: { $ne: currentYear } }
+      ]
+    }) : [];
+    
+    // Get half-yearly automations for the current day and month (if applicable)
+    // Half years are: H1 (Jan), H2 (Jul)
+    const halfYearlyMonths = [0, 6]; // Jan, Jul (0-indexed)
+    const halfYearlyAutomations = halfYearlyMonths.includes(currentMonth) ? await Automation.find({
+      triggerType: 'halfYearly',
+      dayOfMonth: dayOfMonth,
+      monthOfYear: currentMonth + 1, // Convert to 1-indexed for storage
+      // Check if it hasn't been run in the current half year
+      $or: [
+        { lastRunMonth: { $exists: false } },
+        { lastRunMonth: { $ne: currentMonth } },
+        { lastRunYear: { $ne: currentYear } }
+      ]
+    }) : [];
+    
+    // Get yearly automations for the current day and month (if applicable)
+    const yearlyAutomations = await Automation.find({
+      triggerType: 'yearly',
+      dayOfMonth: dayOfMonth,
+      monthOfYear: currentMonth + 1, // Convert to 1-indexed for storage
+      // Check if it hasn't been run this year yet
+      $or: [
+        { lastRunYear: { $exists: false } },
+        { lastRunYear: { $ne: currentYear } }
+      ]
+    });
+    
     // Get automations that trigger on specific date and time
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
@@ -73,7 +115,14 @@ export const runAutomationCheck = async (isManual = true) => {
       }
     });
     
-    const automations = [...monthlyAutomations, ...dateTimeAutomations, ...missedAutomations];
+    const automations = [
+      ...monthlyAutomations, 
+      ...quarterlyAutomations,
+      ...halfYearlyAutomations,
+      ...yearlyAutomations,
+      ...dateTimeAutomations,
+      ...missedAutomations
+    ];
     
     // Check if there are any monthly automations that we're skipping because they already ran this month
     const allMonthlyAutomationsToday = await Automation.find({
@@ -86,10 +135,13 @@ export const runAutomationCheck = async (isManual = true) => {
     if (!isManual) {
       console.log(`[AutomationScheduler] Found ${monthlyAutomations.length} monthly automations for day ${dayOfMonth} that haven't run this month yet`);
       console.log(`[AutomationScheduler] Skipping ${skippedAutomationsCount} monthly automations that already ran this month`);
+      console.log(`[AutomationScheduler] Found ${quarterlyAutomations.length} quarterly automations for day ${dayOfMonth} of month ${currentMonth + 1}`);
+      console.log(`[AutomationScheduler] Found ${halfYearlyAutomations.length} half-yearly automations for day ${dayOfMonth} of month ${currentMonth + 1}`);
+      console.log(`[AutomationScheduler] Found ${yearlyAutomations.length} yearly automations for day ${dayOfMonth} of month ${currentMonth + 1}`);
       console.log(`[AutomationScheduler] Found ${dateTimeAutomations.length} date-time automations for today`);
       console.log(`[AutomationScheduler] Found ${missedAutomations.length} missed date-time automations from past days`);
     } else {
-      console.log(`[AutomationScheduler] Found ${automations.length} total overdue dateAndTime automations`);
+      console.log(`[AutomationScheduler] Found ${automations.length} total automations to process`);
     }
     
     let processedCount = 0;
@@ -250,14 +302,21 @@ export const runAutomationCheck = async (isManual = true) => {
         console.log(`[AutomationScheduler] Automation ${automation._id}, template "${title}": Created ${templateCreatedCount} tasks.`);
       }
       
-      // For dayOfMonth automations, update lastRunDate and save for next month
-      if (automation.triggerType === 'dayOfMonth' || !automation.triggerType) {
+      // For recurring automations (dayOfMonth, quarterly, halfYearly, yearly), 
+      // update lastRunDate and save for next run
+      if (['dayOfMonth', 'quarterly', 'halfYearly', 'yearly'].includes(automation.triggerType) || !automation.triggerType) {
         // Update the lastRunDate, lastRunMonth, and lastRunYear to track when it was executed
         automation.lastRunDate = now;
         automation.lastRunMonth = now.getMonth();
         automation.lastRunYear = now.getFullYear();
         await automation.save();
-        console.log(`[AutomationScheduler] Monthly automation ${automation._id}: Created ${totalTasksCreated} tasks total. Will run next month.`);
+        
+        let nextRunInfo = 'next month';
+        if (automation.triggerType === 'quarterly') nextRunInfo = 'next quarter';
+        if (automation.triggerType === 'halfYearly') nextRunInfo = 'in 6 months';
+        if (automation.triggerType === 'yearly') nextRunInfo = 'next year';
+        
+        console.log(`[AutomationScheduler] ${automation.triggerType} automation ${automation._id}: Created ${totalTasksCreated} tasks total. Will run ${nextRunInfo}.`);
       } 
       // For dateAndTime automations, delete them after execution since they're one-time
       else if (automation.triggerType === 'dateAndTime') {

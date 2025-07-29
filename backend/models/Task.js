@@ -145,6 +145,11 @@ const taskSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  verification: {
+    type: String,
+    enum: ['pending', 'rejected', 'accepted', 'next verification'],
+    default: 'pending'
+  },
   guides: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

@@ -129,12 +129,43 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
         throw new Error('Day of month is required');
       }
       
+      if (automationData.triggerType === 'quarterly') {
+        if (!automationData.dayOfMonth) {
+          throw new Error('Day of month is required for quarterly automation');
+        }
+        
+        if (!automationData.monthOfYear) {
+          automationData.monthOfYear = 1; // Default to January (Q1)
+        }
+      }
+      
+      if (automationData.triggerType === 'halfYearly') {
+        if (!automationData.dayOfMonth) {
+          throw new Error('Day of month is required for half-yearly automation');
+        }
+        
+        if (!automationData.monthOfYear) {
+          automationData.monthOfYear = 1; // Default to January (H1)
+        }
+      }
+      
+      if (automationData.triggerType === 'yearly') {
+        if (!automationData.dayOfMonth) {
+          throw new Error('Day of month is required for yearly automation');
+        }
+        
+        if (!automationData.monthOfYear) {
+          automationData.monthOfYear = 1; // Default to January
+        }
+      }
+      
+      
       if (automationData.triggerType === 'dateAndTime') {
         if (!automationData.specificDate || !automationData.specificTime) {
           throw new Error('Both date and time are required');
         }
         
-        // Validate date is in the future
+        // Validate date is in the future (only for one-time automations)
         const selectedDateTime = new Date(`${automationData.specificDate}T${automationData.specificTime}`);
         const now = new Date();
         
@@ -191,6 +222,19 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                 <h3 className="text-md font-semibold text-gray-800 mb-2">Select Trigger Type</h3>
                 <div className="flex flex-col gap-3">
                   <button
+                    onClick={() => handleTriggerSelect('dateAndTime')}
+                    className="border border-gray-300 rounded-md p-4 flex flex-col gap-2 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="font-medium text-gray-800">One-time Date and Time</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Create one-time tasks on a specific date and time</p>
+                  </button>
+
+                  <button
                     onClick={() => handleTriggerSelect('dayOfMonth')}
                     className="border border-gray-300 rounded-md p-4 flex flex-col gap-2 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
@@ -202,17 +246,44 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                     </div>
                     <p className="text-xs text-gray-500">Create recurring tasks on a specific day each month</p>
                   </button>
+
                   <button
-                    onClick={() => handleTriggerSelect('dateAndTime')}
+                    onClick={() => handleTriggerSelect('quarterly')}
                     className="border border-gray-300 rounded-md p-4 flex flex-col gap-2 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <div className="flex items-center gap-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      <span className="font-medium text-gray-800">Date and Time</span>
+                      <span className="font-medium text-gray-800">Quarterly</span>
                     </div>
-                    <p className="text-xs text-gray-500">Create one-time tasks on a specific date and time</p>
+                    <p className="text-xs text-gray-500">Create recurring tasks every quarter (Jan, Apr, Jul, Oct)</p>
+                  </button>
+
+                  <button
+                    onClick={() => handleTriggerSelect('halfYearly')}
+                    className="border border-gray-300 rounded-md p-4 flex flex-col gap-2 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span className="font-medium text-gray-800">Half Yearly</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Create recurring tasks twice a year (Jan & Jul)</p>
+                  </button>
+
+                  <button
+                    onClick={() => handleTriggerSelect('yearly')}
+                    className="border border-gray-300 rounded-md p-4 flex flex-col gap-2 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span className="font-medium text-gray-800">Yearly</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Create recurring tasks once a year on a specific date</p>
                   </button>
                 </div>
                 <div className="flex justify-end mt-2">
@@ -282,6 +353,108 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                       />
                     </div>
                     <p className="text-xs text-gray-500 mt-1">Tasks will be created automatically on this day each month.</p>
+                  </div>
+                ) : triggerType === 'quarterly' ? (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Quarterly Settings</label>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="relative">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Day of Month (1-31)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="31"
+                          placeholder="Which day of the month"
+                          className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          value={newAutomation.dayOfMonth}
+                          onChange={e => setNewAutomation({ ...newAutomation, dayOfMonth: e.target.value })}
+                        />
+                      </div>
+                      <div className="relative">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Starting Month</label>
+                        <select
+                          className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          value={newAutomation.monthOfYear || 1}
+                          onChange={e => setNewAutomation({ ...newAutomation, monthOfYear: parseInt(e.target.value) })}
+                        >
+                          <option value="1">January (Q1)</option>
+                          <option value="4">April (Q2)</option>
+                          <option value="7">July (Q3)</option>
+                          <option value="10">October (Q4)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">Tasks will be created every quarter (Jan, Apr, Jul, Oct) on the specified day.</p>
+                  </div>
+                ) : triggerType === 'halfYearly' ? (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Half Yearly Settings</label>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="relative">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Day of Month (1-31)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="31"
+                          placeholder="Which day of the month"
+                          className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          value={newAutomation.dayOfMonth}
+                          onChange={e => setNewAutomation({ ...newAutomation, dayOfMonth: e.target.value })}
+                        />
+                      </div>
+                      <div className="relative">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Starting Month</label>
+                        <select
+                          className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          value={newAutomation.monthOfYear || 1}
+                          onChange={e => setNewAutomation({ ...newAutomation, monthOfYear: parseInt(e.target.value) })}
+                        >
+                          <option value="1">January (H1)</option>
+                          <option value="7">July (H2)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">Tasks will be created twice a year (Jan & Jul) on the specified day.</p>
+                  </div>
+                ) : triggerType === 'yearly' ? (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Yearly Settings</label>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="relative">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Day of Month (1-31)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="31"
+                          placeholder="Which day of the month"
+                          className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          value={newAutomation.dayOfMonth}
+                          onChange={e => setNewAutomation({ ...newAutomation, dayOfMonth: e.target.value })}
+                        />
+                      </div>
+                      <div className="relative">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Month</label>
+                        <select
+                          className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          value={newAutomation.monthOfYear || 1}
+                          onChange={e => setNewAutomation({ ...newAutomation, monthOfYear: parseInt(e.target.value) })}
+                        >
+                          <option value="1">January</option>
+                          <option value="2">February</option>
+                          <option value="3">March</option>
+                          <option value="4">April</option>
+                          <option value="5">May</option>
+                          <option value="6">June</option>
+                          <option value="7">July</option>
+                          <option value="8">August</option>
+                          <option value="9">September</option>
+                          <option value="10">October</option>
+                          <option value="11">November</option>
+                          <option value="12">December</option>
+                        </select>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">Tasks will be created once a year on the specified date.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -462,6 +635,34 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                             </svg>
                             Monthly: Day {auto.dayOfMonth}
                           </div>
+                        ) : auto.triggerType === 'quarterly' ? (
+                          <div className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Quarterly: Day {auto.dayOfMonth} 
+                            {auto.monthOfYear === 1 ? ' (Q1)' : 
+                             auto.monthOfYear === 4 ? ' (Q2)' :
+                             auto.monthOfYear === 7 ? ' (Q3)' :
+                             auto.monthOfYear === 10 ? ' (Q4)' : ''}
+                          </div>
+                        ) : auto.triggerType === 'halfYearly' ? (
+                          <div className="bg-orange-100 text-orange-800 text-xs font-medium px-2 py-1 rounded-full flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Half-Yearly: Day {auto.dayOfMonth} 
+                            {auto.monthOfYear === 1 ? ' (H1)' : 
+                             auto.monthOfYear === 7 ? ' (H2)' : ''}
+                          </div>
+                        ) : auto.triggerType === 'yearly' ? (
+                          <div className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Yearly: Day {auto.dayOfMonth}/
+                            {auto.monthOfYear || 1}
+                          </div>
                         ) : (
                           <div className="bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded-full flex items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -471,7 +672,7 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                               auto.specificTime ? 
                               convert24hTo12h(auto.specificTime) : 
                               'Unknown time'
-                            }
+                            } (Once)
                           </div>
                         )}
                         {auto.taskTemplate && Array.isArray(auto.taskTemplate) && (
