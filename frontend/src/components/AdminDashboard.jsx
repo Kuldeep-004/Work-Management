@@ -53,7 +53,6 @@ const ALL_COLUMNS = [
   { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
   { id: 'clientGroup', label: 'Client Group', defaultWidth: 150 },
   { id: 'workType', label: 'Work Type', defaultWidth: 150 },
-  { id: 'workDoneBy', label: 'Work Done', defaultWidth: 120 },
   { id: 'billed', label: 'Internal Works', defaultWidth: 80 },
   { id: 'status', label: 'Stages', defaultWidth: 120 },
   { id: 'priority', label: 'Priority', defaultWidth: 120 },
@@ -123,6 +122,12 @@ const AdminDashboard = () => {
   const [selectedAutomation, setSelectedAutomation] = useState(null);
   const [automationTasks, setAutomationTasks] = useState([]);
   const [showAddAutomationTask, setShowAddAutomationTask] = useState(false);
+  // Bulk selection state
+  const [selectedTasks, setSelectedTasks] = useState([]);
+  const [isAllSelected, setIsAllSelected] = useState(false);
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [showCheckboxes, setShowCheckboxes] = useState(false);
   // Handler for Automation submit
   const handleAutomationSubmit = (data) => {
     setAutomationModalOpen(false);
@@ -348,6 +353,44 @@ const AdminDashboard = () => {
       fetchTasks();
     }
   }, [tabsLoaded, activeTabId]);
+
+  // Clear selections when tasks or filters change
+  useEffect(() => {
+    setSelectedTasks([]);
+    setIsAllSelected(false);
+    setShowBulkActions(false);
+  }, [tasks.length]);
+
+  // Separate useEffect for filter and search changes to prevent infinite loops
+  useEffect(() => {
+    if (tabsLoaded) {
+      setSelectedTasks([]);
+      setIsAllSelected(false);
+      setShowBulkActions(false);
+    }
+  }, [tabsLoaded, activeTabId]);
+
+  // Toggle bulk selection mode
+  const toggleBulkSelection = () => {
+    const newShowCheckboxes = !showCheckboxes;
+    setShowCheckboxes(newShowCheckboxes);
+    
+    // Clear selections when hiding checkboxes
+    if (!newShowCheckboxes) {
+      setSelectedTasks([]);
+      setIsAllSelected(false);
+      setShowBulkActions(false);
+    }
+  };
+
+  // Clear selections when showCheckboxes changes to false
+  useEffect(() => {
+    if (!showCheckboxes) {
+      setSelectedTasks([]);
+      setIsAllSelected(false);
+      setShowBulkActions(false);
+    }
+  }, [showCheckboxes]);
 
   useEffect(() => {
     // Fetch task hours for all users
@@ -575,6 +618,68 @@ const AdminDashboard = () => {
     }
   };
 
+  // Bulk selection handlers
+  const handleTaskSelect = (taskId, isSelected) => {
+    setSelectedTasks(prev => {
+      const newSelected = isSelected 
+        ? [...prev, taskId] 
+        : prev.filter(id => id !== taskId);
+      
+      // Update show bulk actions based on selection and checkbox visibility
+      setShowBulkActions(newSelected.length > 0 && showCheckboxes);
+      
+      // Update select all state
+      const currentTasks = getFilteredAndSortedTasks(tasks, activeTabObj.filters);
+      setIsAllSelected(newSelected.length === currentTasks.length && currentTasks.length > 0);
+      
+      return newSelected;
+    });
+  };
+
+  const handleSelectAll = (isSelected) => {
+    const currentTasks = getFilteredAndSortedTasks(tasks, activeTabObj.filters);
+    if (isSelected) {
+      setSelectedTasks(currentTasks.map(task => task._id));
+      setShowBulkActions(currentTasks.length > 0 && showCheckboxes);
+    } else {
+      setSelectedTasks([]);
+      setShowBulkActions(false);
+    }
+    setIsAllSelected(isSelected);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTasks.length === 0) return;
+
+    try {
+      const deletePromises = selectedTasks.map(taskId =>
+        fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${user.token}` },
+        })
+      );
+
+      const responses = await Promise.all(deletePromises);
+      const failedDeletes = responses.filter(response => !response.ok);
+
+      if (failedDeletes.length > 0) {
+        toast.error(`Failed to delete ${failedDeletes.length} task${failedDeletes.length > 1 ? 's' : ''}`);
+      } else {
+        toast.success(`Successfully deleted ${selectedTasks.length} task${selectedTasks.length > 1 ? 's' : ''}`);
+      }
+
+      // Clear selection and reload tasks
+      setSelectedTasks([]);
+      setIsAllSelected(false);
+      setShowBulkActions(false);
+      setShowDeleteConfirmation(false);
+      fetchTasks();
+    } catch (error) {
+      toast.error('Failed to delete selected tasks');
+      console.error('Bulk delete error:', error);
+    }
+  };
+
   const handleFileUploaded = (files) => {
     // Update the task in the list with new files
     setTasks(prevTasks => 
@@ -679,9 +784,6 @@ const AdminDashboard = () => {
               ? (task.workType[0] || 'Unspecified') 
               : (task.workType || 'Unspecified');
             break;
-          case 'workDoneBy':
-            groupKey = task.workDoneBy || 'Unassigned';
-            break;
           case 'billed':
             groupKey = task.billed ? 'Yes' : 'No';
             break;
@@ -731,9 +833,6 @@ const AdminDashboard = () => {
                 break;
               case 'workType':
                 value = Array.isArray(task.workType) ? task.workType.join(', ') : (task.workType || '');
-                break;
-              case 'workDoneBy':
-                value = task.workDoneBy || '';
                 break;
               case 'billed':
                 value = task.billed ? 'Yes' : 'No';
@@ -815,9 +914,6 @@ const AdminDashboard = () => {
               break;
             case 'workType':
               value = Array.isArray(task.workType) ? task.workType.join(', ') : (task.workType || '');
-              break;
-            case 'workDoneBy':
-              value = task.workDoneBy || '';
               break;
             case 'billed':
               value = task.billed ? 'Yes' : 'No';
@@ -1131,7 +1227,6 @@ const AdminDashboard = () => {
               <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientName' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientName' }); setShowGroupByDropdown(false); }}>Client Name</button>
               <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientGroup' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientGroup' }); setShowGroupByDropdown(false); }}>Client Group</button>
               <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'workType' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'workType' }); setShowGroupByDropdown(false); }}>Work Type</button>
-              <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'workDoneBy' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'workDoneBy' }); setShowGroupByDropdown(false); }}>Work Done</button>
               <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'billed' }); setShowGroupByDropdown(false); }}>Internal Works</button>
             </div>
           )}
@@ -1141,6 +1236,22 @@ const AdminDashboard = () => {
           className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 text-sm"
         >
           Download
+        </button>
+        {/* Bulk Selection Toggle Button */}
+        <button
+          onClick={toggleBulkSelection}
+          className={`ml-0 flex items-center justify-center w-auto px-4 h-9 rounded-lg focus:outline-none focus:ring-2 shadow-sm transition-colors ${
+            showCheckboxes 
+              ? 'bg-orange-600 hover:bg-orange-700 text-white focus:ring-orange-500' 
+              : 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500'
+          }`}
+          title={showCheckboxes ? "Hide Selection Mode" : "Enable Selection Mode"}
+          type="button"
+        >
+          <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {showCheckboxes ? 'Exit Selection' : 'Select'}
         </button>
         {/* Automation Button - left of the + button */}
         <button
@@ -1160,6 +1271,48 @@ const AdminDashboard = () => {
           <PlusIcon className="h-6 w-8" />
         </button>
       </div>
+
+      {/* Bulk Actions Bar */}
+      {showBulkActions && showCheckboxes && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg px-4 py-3 mb-4 flex items-center justify-between shadow-sm animate-fade-in">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
+                <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <span className="text-blue-800 font-medium">
+                {selectedTasks.length} task{selectedTasks.length > 1 ? 's' : ''} selected
+              </span>
+            </div>
+            <div className="flex items-center space-x-2 text-sm text-blue-600">
+              <span>•</span>
+              <button
+                onClick={() => {
+                  setSelectedTasks([]);
+                  setIsAllSelected(false);
+                  setShowBulkActions(false);
+                }}
+                className="text-blue-600 hover:text-blue-800 font-medium transition-colors hover:underline"
+              >
+                Clear Selection
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowDeleteConfirmation(true)}
+              className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all hover:shadow-md"
+            >
+              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete Selected ({selectedTasks.length})
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Responsive table wrapper */}
       <div className="overflow-x-auto w-full" ref={tableRef}>
@@ -1192,6 +1345,12 @@ const AdminDashboard = () => {
           filters={isFilterPopupOpen ? filterDraft : activeTabObj.filters}
           tabKey="adminDashboard"
           tabId={activeTabObj.id}
+          // Bulk selection props
+          enableBulkSelection={showCheckboxes}
+          selectedTasks={selectedTasks}
+          onTaskSelect={handleTaskSelect}
+          isAllSelected={isAllSelected}
+          onSelectAll={handleSelectAll}
         />
       </div>
       {/* Edit Task Modal */}
@@ -1248,7 +1407,7 @@ const AdminDashboard = () => {
               </div>
               <button onClick={() => setSelectedAutomation(null)} className="text-gray-400 hover:text-gray-700 text-xl">×</button>
             </div>
-            <div className="flex-1 overflow-y-auto mb-4">
+            <div className="flex-1 mb-4">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-md font-semibold text-gray-800">Task Templates</h3>
                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
@@ -1257,7 +1416,7 @@ const AdminDashboard = () => {
               </div>
               
               {Array.isArray(selectedAutomation.taskTemplate) && selectedAutomation.taskTemplate.length > 0 ? (
-                <ul className="space-y-2 mt-2">
+                <ul className="space-y-2 mt-2 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar" style={{ maxHeight: "420px" }}>
                   {selectedAutomation.taskTemplate.map((template, idx) => (
                     <li key={idx} className="py-3 px-4 flex items-center justify-between bg-yellow-50 border-l-4 border-yellow-400 rounded-md hover:bg-yellow-100 transition-colors shadow-sm">
                       <div className="flex-1">
@@ -1415,6 +1574,44 @@ const AdminDashboard = () => {
               ) : (
                 <TaskComments taskId={selectedTask._id} />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showDeleteConfirmation && (
+        <div className="fixed inset-0 bg-gray-50/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+            <div className="flex items-center mb-4">
+              <div className="flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mr-4">
+                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Delete Tasks</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+            <div className="mb-6">
+              <p className="text-gray-700">
+                Are you sure you want to delete <span className="font-semibold text-red-600">{selectedTasks.length}</span> selected task{selectedTasks.length > 1 ? 's' : ''}?
+              </p>
+            </div>
+            <div className="flex space-x-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirmation(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+              >
+                Delete {selectedTasks.length} Task{selectedTasks.length > 1 ? 's' : ''}
+              </button>
             </div>
           </div>
         </div>

@@ -19,6 +19,7 @@ import Notes from '../components/Notes';
 import BilledTasks from './dashboard/BilledTasks';
 import UnBilledTasks from './dashboard/UnBilledTasks';
 import TaskVerification from './dashboard/TaskVerification';
+import ActivityLogs from './dashboard/ActivityLogs';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -32,6 +33,7 @@ const Dashboard = () => {
           <Route path="received-tasks" element={<ReceivedTasks />} />
           <Route path="assigned-tasks" element={<AssignedTasks />} />
           <Route path="task-verification" element={<TaskVerification />} />
+          <Route path="activity-logs" element={<ActivityLogs />} />
           <Route path="notes" element={<Notes />} />
           <Route path="team" element={<TeamMembers />} />
           <Route path="announcements" element={<Announcements />} />
@@ -60,6 +62,7 @@ const Dashboard = () => {
           <Route path="received-tasks" element={<ReceivedTasks />} />
           <Route path="assigned-tasks" element={<AssignedTasks />} />
           <Route path="subordinate-timesheets" element={<SubordinateTimesheets />} />
+          <Route path="activity-logs" element={<ActivityLogs />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="task-verification" element={<TaskVerification />} />
           <Route path="analytics" element={<Analytics />} />

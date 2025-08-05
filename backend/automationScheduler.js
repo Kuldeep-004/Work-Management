@@ -50,34 +50,32 @@ export const runAutomationCheck = async (isManual = true) => {
     });
     
     // Get quarterly automations for the current day and month (if applicable)
-    // Quarters are: Q1 (Jan), Q2 (Apr), Q3 (Jul), Q4 (Oct)
-    const quarterlyMonths = [0, 3, 6, 9]; // Jan, Apr, Jul, Oct (0-indexed)
-    const quarterlyAutomations = quarterlyMonths.includes(currentMonth) ? await Automation.find({
+    // Check if current month matches any of the selected quarterly months
+    const quarterlyAutomations = await Automation.find({
       triggerType: 'quarterly',
       dayOfMonth: dayOfMonth,
-      monthOfYear: currentMonth + 1, // Convert to 1-indexed for storage
-      // Check if it hasn't been run in the current quarter
+      quarterlyMonths: currentMonth + 1, // Convert to 1-indexed for comparison
+      // Check if it hasn't been run in the current month
       $or: [
         { lastRunMonth: { $exists: false } },
         { lastRunMonth: { $ne: currentMonth } },
         { lastRunYear: { $ne: currentYear } }
       ]
-    }) : [];
+    });
     
     // Get half-yearly automations for the current day and month (if applicable)
-    // Half years are: H1 (Jan), H2 (Jul)
-    const halfYearlyMonths = [0, 6]; // Jan, Jul (0-indexed)
-    const halfYearlyAutomations = halfYearlyMonths.includes(currentMonth) ? await Automation.find({
+    // Check if current month matches any of the selected half-yearly months
+    const halfYearlyAutomations = await Automation.find({
       triggerType: 'halfYearly',
       dayOfMonth: dayOfMonth,
-      monthOfYear: currentMonth + 1, // Convert to 1-indexed for storage
-      // Check if it hasn't been run in the current half year
+      halfYearlyMonths: currentMonth + 1, // Convert to 1-indexed for comparison
+      // Check if it hasn't been run in the current month
       $or: [
         { lastRunMonth: { $exists: false } },
         { lastRunMonth: { $ne: currentMonth } },
         { lastRunYear: { $ne: currentYear } }
       ]
-    }) : [];
+    });
     
     // Get yearly automations for the current day and month (if applicable)
     const yearlyAutomations = await Automation.find({
@@ -170,11 +168,10 @@ export const runAutomationCheck = async (isManual = true) => {
           dueDate,
           targetDate,
           verificationAssignedTo,
-          billed,
-          workDoneBy
+          billed
         } = template || {};
         
-        if (!title || !clientName || !clientGroup || !workType || !assignedTo || !priority || !inwardEntryDate || !workDoneBy) {
+        if (!title || !clientName || !clientGroup || !workType || !assignedTo || !priority || !inwardEntryDate) {
           console.warn(`[AutomationScheduler] Skipping template in automation ${automation._id}: missing required fields.`);
           continue;
         }
@@ -282,8 +279,7 @@ export const runAutomationCheck = async (isManual = true) => {
             billed: billed !== undefined ? billed : true,
             selfVerification: false,
             verificationStatus: 'completed',
-            status: 'yet_to_start', // Make sure we set the correct status
-            workDoneBy
+            status: 'yet_to_start' // Make sure we set the correct status
           });
           
           try {

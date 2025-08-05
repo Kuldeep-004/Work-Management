@@ -62,7 +62,6 @@ const ALL_COLUMNS = [
   { id: 'clientName', label: 'Client Name' },
   { id: 'clientGroup', label: 'Client Group' },
   { id: 'workType', label: 'Work Type' },
-  { id: 'workDoneBy', label: 'Work Done' },
   { id: 'billed', label: 'Internal Works' },
   { id: 'status', label: 'Task Status' },
   { id: 'priority', label: 'Priority' },
@@ -848,8 +847,6 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap"><div className="text-sm text-gray-500">{task.clientGroup}</div></td>;
                     case 'workType':
                       return <td key={col.id} className="px-4 py-4 sm:px-6"><div className="flex overflow-x-auto whitespace-nowrap gap-1 no-scrollbar">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></td>;
-                    case 'workDoneBy':
-                      return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap"><div className="text-sm text-gray-900">{task.workDoneBy || 'NA'}</div></td>;
                     case 'billed':
                       return <td key={col.id} className="px-4 py-4 sm:px-6 whitespace-nowrap text-center text-lg">{task.billed ? 'Yes' : 'No'}</td>;
                     case 'status':

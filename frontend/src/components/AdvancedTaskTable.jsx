@@ -35,7 +35,6 @@ const BASE_COLUMNS = [
   { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
   { id: 'clientGroup', label: 'Client Group', defaultWidth: 150 },
   { id: 'workType', label: 'Work Type', defaultWidth: 150 },
-  { id: 'workDoneBy', label: 'Work Done', defaultWidth: 120 },
   { id: 'billed', label: 'Internal Works', defaultWidth: 80 },
   { id: 'status', label: 'Stages', defaultWidth: 120 },
   { id: 'priority', label: 'Priority', defaultWidth: 120 },
@@ -124,6 +123,12 @@ const AdvancedTaskTable = ({
   tabKey = 'defaultTabKey',
   tabId,
   allColumns, // Accept allColumns prop
+  // Bulk selection props
+  enableBulkSelection = false,
+  selectedTasks = [],
+  onTaskSelect,
+  isAllSelected = false,
+  onSelectAll,
 }) => {
   const { user } = useAuth();
   const [prevColumnOrder, setPrevColumnOrder] = useState([]);
@@ -674,7 +679,6 @@ const AdvancedTaskTable = ({
     : (columnOrder.includes('clientName') && sortBy === 'clientName') ? 'clientName'
     : (columnOrder.includes('clientGroup') && sortBy === 'clientGroup') ? 'clientGroup'
     : (columnOrder.includes('workType') && sortBy === 'workType') ? 'workType'
-    : (columnOrder.includes('workDoneBy') && sortBy === 'workDoneBy') ? 'workDoneBy'
     : (columnOrder.includes('billed') && sortBy === 'billed') ? 'billed'
     : null
   );
@@ -693,13 +697,6 @@ const AdvancedTaskTable = ({
       groupedTasks = {};
       tasks.forEach(task => {
         let key = Array.isArray(task.workType) ? (task.workType[0] || 'Unspecified') : (task.workType || 'Unspecified');
-        if (!groupedTasks[key]) groupedTasks[key] = [];
-        groupedTasks[key].push(task);
-      });
-    } else if (groupField === 'workDoneBy') {
-      groupedTasks = {};
-      tasks.forEach(task => {
-        let key = task.workDoneBy || 'Unassigned';
         if (!groupedTasks[key]) groupedTasks[key] = [];
         groupedTasks[key].push(task);
       });
@@ -878,7 +875,6 @@ const AdvancedTaskTable = ({
   const getGroupKey = (task) => {
     if (!shouldGroup) return null;
     if (groupField === 'workType') return Array.isArray(task.workType) ? (task.workType[0] || 'Unspecified') : (task.workType || 'Unspecified');
-    if (groupField === 'workDoneBy') return task.workDoneBy || 'Unassigned';
     if (groupField === 'billed') return task.billed ? 'Yes' : 'No';
     return task[groupField];
   };
@@ -1136,6 +1132,16 @@ const AdvancedTaskTable = ({
             {!shouldGroup && (
               <thead className="border-b border-gray-200">
                 <tr>
+                  {enableBulkSelection && (
+                    <th className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none whitespace-nowrap border-r border-gray-200" style={{width: '48px', minWidth: '48px'}} title="Select All">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={(e) => onSelectAll && onSelectAll(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                    </th>
+                  )}
                   <th className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none whitespace-nowrap border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>No</th>
                   {getOrderedVisibleColumns().map((colId, idx, arr) => {
                     const col = ALL_COLUMNS.find(c => c.id === colId);
@@ -1227,7 +1233,7 @@ const AdvancedTaskTable = ({
                         setDragOverGroup(null);
                       }}
                     >
-                      <td colSpan={getOrderedVisibleColumns().length + ((viewType === 'assigned' || viewType === 'admin') ? 2 : 1)} 
+                      <td colSpan={getOrderedVisibleColumns().length + ((viewType === 'assigned' || viewType === 'admin') ? 2 : 1) + (enableBulkSelection ? 1 : 0)} 
                           className={`bg-gray-100 text-gray-800 font-semibold px-4 py-2 border-t border-b border-gray-300 ${draggedGroup === group ? 'opacity-50' : ''}`}>
                         <div className="flex items-center">
                           <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1238,6 +1244,11 @@ const AdvancedTaskTable = ({
                       </td>
                     </tr>
                     <tr key={group + '-columns'} className="border-b border-gray-200">
+                      {enableBulkSelection && (
+                        <th className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none whitespace-nowrap border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>
+                          {/* Empty header for group - no select all */}
+                        </th>
+                      )}
                       <th className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none whitespace-nowrap border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>No</th>
                       {getOrderedVisibleColumns().map((colId, idx, arr) => {
                         const col = ALL_COLUMNS.find(c => c.id === colId);
@@ -1293,7 +1304,7 @@ const AdvancedTaskTable = ({
                     {groupTasks.map((task, idx) => (
                       <tr
                         key={task._id}
-                        className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''}`}
+                        className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''}`}
                         draggable
                         onDragStart={e => handleRowDragStart(e, task._id)}
                         onDragOver={e => handleRowDragOver(e, task._id)}
@@ -1301,6 +1312,18 @@ const AdvancedTaskTable = ({
                         onDragEnd={handleRowDragEnd}
                         style={{ opacity: draggedTaskId === task._id ? 0.5 : 1 }}
                       >
+                        {enableBulkSelection && (
+                          <td className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>
+                            <input
+                              type="checkbox"
+                              checked={selectedTasks.includes(task._id)}
+                              onChange={(e) => onTaskSelect && onTaskSelect(task._id, e.target.checked)}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                              onClick={(e) => e.stopPropagation()}
+                              title={selectedTasks.includes(task._id) ? "Deselect task" : "Select task"}
+                            />
+                          </td>
+                        )}
                         <td
                           className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-move"
                           style={{width: '48px', minWidth: '48px', textAlign: 'right'}}
@@ -1363,9 +1386,6 @@ const AdvancedTaskTable = ({
                             
                             case 'workType':
                               return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex gap-1">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></div></td>;
-                            
-                            case 'workDoneBy':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.workDoneBy || 'NA'}</span></div></td>;
                             
                             case 'billed':
                               return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? 'Yes' : 'No'}</span></div></td>;
@@ -2146,7 +2166,7 @@ const AdvancedTaskTable = ({
                 orderedTasks.map((task, idx) => (
                   <tr
                     key={task._id}
-                    className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''}`}
+                    className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''}`}
                     draggable
                     onDragStart={e => handleRowDragStart(e, task._id)}
                     onDragOver={e => handleRowDragOver(e, task._id)}
@@ -2154,6 +2174,18 @@ const AdvancedTaskTable = ({
                     onDragEnd={handleRowDragEnd}
                     style={{ opacity: draggedTaskId === task._id ? 0.5 : 1 }}
                   >
+                    {enableBulkSelection && (
+                      <td className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>
+                        <input
+                          type="checkbox"
+                          checked={selectedTasks.includes(task._id)}
+                          onChange={(e) => onTaskSelect && onTaskSelect(task._id, e.target.checked)}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          onClick={(e) => e.stopPropagation()}
+                          title={selectedTasks.includes(task._id) ? "Deselect task" : "Select task"}
+                        />
+                      </td>
+                    )}
                     <td
                       className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-move"
                       style={{width: '48px', minWidth: '48px', textAlign: 'right'}}
@@ -2216,9 +2248,6 @@ const AdvancedTaskTable = ({
                       
                       case 'workType':
                         return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex gap-1">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></div></td>;
-                      
-                      case 'workDoneBy':
-                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.workDoneBy || 'NA'}</span></div></td>;
                       
                       case 'billed':
                         return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? 'Yes' : 'No'}</span></div></td>;

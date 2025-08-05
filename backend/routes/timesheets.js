@@ -3,6 +3,7 @@ import Timesheet from '../models/Timesheet.js';
 import Task from '../models/Task.js';
 import { protect } from '../middleware/authMiddleware.js';
 import User from '../models/User.js';
+import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
@@ -196,6 +197,23 @@ router.post('/add-entry', protect, async (req, res) => {
     // Populate task details before sending response
     await timesheet.populate('entries.task', 'title description clientName clientGroup workType');
     
+    // Log timesheet entry addition
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'timesheet_entry_added',
+      timesheet._id,
+      `Added timesheet entry${taskId ? ' for task' : ''} "${manualTaskName || (await Task.findById(taskId))?.title || 'Unnamed task'}"`,
+      null,
+      { 
+        taskId, 
+        manualTaskName, 
+        workDescription, 
+        startTime, 
+        endTime 
+      },
+      req
+    );
+    
     res.json(timesheet);
   } catch (error) {
     console.error('Error adding timesheet entry:', error);
@@ -220,6 +238,26 @@ router.delete('/entry/:entryId', protect, async (req, res) => {
     if (timesheet.isCompleted) {
       return res.status(400).json({ message: 'Timesheet already submitted. No more changes allowed.' });
     }
+    
+    // Find the entry to log before deletion
+    const entryToDelete = timesheet.entries.id(entryId);
+    
+    // Log timesheet entry deletion
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'timesheet_entry_deleted',
+      timesheet._id,
+      `Deleted timesheet entry${entryToDelete?.task ? ' for task' : ''} "${entryToDelete?.manualTaskName || 'Task entry'}"`,
+      { 
+        taskId: entryToDelete?.task,
+        manualTaskName: entryToDelete?.manualTaskName,
+        workDescription: entryToDelete?.workDescription,
+        startTime: entryToDelete?.startTime,
+        endTime: entryToDelete?.endTime
+      },
+      null,
+      req
+    );
     
     timesheet.entries.pull(entryId);
     await timesheet.save();

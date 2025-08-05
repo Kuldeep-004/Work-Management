@@ -2,6 +2,7 @@ import express from 'express';
 import Team from '../models/Team.js';
 import User from '../models/User.js';
 import { protect } from '../middleware/authMiddleware.js';
+import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
@@ -28,6 +29,18 @@ router.post('/', protect, isAdmin, async (req, res) => {
       createdBy: req.user.id
     });
     await team.save();
+
+    // Log team creation activity
+    await ActivityLogger.logTeamActivity(
+      req.user.id,
+      'team_created',
+      team._id,
+      `Created new team "${name}"`,
+      null,
+      { name, description },
+      req
+    );
+
     res.status(201).json(team);
   } catch (error) {
     res.status(400).json({ message: error.message });

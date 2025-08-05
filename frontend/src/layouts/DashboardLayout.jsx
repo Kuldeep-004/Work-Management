@@ -11,7 +11,8 @@ import {
   MegaphoneIcon,
   BuildingOfficeIcon,
   ClockIcon,
-  ShieldCheckIcon, // <-- Add this import
+  ShieldCheckIcon,
+  ClipboardDocumentCheckIcon, // Activity logs icon
 } from '@heroicons/react/24/outline';
 import TopBar from '../components/TopBar';
 import { useState } from 'react';
@@ -37,6 +38,7 @@ const DashboardLayout = ({ children }) => {
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'subordinate-timesheets', label: 'Subordinate Timesheets', icon: ClipboardDocumentListIcon, path: '/dashboard/subordinate-timesheets' },
           { id: 'task-verification', label: 'Tasks Pending For Approval', icon: ShieldCheckIcon, path: '/dashboard/task-verification' },
+          { id: 'activity-logs', label: 'Activity Logs', icon: ClipboardDocumentCheckIcon, path: '/dashboard/activity-logs' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'team', label: 'Teams', icon: UserGroupIcon, path: '/dashboard/team' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
@@ -68,6 +70,7 @@ const DashboardLayout = ({ children }) => {
           // { id: 'assigned-tasks', label: 'Task Assigned By Me', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' }, // HIDDEN TEMPORARILY
           { id: 'timesheets', label: 'Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'subordinate-timesheets', label: 'Subordinate Timesheets', icon: ClipboardDocumentListIcon, path: '/dashboard/subordinate-timesheets' },
+          { id: 'activity-logs', label: 'Activity Logs', icon: ClipboardDocumentCheckIcon, path: '/dashboard/activity-logs' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'clients', label: 'Clients', icon: BuildingOfficeIcon, path: '/dashboard/clients' },

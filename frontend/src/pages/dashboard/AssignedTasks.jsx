@@ -24,7 +24,6 @@ const ALL_COLUMNS = [
   { id: 'clientName', label: 'Client Name' },
   { id: 'clientGroup', label: 'Client Group' },
   { id: 'workType', label: 'Work Type' },
-  { id: 'workDoneBy', label: 'Work Done' },
   { id: 'billed', label: 'Internal Works' },
   { id: 'status', label: 'Task Status' },
   { id: 'priority', label: 'Priority' },
@@ -590,7 +589,6 @@ const AssignedTasks = () => {
             <option value="clientName">Client Name</option>
             <option value="clientGroup">Client Group</option>
             <option value="workType">Work Type</option>
-            <option value="workDoneBy">Assigned To</option>
             <option value="billed">Billed</option>
           </select>
         </div>

@@ -5,7 +5,9 @@ const automationSchema = new mongoose.Schema({
   description: { type: String },
   triggerType: { type: String, enum: ['dayOfMonth', 'dateAndTime', 'quarterly', 'halfYearly', 'yearly'], required: true, default: 'dayOfMonth' },
   dayOfMonth: { type: Number }, // For dayOfMonth, yearly, halfYearly, quarterly
-  monthOfYear: { type: Number }, // For yearly, halfYearly, quarterly (1-12 for yearly, 1&7 for halfYearly, 1&4&7&10 for quarterly)
+  monthOfYear: { type: Number }, // For yearly (1-12)
+  quarterlyMonths: [{ type: Number }], // For quarterly: array of 4 months (one for each quarter)
+  halfYearlyMonths: [{ type: Number }], // For halfYearly: array of 2 months (one for each half)
   specificDate: { type: Date },
   specificTime: { type: String }, // Time in 24-hour format (HH:MM)
   tasks: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Task' }],
@@ -24,7 +26,6 @@ const automationSchema = new mongoose.Schema({
     targetDate: String,
     verificationAssignedTo: mongoose.Schema.Types.ObjectId,
     billed: Boolean,
-    workDoneBy: String,
     files: [{
       filename: String,
       originalName: String,

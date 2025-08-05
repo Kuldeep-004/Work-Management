@@ -3,6 +3,7 @@ import Priority from '../models/Priority.js';
 import Task from '../models/Task.js';
 import { protect } from '../middleware/authMiddleware.js';
 import admin from '../middleware/admin.js';
+import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
@@ -64,6 +65,17 @@ router.post('/', protect, async (req, res) => {
     const savedPriority = await priority.save();
     await savedPriority.populate('createdBy', 'firstName lastName');
     
+    // Log priority creation
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'priority_created',
+      savedPriority._id,
+      `Created custom priority "${name.trim()}"`,
+      null,
+      { name: name.trim(), order: order || 100 },
+      req
+    );
+    
     res.status(201).json(savedPriority);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -104,8 +116,25 @@ router.put('/:id', protect, async (req, res) => {
     if (name) priority.name = name.trim();
     if (order !== undefined) priority.order = order;
 
+    // Store old values for logging
+    const oldValues = {
+      name: priority.name,
+      order: priority.order
+    };
+
     const updatedPriority = await priority.save();
     await updatedPriority.populate('createdBy', 'firstName lastName');
+    
+    // Log priority update
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'priority_updated',
+      updatedPriority._id,
+      `Updated custom priority "${priority.name}"`,
+      oldValues,
+      { name: name?.trim(), order },
+      req
+    );
     
     res.json(updatedPriority);
   } catch (error) {
@@ -139,6 +168,17 @@ router.delete('/:id', protect, async (req, res) => {
         tasksCount: tasksWithPriority
       });
     }
+
+    // Log priority deletion before deleting
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'priority_deleted',
+      priority._id,
+      `Deleted custom priority "${priority.name}"`,
+      { name: priority.name, order: priority.order },
+      null,
+      req
+    );
 
     await Priority.findByIdAndDelete(req.params.id);
     res.json({ message: 'Priority deleted successfully' });

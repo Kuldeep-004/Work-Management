@@ -9,6 +9,7 @@ import { uploadImage, deleteFile } from '../utils/cloudinary.js';
 import fs from 'fs';
 import { promisify } from 'util';
 import UserTabState from '../models/UserTabState.js';
+import ActivityLogger from '../utils/activityLogger.js';
 
 const unlinkAsync = promisify(fs.unlink);
 const router = express.Router();
@@ -245,6 +246,37 @@ router.put('/:userId/approval', protect, async (req, res) => {
 
     user.status = status;
     await user.save();
+
+    // Log user approval/rejection activity
+    if (status === 'approved') {
+      await ActivityLogger.logUserActivity(
+        req.user.id,
+        'user_approved',
+        user._id,
+        `Approved user ${user.firstName} ${user.lastName} (${user.email}) with role ${role}`,
+        { status: 'pending' },
+        { status: 'approved', role, team },
+        req,
+        {
+          userEmail: user.email,
+          assignedRole: role,
+          assignedTeam: team
+        }
+      );
+    } else if (status === 'rejected') {
+      await ActivityLogger.logUserActivity(
+        req.user.id,
+        'user_rejected',
+        user._id,
+        `Rejected user ${user.firstName} ${user.lastName} (${user.email})`,
+        { status: 'pending' },
+        { status: 'rejected' },
+        req,
+        {
+          userEmail: user.email
+        }
+      );
+    }
 
     res.status(200).json({ message: `User ${status} successfully` });
   } catch (error) {

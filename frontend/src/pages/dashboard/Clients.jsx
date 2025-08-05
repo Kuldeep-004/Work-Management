@@ -14,6 +14,8 @@ const Clients = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [isWorkTypeModalOpen, setIsWorkTypeModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editClientId, setEditClientId] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     group: '',
@@ -26,6 +28,13 @@ const Clients = () => {
   });
   const [workTypeFormData, setWorkTypeFormData] = useState({
     name: ''
+  });
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    group: '',
+    status: 'Individual',
+    workOffered: [],
+    priority: 'A',
   });
 
   const fetchClients = async () => {
@@ -156,6 +165,32 @@ const Clients = () => {
         name: ''
       });
       toast.success('Work type created successfully');
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/clients/${editClientId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify(editFormData),
+      });
+      if (response.status === 404) {
+        toast.error('Client not found. It may have been deleted.');
+        setIsEditModalOpen(false);
+        await fetchClients();
+        return;
+      }
+      if (!response.ok) throw new Error('Failed to update client');
+      await fetchClients();
+      setIsEditModalOpen(false);
+      toast.success('Client updated successfully');
     } catch (error) {
       toast.error(error.message);
     }
@@ -295,9 +330,9 @@ const Clients = () => {
                             <td className="w-1/3 px-4 py-2">
                               <div className="w-48 overflow-x-auto whitespace-nowrap scrollbar-hide">
                                 <div className="flex flex-wrap gap-1">
-                                  {client.workOffered.map((work) => (
+                                  {client.workOffered.map((work, idx) => (
                                     <span
-                                      key={work._id}
+                                      key={work._id ? `${work._id}-${idx}` : idx}
                                       className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
                                     >
                                       {work.name}
@@ -307,13 +342,34 @@ const Clients = () => {
                               </div>
                             </td>
                             <td className="w-20 px-4 py-2 whitespace-nowrap">
-                              <button
-                                onClick={() => handleDeleteClient(client._id)}
-                                className="text-red-600 hover:text-red-800 transition-colors"
-                                title="Delete client"
-                              >
-                                <TrashIcon className="h-5 w-5" />
-                              </button>
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => {
+                                    setEditClientId(client._id);
+                                    setEditFormData({
+                                      name: client.name,
+                                      group: client.group._id,
+                                      status: client.status,
+                                      workOffered: client.workOffered.map(w => w._id),
+                                      priority: client.priority
+                                    });
+                                    setIsEditModalOpen(true);
+                                  }}
+                                  className="text-blue-600 hover:text-blue-800 transition-colors"
+                                  title="Edit client"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487a2.1 2.1 0 1 1 2.97 2.97L7.5 19.789l-4 1 1-4 12.362-12.302z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteClient(client._id)}
+                                  className="text-red-600 hover:text-red-800 transition-colors"
+                                  title="Delete client"
+                                >
+                                  <TrashIcon className="h-5 w-5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -428,8 +484,8 @@ const Clients = () => {
                     <option value="">Select work type</option>
                     {workTypes
                       .filter(workType => !formData.workOffered.includes(workType._id))
-                      .map((workType) => (
-                        <option key={workType._id} value={workType._id}>
+                      .map((workType, idx) => (
+                        <option key={workType._id ? `${workType._id}-${idx}` : idx} value={workType._id}>
                           {workType.name}
                         </option>
                       ))}
@@ -564,8 +620,126 @@ const Clients = () => {
           </div>
         </div>
       )}
+
+      {/* Edit Client Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white rounded-lg p-8 w-full max-w-md">
+            <h2 className="text-2xl font-bold mb-6">Edit Client</h2>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+                <input
+                  type="text"
+                  value={editFormData.name}
+                  onChange={e => setEditFormData({ ...editFormData, name: e.target.value })}
+                  className="w-full border rounded-md px-3 py-2"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Client Group</label>
+                <div className="flex gap-2">
+                  <select
+                    value={editFormData.group}
+                    onChange={e => setEditFormData({ ...editFormData, group: e.target.value })}
+                    className="flex-1 border rounded-md px-3 py-2"
+                    required
+                  >
+                    <option value="">Select a group</option>
+                    {clientGroups.map(group => (
+                      <option key={group._id} value={group._id}>{group.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={editFormData.status}
+                  onChange={e => setEditFormData({ ...editFormData, status: e.target.value })}
+                  className="w-full border rounded-md px-3 py-2"
+                  required
+                >
+                  <option value="Individual">Individual</option>
+                  <option value="Firm">Firm</option>
+                  <option value="Company">Company</option>
+                  <option value="Others">Others</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                <select
+                  value={editFormData.priority}
+                  onChange={e => setEditFormData({ ...editFormData, priority: e.target.value })}
+                  className="w-full border rounded-md px-3 py-2"
+                  required
+                >
+                  <option value="A">A (Most Priority)</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                  <option value="D">D (Least Priority)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Work Offered</label>
+                <div className="flex gap-2">
+                  <select
+                    value=""
+                    onChange={e => {
+                      if (e.target.value) {
+                        setEditFormData({
+                          ...editFormData,
+                          workOffered: [...editFormData.workOffered, e.target.value]
+                        });
+                      }
+                    }}
+                    className="flex-1 border rounded-md px-3 py-2"
+                  >
+                    <option value="">Select work type</option>
+                    {workTypes
+                      .filter(workType => !editFormData.workOffered.includes(workType._id))
+                      .map((workType, idx) => (
+                        <option key={workType._id ? `${workType._id}-${idx}` : idx} value={workType._id}>{workType.name}</option>
+                      ))}
+                  </select>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {editFormData.workOffered.map((workId, idx) => {
+                    const workType = workTypes.find(wt => wt._id === workId);
+                    return workType ? (
+                      <span key={workId ? `${workId}-${idx}` : idx} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {workType.name}
+                        <button
+                          type="button"
+                          onClick={() => setEditFormData({
+                            ...editFormData,
+                            workOffered: editFormData.workOffered.filter(id => id !== workId)
+                          })}
+                          className="ml-1 text-blue-600 hover:text-blue-800"
+                        >×</button>
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >Cancel</button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >Update Client</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default Clients; 
+export default Clients;

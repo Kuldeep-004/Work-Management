@@ -4,6 +4,7 @@ import defaultProfile from '../assets/avatar.jpg';
 import { UserCircleIcon, KeyIcon, ArrowRightOnRectangleIcon, Bars3Icon } from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from './NotificationBell';
+import ChatIcon from './ChatIcon';
 
 const TopBar = (props) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -63,8 +64,9 @@ const TopBar = (props) => {
         </div>
       </div>
       
-      {/* Notification Bell and User Profile */}
+      {/* Chat, Notification Bell and User Profile */}
       <div className="flex items-center space-x-4">
+        <ChatIcon />
         <NotificationBell />
         
         {/* User Profile with Dropdown */}

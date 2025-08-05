@@ -5,6 +5,9 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import jwt from 'jsonwebtoken';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import authRoutes from './routes/auth.js';
 import taskRoutes from './routes/tasks.js';
 import userRoutes from './routes/users.js';
@@ -15,7 +18,12 @@ import timesheetRoutes from './routes/timesheets.js';
 import notificationRoutes from './routes/notifications.js';
 import priorityRoutes from './routes/priorities.js';
 import automationsRouter from './routes/automations.js';
+import activityLogRoutes from './routes/activityLogs.js';
+import chatRoutes from './routes/chats.js';
+import messageRoutes from './routes/messages.js';
+import { activityLoggerMiddleware } from './middleware/activityLoggerMiddleware.js';
 import Team from './models/Team.js';
+import User from './models/User.js';
 import './models/UserTabState.js';
 // Import automation scheduler to ensure it runs when the server starts
 import './automationScheduler.js';
@@ -40,8 +48,17 @@ if (!process.env.JWT_SECRET) {
 }
 
 const app = express();
+const server = createServer(app);
 
 const allowedOrigins = ['https://haacaswork.vercel.app','https://works.haacas.com', 'http://localhost:5173'];
+
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
 
 app.use(cors({
   origin: allowedOrigins,
@@ -49,6 +66,9 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// Activity logging middleware (place before routes)
+app.use(activityLoggerMiddleware({ includeBody: false }));
 
 // Serve static files from uploads directory with proper headers
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
@@ -70,6 +90,124 @@ app.use('/api/timesheets', timesheetRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/priorities', priorityRoutes);
 app.use('/api/automations', automationsRouter);
+app.use('/api/activity-logs', activityLogRoutes);
+app.use('/api/chats', chatRoutes);
+app.use('/api/messages', messageRoutes);
+
+// Socket.IO for real-time chat
+const connectedUsers = new Map();
+
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  // Handle user authentication
+  socket.on('authenticate', async (token) => {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id);
+      
+      if (user) {
+        socket.userId = user._id.toString();
+        connectedUsers.set(user._id.toString(), socket.id);
+        
+        // Update user online status
+        await User.findByIdAndUpdate(user._id, { 
+          isOnline: true,
+          lastSeen: new Date()
+        });
+        
+        socket.join(user._id.toString());
+        console.log(`User ${user.firstName} ${user.lastName} authenticated`);
+        
+        // Notify contacts about online status
+        socket.broadcast.emit('user_online', {
+          userId: user._id,
+          isOnline: true
+        });
+      }
+    } catch (error) {
+      console.error('Authentication error:', error);
+      socket.emit('auth_error', 'Invalid token');
+    }
+  });
+
+  // Handle joining chat rooms
+  socket.on('join_chat', (chatId) => {
+    socket.join(chatId);
+    console.log(`User ${socket.userId} joined chat ${chatId}`);
+  });
+
+  // Handle leaving chat rooms
+  socket.on('leave_chat', (chatId) => {
+    socket.leave(chatId);
+    console.log(`User ${socket.userId} left chat ${chatId}`);
+  });
+
+  // Handle sending messages
+  socket.on('send_message', (data) => {
+    socket.to(data.chatId).emit('new_message', data.message);
+  });
+
+  // Handle typing indicators
+  socket.on('typing_start', (data) => {
+    socket.to(data.chatId).emit('user_typing', {
+      userId: socket.userId,
+      chatId: data.chatId,
+      isTyping: true
+    });
+  });
+
+  socket.on('typing_stop', (data) => {
+    socket.to(data.chatId).emit('user_typing', {
+      userId: socket.userId,
+      chatId: data.chatId,
+      isTyping: false
+    });
+  });
+
+  // Handle message read status
+  socket.on('message_read', (data) => {
+    socket.to(data.chatId).emit('message_read_update', {
+      messageId: data.messageId,
+      userId: socket.userId,
+      readAt: new Date()
+    });
+  });
+
+  // Handle messages read (when user reads all messages in a chat)
+  socket.on('messages_read', (data) => {
+    // Emit to all users in the chat that messages have been read
+    socket.to(data.chatId).emit('messages_read', {
+      chatId: data.chatId,
+      userId: data.userId,
+      readAt: new Date()
+    });
+  });
+
+  // Handle disconnection
+  socket.on('disconnect', async () => {
+    console.log('User disconnected:', socket.id);
+    
+    if (socket.userId) {
+      connectedUsers.delete(socket.userId);
+      
+      // Update user offline status
+      await User.findByIdAndUpdate(socket.userId, { 
+        isOnline: false,
+        lastSeen: new Date()
+      });
+      
+      // Notify contacts about offline status
+      socket.broadcast.emit('user_online', {
+        userId: socket.userId,
+        isOnline: false
+      });
+    }
+  });
+});
+
+// Make io available to routes
+app.set('io', io);
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/haacas13')
@@ -79,6 +217,6 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/haacas13'
   .catch((err) => console.error('MongoDB connection error:', err));
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 }); 

@@ -25,11 +25,6 @@ const taskSchema = new mongoose.Schema({
     required: true,
     trim: true
   }],
-  workDoneBy: {
-    type: String,
-    enum: ['First floor', 'Second floor', 'Both'],
-    required: true
-  },
   billed: {
     type: Boolean,
     default: true

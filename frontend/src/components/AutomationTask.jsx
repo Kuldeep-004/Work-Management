@@ -46,8 +46,7 @@ const AutomationTask = ({
     inwardEntryTime: '',
     dueDate: '',
     targetDate: '',
-    billed: false, // default to No (Internal Works)
-    workDoneBy: '' // NEW FIELD
+    billed: false // default to No (Internal Works)
   });
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -320,8 +319,7 @@ const AutomationTask = ({
         inwardEntryTime: convertedTime,
         dueDate: initialData.dueDate ? initialData.dueDate.split('T')[0] : '',
         targetDate: initialData.targetDate ? initialData.targetDate.split('T')[0] : '',
-        billed: typeof initialData.billed === 'boolean' ? initialData.billed : true,
-        workDoneBy: initialData.workDoneBy || '' // NEW FIELD
+        billed: typeof initialData.billed === 'boolean' ? initialData.billed : true
       });
       setClientSearchTerm(initialData.clientName || '');
       const assignedToRaw = Array.isArray(initialData.assignedTo)
@@ -350,8 +348,7 @@ const AutomationTask = ({
         inwardEntryTime: time,
         dueDate: '',
         targetDate: '',
-        billed: false,
-        workDoneBy: '' // NEW FIELD
+        billed: false
       });
       setClientSearchTerm('');
       setSelectedUsers([]);
@@ -426,22 +423,31 @@ const AutomationTask = ({
       toast.error('Please select whether the task is billed or not');
       return;
     }
-    if (!formData.workDoneBy) {
-      toast.error('Please select Work Done by');
-      return;
-    }
 
     try {
       setUploading(true);
       console.log('Creating task with files:', selectedFiles); // Debug log
 
       // Convert 12-hour time to 24-hour format for backend
+      // Make sure assignedTo is properly formatted as an array of non-empty IDs
+      let assignedToArray;
+      if (Array.isArray(formData.assignedTo)) {
+        assignedToArray = formData.assignedTo.filter(Boolean);
+      } else {
+        assignedToArray = formData.assignedTo ? [formData.assignedTo] : [];
+      }
+      
+      if (assignedToArray.length === 0) {
+        toast.error('Please select at least one user to assign the task to');
+        setUploading(false);
+        return;
+      }
+      
       const taskData = {
         ...formData,
-        assignedTo: Array.isArray(formData.assignedTo) ? formData.assignedTo.filter(Boolean) : [formData.assignedTo].filter(Boolean),
+        assignedTo: assignedToArray,
         inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
-        billed: formData.billed,
-        workDoneBy: formData.workDoneBy // NEW FIELD
+        billed: formData.billed
       };
 
       let response, updatedTask;
@@ -469,32 +475,101 @@ const AutomationTask = ({
           setUploading(false);
           return;
         }
-        const response = await fetch(`${API_BASE_URL}/api/automations/${automationId}/tasks`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${loggedInUser.token}`,
-          },
-          body: JSON.stringify(taskData),
-        });
+        
+        try {
+          // First save the automation template
+          const response = await fetch(`${API_BASE_URL}/api/automations/${automationId}/tasks`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${loggedInUser.token}`,
+            },
+            body: JSON.stringify(taskData),
+          });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to create task');
-        }
-
-        const result = await response.json();
-        console.log('Automation template save response:', result); // Debug log
-        toast.success(result.message || 'Automation task template saved successfully');
-        // Pass the newly created template or the full array of templates to the parent component
-        if (onSubmit) {
-          if (result.taskTemplate) {
-            onSubmit(result.taskTemplate); // Single template from old API
-          } else if (result.allTemplates && Array.isArray(result.allTemplates)) {
-            onSubmit(result.allTemplates); // All templates from updated API
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to create task template');
           }
+
+          const result = await response.json();
+          console.log('Automation template save response:', result); // Debug log
+          toast.success(result.message || 'Automation task template saved successfully');
+          
+          // If files are selected, create an actual task to attach files to
+          if (selectedFiles.length > 0) {
+            // Make sure assignedTo is non-empty and properly formatted
+            if (!taskData.assignedTo || !taskData.assignedTo.length) {
+              throw new Error('assignedTo must be a non-empty array of user IDs');
+            }
+            
+            // Create a real task for file upload
+            const taskRequestData = {
+              ...taskData,
+              // Double check that assignedTo is properly formatted as an array of IDs
+              assignedTo: Array.isArray(taskData.assignedTo) ? taskData.assignedTo : [taskData.assignedTo]
+            };
+            
+            console.log("Creating task with data:", taskRequestData);
+            
+            const taskResponse = await fetch(`${API_BASE_URL}/api/tasks`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${loggedInUser.token}`,
+              },
+              body: JSON.stringify(taskRequestData),
+            });
+            
+            if (!taskResponse.ok) {
+              const errorText = await taskResponse.text();
+              console.error('Error creating task for file upload:', errorText);
+              throw new Error(`Failed to create task for file upload: ${errorText}`);
+            }
+            
+            let taskResult;
+            try {
+              taskResult = await taskResponse.json();
+              console.log("Task creation response:", taskResult);
+            } catch (err) {
+              console.error("Error parsing task creation response:", err);
+              throw new Error("Failed to parse task creation response");
+            }
+            
+            // Handle case where API returns an array instead of a single object
+            let taskObj;
+            if (Array.isArray(taskResult) && taskResult.length > 0) {
+              taskObj = taskResult[0];
+              console.log("Using first task from array:", taskObj);
+            } else {
+              taskObj = taskResult;
+            }
+            
+            if (taskObj && taskObj._id) {
+              console.log("Got valid task ID:", taskObj._id);
+              setCreatedTaskId(taskObj._id);
+              await uploadFiles(taskObj._id);
+              toast.success('Files uploaded successfully');
+            } else {
+              console.error("Invalid task result:", taskResult);
+              throw new Error('Invalid task ID received from server');
+            }
+          }
+          
+          // Pass the newly created template or the full array of templates to the parent component
+          if (onSubmit) {
+            if (result.taskTemplate) {
+              onSubmit(result.taskTemplate); // Single template from old API
+            } else if (result.allTemplates && Array.isArray(result.allTemplates)) {
+              onSubmit(result.allTemplates); // All templates from updated API
+            }
+          }
+          onClose();
+        } catch (error) {
+          console.error('Error in task creation process:', error);
+          toast.error(`Task template saved but ${error.message}`);
+          throw error;
         }
-        onClose();
       }
     } catch (error) {
       console.error('Error creating task:', error);
@@ -507,12 +582,19 @@ const AutomationTask = ({
 
   const uploadFiles = async (taskId) => {
     if (!taskId) {
+      console.error('Missing task ID for file upload');
       throw new Error('Invalid task ID');
     }
 
     if (!selectedFiles.length) {
       console.log('No files to upload'); // Debug log
       return;
+    }
+    
+    // Validate taskId format
+    if (typeof taskId !== 'string' || !taskId.match(/^[0-9a-fA-F]{24}$/)) {
+      console.error('Invalid task ID format:', taskId);
+      throw new Error('Invalid task ID format');
     }
 
     console.log('Uploading files for task:', taskId, 'Files:', selectedFiles); // Debug log
@@ -1097,27 +1179,6 @@ const AutomationTask = ({
                       readOnly
                       placeholder="Team Head will appear here"
                     />
-                  </div>
-                </div>
-                {/* Work Done by always on its own row, not affected by chips */}
-                <div
-                  className={`md:col-span-2 ${selectedUsers.length > 0 ? 'mt-10' : 'mt-0'}`}
-                >
-                  <div className="w-48 min-w-[160px]">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Work Done by <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.workDoneBy}
-                      onChange={e => setFormData({ ...formData, workDoneBy: e.target.value })}
-                      className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    >
-                      <option value="" disabled>Select option</option>
-                      <option value="First floor">First floor</option>
-                      <option value="Second floor">Second floor</option>
-                      <option value="Both">Both</option>
-                    </select>
                   </div>
                 </div>
                 {/* Status in one row, Work Type under Status */}

@@ -46,8 +46,7 @@ const AutomationPopup = ({
     inwardEntryTime: '',
     dueDate: '',
     targetDate: '',
-    billed: false, // default to No (Internal Works)
-    workDoneBy: '' // NEW FIELD
+    billed: false // default to No (Internal Works)
   });
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -320,8 +319,7 @@ const AutomationPopup = ({
         inwardEntryTime: convertedTime,
         dueDate: initialData.dueDate ? initialData.dueDate.split('T')[0] : '',
         targetDate: initialData.targetDate ? initialData.targetDate.split('T')[0] : '',
-        billed: typeof initialData.billed === 'boolean' ? initialData.billed : true,
-        workDoneBy: initialData.workDoneBy || '' // NEW FIELD
+        billed: typeof initialData.billed === 'boolean' ? initialData.billed : true
       });
       setClientSearchTerm(initialData.clientName || '');
       const assignedToRaw = Array.isArray(initialData.assignedTo)
@@ -350,8 +348,7 @@ const AutomationPopup = ({
         inwardEntryTime: time,
         dueDate: '',
         targetDate: '',
-        billed: false,
-        workDoneBy: '' // NEW FIELD
+        billed: false
       });
       setClientSearchTerm('');
       setSelectedUsers([]);
@@ -426,10 +423,6 @@ const AutomationPopup = ({
       toast.error('Please select whether the task is billed or not');
       return;
     }
-    if (!formData.workDoneBy) {
-      toast.error('Please select Work Done by');
-      return;
-    }
 
     try {
       setUploading(true);
@@ -440,8 +433,7 @@ const AutomationPopup = ({
         ...formData,
         assignedTo: Array.isArray(formData.assignedTo) ? formData.assignedTo.filter(Boolean) : [formData.assignedTo].filter(Boolean),
         inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
-        billed: formData.billed,
-        workDoneBy: formData.workDoneBy // NEW FIELD
+        billed: formData.billed
       };
 
       let response, updatedTask;
@@ -1110,27 +1102,6 @@ const AutomationPopup = ({
                       readOnly
                       placeholder="Team Head will appear here"
                     />
-                  </div>
-                </div>
-                {/* Work Done by always on its own row, not affected by chips */}
-                <div
-                  className={`md:col-span-2 ${selectedUsers.length > 0 ? 'mt-10' : 'mt-0'}`}
-                >
-                  <div className="w-48 min-w-[160px]">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Work Done by <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.workDoneBy}
-                      onChange={e => setFormData({ ...formData, workDoneBy: e.target.value })}
-                      className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    >
-                      <option value="" disabled>Select option</option>
-                      <option value="First floor">First floor</option>
-                      <option value="Second floor">Second floor</option>
-                      <option value="Both">Both</option>
-                    </select>
                   </div>
                 </div>
                 {/* Status in one row, Work Type under Status */}

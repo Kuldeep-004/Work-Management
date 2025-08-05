@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { generateOTP, sendOTPEmail } from '../utils/emailUtils.js';
 import Team from '../models/Team.js';
+import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
@@ -166,6 +167,19 @@ router.post('/login', async (req, res) => {
       photo: user.photo,
       token
     });
+
+    // Log login activity
+    await ActivityLogger.logAuthActivity(
+      user._id,
+      'user_login',
+      `${user.firstName} ${user.lastName} logged in`,
+      req,
+      {
+        userRole: user.role,
+        loginTime: new Date()
+      }
+    );
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

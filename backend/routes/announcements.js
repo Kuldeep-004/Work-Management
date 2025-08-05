@@ -2,6 +2,7 @@ import express from 'express';
 import Announcement from '../models/Announcement.js';
 import { protect } from '../middleware/authMiddleware.js';
 import admin from '../middleware/admin.js';
+import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
@@ -14,6 +15,21 @@ router.post('/', [protect, admin], async (req, res) => {
             expiresAt: req.body.expiresAt
         });
         await announcement.save();
+        
+        // Log announcement creation
+        await ActivityLogger.logSystemActivity(
+            req.user._id,
+            'announcement_created',
+            announcement._id,
+            `Created announcement: "${req.body.content.substring(0, 50)}${req.body.content.length > 50 ? '...' : ''}"`,
+            null,
+            { 
+                content: req.body.content, 
+                expiresAt: req.body.expiresAt 
+            },
+            req
+        );
+        
         res.status(201).json(announcement);
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -39,6 +55,21 @@ router.delete('/:id', [protect, admin], async (req, res) => {
         if (!announcement) {
             return res.status(404).json({ message: 'Announcement not found' });
         }
+        
+        // Log announcement deletion before deleting
+        await ActivityLogger.logSystemActivity(
+            req.user._id,
+            'announcement_deleted',
+            announcement._id,
+            `Deleted announcement: "${announcement.content.substring(0, 50)}${announcement.content.length > 50 ? '...' : ''}"`,
+            { 
+                content: announcement.content, 
+                expiresAt: announcement.expiresAt 
+            },
+            null,
+            req
+        );
+        
         await announcement.deleteOne();
         res.json({ message: 'Announcement deleted' });
     } catch (error) {

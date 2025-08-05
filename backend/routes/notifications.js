@@ -1,6 +1,7 @@
 import express from 'express';
 import Notification from '../models/Notification.js';
 import { protect } from '../middleware/authMiddleware.js';
+import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
@@ -56,6 +57,17 @@ router.patch('/:id/read', protect, async (req, res) => {
       return res.status(404).json({ message: 'Notification not found' });
     }
 
+    // Log notification read
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'notification_read',
+      notification._id,
+      `Marked notification as read: "${notification.message}"`,
+      { isRead: false },
+      { isRead: true },
+      req
+    );
+
     res.json(notification);
   } catch (error) {
     console.error('Error marking notification as read:', error);
@@ -66,13 +78,24 @@ router.patch('/:id/read', protect, async (req, res) => {
 // Mark all notifications as read
 router.patch('/mark-all-read', protect, async (req, res) => {
   try {
-    await Notification.updateMany(
+    const result = await Notification.updateMany(
       {
         recipient: req.user._id,
         isRead: false,
         isDeleted: false
       },
       { isRead: true }
+    );
+
+    // Log marking all notifications as read
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'notifications_mark_all_read',
+      null,
+      `Marked ${result.modifiedCount} notifications as read`,
+      null,
+      { modifiedCount: result.modifiedCount },
+      req
     );
 
     res.json({ message: 'All notifications marked as read' });
@@ -85,16 +108,33 @@ router.patch('/mark-all-read', protect, async (req, res) => {
 // Delete notification (permanent delete)
 router.delete('/:id', protect, async (req, res) => {
   try {
-    const notification = await Notification.findOneAndDelete(
-      {
-        _id: req.params.id,
-        recipient: req.user._id
-      }
-    );
+    const notification = await Notification.findOne({
+      _id: req.params.id,
+      recipient: req.user._id
+    });
 
     if (!notification) {
       return res.status(404).json({ message: 'Notification not found' });
     }
+
+    // Log notification deletion before deleting
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'notification_deleted',
+      notification._id,
+      `Deleted notification: "${notification.message}"`,
+      { 
+        message: notification.message,
+        isRead: notification.isRead 
+      },
+      null,
+      req
+    );
+
+    await Notification.findOneAndDelete({
+      _id: req.params.id,
+      recipient: req.user._id
+    });
 
     res.json({ message: 'Notification deleted successfully' });
   } catch (error) {

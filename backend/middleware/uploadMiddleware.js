@@ -2,6 +2,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { uploadFile, uploadImage } from '../utils/cloudinary.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -76,6 +77,53 @@ const taskFileFilter = (req, file, cb) => {
   }
 };
 
+// File filter for chat files (including audio)
+const chatFileFilter = (req, file, cb) => {
+  const allowedTypes = [
+    // Images
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    
+    // Audio
+    'audio/mpeg',
+    'audio/mp3',
+    'audio/wav',
+    'audio/ogg',
+    'audio/m4a',
+    'audio/webm',
+    
+    // Video
+    'video/mp4',
+    'video/mpeg',
+    'video/quicktime',
+    'video/webm',
+    
+    // Documents
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain',
+    
+    // Other common files
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/json',
+    'text/csv'
+  ];
+
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(null, true); // Allow all file types for chat
+  }
+};
+
 // Create multer instances for different purposes
 const uploadPhoto = multer({
   storage: storage,
@@ -84,6 +132,22 @@ const uploadPhoto = multer({
     fileSize: 5 * 1024 * 1024 // 5MB limit for photos
   }
 }).single('photo');
+
+const uploadChatFile = multer({
+  storage: storage,
+  fileFilter: chatFileFilter,
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB limit for chat files
+  }
+}).single('file');
+
+const uploadChatAvatar = multer({
+  storage: storage,
+  fileFilter: photoFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit for avatars
+  }
+}).single('avatar');
 
 const uploadTaskFiles = multer({
   storage: storage,
@@ -110,6 +174,99 @@ export const uploadMiddleware = (req, res, next) => {
         message: err.message || 'Error uploading file'
       });
     }
+    next();
+  });
+};
+
+// Chat file upload middleware  
+export const uploadChatFileMiddleware = (req, res, next) => {
+  uploadChatFile(req, res, async function (err) {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          message: 'File is too large. Maximum size is 50MB'
+        });
+      }
+      return res.status(400).json({
+        message: `Upload error: ${err.message}`
+      });
+    } else if (err) {
+      return res.status(400).json({
+        message: err.message || 'Error uploading file'
+      });
+    }
+
+    // Upload to pCloud if file exists
+    if (req.file) {
+      try {
+        const uploadResult = await uploadFile(req.file.path, 'files');
+        
+        // Add cloud storage info to req.file
+        req.file.public_id = uploadResult.public_id;
+        req.file.secure_url = uploadResult.url;
+        req.file.original_filename = req.file.originalname;
+        req.file.bytes = req.file.size;
+        req.file.mimetype = req.file.mimetype;
+        
+        // Clean up local file
+        fs.unlinkSync(req.file.path);
+        
+      } catch (uploadError) {
+        // Clean up local file on error
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+        return res.status(500).json({
+          message: 'Error uploading file to cloud storage'
+        });
+      }
+    }
+    
+    next();
+  });
+};
+
+// Chat avatar upload middleware
+export const uploadChatAvatarMiddleware = (req, res, next) => {
+  uploadChatAvatar(req, res, async function (err) {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          message: 'Avatar is too large. Maximum size is 5MB'
+        });
+      }
+      return res.status(400).json({
+        message: `Upload error: ${err.message}`
+      });
+    } else if (err) {
+      return res.status(400).json({
+        message: err.message || 'Error uploading avatar'
+      });
+    }
+
+    // Upload to pCloud if file exists
+    if (req.file) {
+      try {
+        const uploadResult = await uploadImage(req.file.path);
+        
+        // Add cloud storage info to req.file
+        req.file.public_id = uploadResult.public_id;
+        req.file.secure_url = uploadResult.url;
+        
+        // Clean up local file
+        fs.unlinkSync(req.file.path);
+        
+      } catch (uploadError) {
+        // Clean up local file on error
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+        return res.status(500).json({
+          message: 'Error uploading avatar to cloud storage'
+        });
+      }
+    }
+    
     next();
   });
 };

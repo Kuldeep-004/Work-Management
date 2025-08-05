@@ -3,6 +3,7 @@ import Automation from '../models/Automation.js';
 import Task from '../models/Task.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { runAutomationCheck, resetMonthlyAutomationStatus } from '../automationScheduler.js';
+import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ router.get('/', protect, async (req, res) => {
 // Create a new automation
 router.post('/', protect, async (req, res) => {
   try {
-    const { name, description, triggerType, dayOfMonth, specificDate, specificTime } = req.body;
+    const { name, description, triggerType, dayOfMonth, specificDate, specificTime, quarterlyMonths, halfYearlyMonths } = req.body;
     
     if (!name || !triggerType) return res.status(400).json({ message: 'Name and triggerType are required' });
     
@@ -45,13 +46,35 @@ router.post('/', protect, async (req, res) => {
       description,
       triggerType,
       dayOfMonth: ['dayOfMonth', 'quarterly', 'halfYearly', 'yearly'].includes(triggerType) ? dayOfMonth : undefined,
-      monthOfYear: ['quarterly', 'halfYearly', 'yearly'].includes(triggerType) ? monthOfYear : undefined,
+      monthOfYear: triggerType === 'yearly' ? monthOfYear : undefined,
+      quarterlyMonths: triggerType === 'quarterly' ? quarterlyMonths : undefined,
+      halfYearlyMonths: triggerType === 'halfYearly' ? halfYearlyMonths : undefined,
       specificDate: triggerType === 'dateAndTime' ? specificDate : undefined,
       specificTime: triggerType === 'dateAndTime' ? specificTime : undefined,
       createdBy: req.user._id,
     });
     
     await automation.save();
+    
+    // Log automation creation
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'automation_created',
+      automation._id,
+      `Created automation "${name}" with trigger type "${triggerType}"`,
+      null,
+      { 
+        name, 
+        triggerType, 
+        dayOfMonth, 
+        specificDate, 
+        specificTime,
+        quarterlyMonths,
+        halfYearlyMonths
+      },
+      req
+    );
+    
     res.json(automation);
   } catch (err) {
     res.status(500).json({ message: 'Failed to create automation', error: err.message });
@@ -76,7 +99,7 @@ router.put('/:id', protect, async (req, res) => {
     if (!automation) return res.status(404).json({ message: 'Automation not found' });
     
     // Only allow updating certain fields
-    const { name, description, triggerType, dayOfMonth, monthOfYear, specificDate, specificTime, taskTemplate } = req.body;
+    const { name, description, triggerType, dayOfMonth, monthOfYear, specificDate, specificTime, taskTemplate, quarterlyMonths, halfYearlyMonths } = req.body;
     
     if (name !== undefined) automation.name = name;
     if (description !== undefined) automation.description = description;
@@ -86,9 +109,19 @@ router.put('/:id', protect, async (req, res) => {
     if (['dayOfMonth', 'quarterly', 'halfYearly', 'yearly'].includes(triggerType || automation.triggerType)) {
       if (dayOfMonth !== undefined) automation.dayOfMonth = dayOfMonth;
       
-      // Set monthOfYear for quarterly, halfYearly, yearly types
-      if (['quarterly', 'halfYearly', 'yearly'].includes(triggerType || automation.triggerType)) {
+      // Set monthOfYear for yearly type only
+      if (triggerType === 'yearly' || automation.triggerType === 'yearly') {
         if (monthOfYear !== undefined) automation.monthOfYear = monthOfYear;
+      }
+      
+      // Set quarterlyMonths for quarterly type
+      if (triggerType === 'quarterly' || automation.triggerType === 'quarterly') {
+        if (quarterlyMonths !== undefined) automation.quarterlyMonths = quarterlyMonths;
+      }
+      
+      // Set halfYearlyMonths for halfYearly type
+      if (triggerType === 'halfYearly' || automation.triggerType === 'halfYearly') {
+        if (halfYearlyMonths !== undefined) automation.halfYearlyMonths = halfYearlyMonths;
       }
       
       // Clear date and time fields when changing to a time-based type
@@ -104,12 +137,45 @@ router.put('/:id', protect, async (req, res) => {
       if (triggerType === 'dateAndTime') {
         automation.dayOfMonth = undefined;
         automation.monthOfYear = undefined;
+        automation.quarterlyMonths = undefined;
+        automation.halfYearlyMonths = undefined;
       }
     }
     
     if (taskTemplate !== undefined) automation.taskTemplate = taskTemplate;
     
+    // Store old values for logging
+    const oldValues = {
+      name: automation.name,
+      description: automation.description,
+      triggerType: automation.triggerType,
+      dayOfMonth: automation.dayOfMonth,
+      monthOfYear: automation.monthOfYear,
+      specificDate: automation.specificDate,
+      specificTime: automation.specificTime
+    };
+    
     await automation.save();
+    
+    // Log automation update
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'automation_updated',
+      automation._id,
+      `Updated automation "${automation.name}"`,
+      oldValues,
+      { 
+        name, 
+        description, 
+        triggerType, 
+        dayOfMonth, 
+        monthOfYear, 
+        specificDate, 
+        specificTime 
+      },
+      req
+    );
+    
     res.json(automation);
   } catch (err) {
     res.status(500).json({ message: 'Failed to update automation', error: err.message });
@@ -150,8 +216,7 @@ router.post('/:id/tasks', protect, async (req, res) => {
       dueDate,
       targetDate,
       verificationAssignedTo,
-      billed,
-      workDoneBy
+      billed
     } = req.body;
 
     // Validate required fields
@@ -163,10 +228,6 @@ router.post('/:id/tasks', protect, async (req, res) => {
     if (!assignedTo || (Array.isArray(assignedTo) && assignedTo.length === 0)) errors.assignedTo = 'Assigned To is required';
     if (!priority) errors.priority = 'Priority is required';
     if (!inwardEntryDate) errors.inwardEntryDate = 'Inward Entry Date is required';
-    const validWorkDoneBy = ['First floor', 'Second floor', 'Both'];
-    if (!workDoneBy || !validWorkDoneBy.includes(workDoneBy)) {
-      errors.workDoneBy = 'workDoneBy is required and must be one of: First floor, Second floor, Both';
-    }
     if (Object.keys(errors).length > 0) {
       return res.status(400).json({ message: 'Validation error', errors });
     }
@@ -185,8 +246,7 @@ router.post('/:id/tasks', protect, async (req, res) => {
       dueDate,
       targetDate,
       verificationAssignedTo,
-      billed: billed !== undefined ? billed : false,
-      workDoneBy
+      billed: billed !== undefined ? billed : false
     };
 
     try {
@@ -199,6 +259,18 @@ router.post('/:id/tasks', protect, async (req, res) => {
       automation.taskTemplate.push(newTaskTemplate);
       
       await automation.save();
+      
+      // Log task template addition
+      await ActivityLogger.logSystemActivity(
+        req.user._id,
+        'automation_task_template_added',
+        automation._id,
+        `Added task template "${title}" to automation "${automation.name}"`,
+        null,
+        { title, clientName, priority, assignedTo },
+        req
+      );
+      
       return res.status(200).json({ 
         message: 'Automation task template saved successfully', 
         taskTemplate: newTaskTemplate,
@@ -223,6 +295,17 @@ router.post('/check-trigger', protect, async (req, res) => {
     
     // Call the automation check function
     const result = await runAutomationCheck();
+    
+    // Log automation trigger
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'automation_triggered',
+      null,
+      `Manually triggered automation check - processed ${result.processedCount || 0} automations`,
+      null,
+      { processedCount: result.processedCount, success: result.success },
+      req
+    );
     
     if (result.success) {
       return res.status(200).json({ 
@@ -254,6 +337,17 @@ router.post('/reset-monthly-status', protect, async (req, res) => {
     // Call the reset function
     const result = await resetMonthlyAutomationStatus(automationId);
     
+    // Log automation status reset
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'automation_status_reset',
+      automationId,
+      `Reset monthly automation status${automationId ? ` for automation ${automationId}` : ' for all automations'}`,
+      null,
+      { automationId, modifiedCount: result.modifiedCount },
+      req
+    );
+    
     if (result.success) {
       return res.status(200).json({ 
         message: `Successfully reset ${result.modifiedCount} monthly automations`,
@@ -268,6 +362,51 @@ router.post('/reset-monthly-status', protect, async (req, res) => {
   } catch (err) {
     console.error('Error resetting monthly automation status:', err);
     res.status(500).json({ message: 'Failed to reset automation status', error: err.message });
+  }
+});
+
+// Delete an automation
+router.delete('/:id', protect, async (req, res) => {
+  try {
+    const automation = await Automation.findById(req.params.id);
+    
+    if (!automation) {
+      return res.status(404).json({ message: 'Automation not found' });
+    }
+    
+    // Check if the user is authorized (creator or admin)
+    if (automation.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Not authorized to delete this automation' });
+    }
+    
+    // Log automation deletion before deleting
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'automation_deleted',
+      automation._id,
+      `Deleted automation "${automation.name}"`,
+      { 
+        name: automation.name, 
+        triggerType: automation.triggerType,
+        taskTemplateCount: automation.taskTemplate?.length || 0
+      },
+      null,
+      req
+    );
+    
+    // Delete the automation
+    await Automation.findByIdAndDelete(req.params.id);
+    
+    // Delete any associated tasks templates
+    if (automation.taskTemplate && automation.taskTemplate.length > 0) {
+      // This doesn't delete actual created tasks, just the templates
+      console.log(`Deleted automation ${req.params.id} with ${automation.taskTemplate.length} task templates`);
+    }
+    
+    res.json({ message: 'Automation deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting automation:', err);
+    res.status(500).json({ message: 'Failed to delete automation', error: err.message });
   }
 });
 

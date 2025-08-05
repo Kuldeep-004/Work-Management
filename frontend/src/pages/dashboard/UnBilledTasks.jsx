@@ -196,7 +196,6 @@ const UnBilledTasks = () => {
               <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'clientName' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('clientName'); setShowGroupByDropdown(false); }}>Client Name</button>
               <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'clientGroup' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('clientGroup'); setShowGroupByDropdown(false); }}>Client Group</button>
               <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'workType' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('workType'); setShowGroupByDropdown(false); }}>Work Type</button>
-              <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'workDoneBy' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('workDoneBy'); setShowGroupByDropdown(false); }}>Assigned To</button>
               <button className={`block w-full text-left px-4 py-2 rounded ${sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { setSortBy('billed'); setShowGroupByDropdown(false); }}>Billed</button>
             </div>
           )}
