@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../apiConfig';
+import pushNotificationManager from '../utils/pushNotificationManager';
 
 const AuthContext = createContext();
 
@@ -60,12 +61,44 @@ export const AuthProvider = ({ children }) => {
 
       setUser(data);
       localStorage.setItem('user', JSON.stringify(data));
+      
+      // Initialize push notifications after successful login
+      await initializePushNotifications(data.token);
+      
       toast.success('Login successful!');
       return data;
     } catch (error) {
       console.error('Login error:', error);
       toast.error(error.message || 'An error occurred during login');
       throw error;
+    }
+  };
+
+  const initializePushNotifications = async (token) => {
+    try {
+      const initialized = await pushNotificationManager.initialize();
+      if (!initialized) {
+        console.log('Push notifications not supported or failed to initialize');
+        return;
+      }
+
+      const permission = await pushNotificationManager.requestPermission();
+      
+      if (permission === 'granted') {
+        await pushNotificationManager.subscribe(token);
+        toast.success('You will receive timesheet reminders!');
+      } else if (permission === 'denied') {
+        await pushNotificationManager.updatePermissionStatus('denied', token);
+        toast('Push notifications are disabled. You can enable them in your browser settings.', {
+          icon: '🔔',
+          duration: 5000
+        });
+      }
+      
+      await pushNotificationManager.updatePermissionStatus(permission, token);
+    } catch (error) {
+      console.error('Error setting up push notifications:', error);
+      // Don't show error to user as it's not critical to login
     }
   };
 
@@ -130,7 +163,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      // Unsubscribe from push notifications before logging out
+      if (user?.token) {
+        await pushNotificationManager.unsubscribe(user.token);
+      }
+    } catch (error) {
+      console.error('Error unsubscribing from push notifications:', error);
+    }
+    
     setUser(null);
     localStorage.removeItem('user');
     toast.success('Logged out successfully!');

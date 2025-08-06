@@ -263,7 +263,7 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   };
 
   const getChatDisplayInfo = () => {
@@ -315,7 +315,16 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
       {/* Header */}
       <div className="p-4 border-b border-gray-200 bg-white">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">            
+          <div className="flex items-center space-x-3">
+            {/* Back button - only visible on mobile */}
+            <button
+              onClick={onBack}
+              className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Back to chats"
+            >
+              <ArrowLeftIcon className="h-5 w-5" />
+            </button>
+            
             <div className="relative flex-shrink-0">
               {avatar ? (
                 <img

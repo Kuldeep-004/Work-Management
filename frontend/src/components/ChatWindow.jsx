@@ -14,6 +14,7 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [showMobileChat, setShowMobileChat] = useState(false); // Mobile navigation state
   const { user } = useAuth();
   const windowRef = useRef(null);
 
@@ -150,6 +151,7 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
 
   const handleChatSelect = (chat) => {
     setActiveChat(chat);
+    setShowMobileChat(true); // Show chat on mobile
     
     // Reset unread count when chat is selected
     if (chat.unreadCount > 0) {
@@ -176,6 +178,7 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
 
     if (existingChat) {
       setActiveChat(existingChat);
+      setShowMobileChat(true); // Show chat on mobile
       if (socket) {
         socket.emit('join_chat', existingChat._id);
       }
@@ -193,6 +196,7 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
       };
       
       setActiveChat(tempChat);
+      setShowMobileChat(true); // Show chat on mobile
       // Don't add to chats list yet - only add when first message is sent
     }
   };
@@ -200,7 +204,13 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
   const handleNewGroup = (newChat) => {
     setChats(prev => [newChat, ...prev]);
     setActiveChat(newChat);
+    setShowMobileChat(true); // Show chat on mobile
     setIsNewGroupModalOpen(false);
+  };
+
+  // Function to handle mobile back navigation
+  const handleMobileBack = () => {
+    setShowMobileChat(false);
   };
 
   const handleCreateGroup = async (groupData) => {
@@ -252,20 +262,23 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
   return (
     <div 
       ref={windowRef}
-      className="bg-white rounded-lg shadow-2xl border border-gray-200 overflow-hidden"
+      className="bg-white h-full w-full md:rounded-lg md:shadow-2xl md:border border-gray-200 overflow-hidden"
       style={{ 
-        width: '85vw', 
-        height: '80vh',
-        maxWidth: '1200px',
-        maxHeight: '800px',
-        minWidth: '600px',
-        minHeight: '500px',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+        // Desktop styles only
+        ...(window.innerWidth >= 768 && {
+          width: '85vw', 
+          height: '80vh',
+          maxWidth: '1200px',
+          maxHeight: '800px',
+          minWidth: '600px',
+          minHeight: '500px',
+        }),
+        boxShadow: window.innerWidth >= 768 ? '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' : 'none'
       }}
     >
       <div className="flex h-full">
-        {/* Sidebar - Chat List - Fixed width */}
-        <div className="w-80 border-r border-gray-200 bg-gray-50 flex-shrink-0">
+        {/* Sidebar - Chat List - Desktop: fixed width, Mobile: full width */}
+        <div className={`w-full md:w-80 border-r border-gray-200 bg-gray-50 flex-shrink-0 ${showMobileChat ? 'hidden md:block' : 'block'}`}>
           <ChatSidebar
             chats={chats}
             allUsers={allUsers}
@@ -279,13 +292,13 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
           />
         </div>
 
-        {/* Chat View */}
+        {/* Chat View - Desktop: show when selected, Mobile: show when showMobileChat is true */}
         {activeChat && (
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className={`flex-1 flex flex-col min-w-0 ${showMobileChat ? 'block' : 'hidden md:flex'}`}>
             <ChatView
               chat={activeChat}
               socket={socket}
-              onBack={() => setActiveChat(null)}
+              onBack={handleMobileBack}
               onChatUpdate={handleChatUpdate}
               onlineUsers={onlineUsers}
               allUsers={allUsers}
@@ -293,9 +306,9 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
           </div>
         )}
 
-        {/* Empty state */}
+        {/* Empty state - only show on desktop when no chat is selected */}
         {!activeChat && (
-          <div className="flex-1 flex items-center justify-center bg-gray-50">
+          <div className="hidden md:flex flex-1 items-center justify-center bg-gray-50">
             <div className="text-center text-gray-300">
               <div className="text-8xl font-bold mb-4">HAACAS</div>
               <p className="text-xl">Select a chat to start messaging</p>

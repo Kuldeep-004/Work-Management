@@ -157,20 +157,38 @@ const Timesheets = () => {
     if (!entry) return;
     // Prevent saving if neither a task nor a manual task is selected
     const isInternalWorks = entry.task === 'internal-works' || entry.manualTaskName === 'Internal Works';
-    if (!entry.task && !isInternalWorks) {
+    const isOther = entry.task === 'other' || entry.manualTaskName === 'Other';
+    if (!entry.task && !isInternalWorks && !isOther) {
       toast.error('Please select a task before saving.');
       return;
     }
     try {
       let res;
-      // Determine if this is an internal works entry
-      const payload = {
-        taskId: isInternalWorks ? null : entry.task,
-        manualTaskName: isInternalWorks ? 'Internal Works' : '',
+      
+      // Prepare payload based on task selection
+      let payload = {
         workDescription: entry.workDescription,
         startTime: entry.startTime,
         endTime: entry.endTime
       };
+      
+      // Handle task vs manual task logic
+      if (entry.task === 'other') {
+        payload.taskId = 'other';
+        payload.manualTaskName = '';
+      } else if (entry.task === 'internal-works') {
+        payload.taskId = 'internal-works';
+        payload.manualTaskName = '';
+      } else if (entry.task) {
+        // Regular task ID
+        payload.taskId = entry.task;
+        payload.manualTaskName = '';
+      } else {
+        // Fallback for existing entries
+        payload.taskId = null;
+        payload.manualTaskName = entry.manualTaskName || '';
+      }
+      
       if (entry._id && isValidObjectId(entry._id)) {
         // PATCH for existing entry with valid ObjectId
         res = await fetch(`${API_BASE_URL}/api/timesheets/entry/${entry._id}`, {
@@ -230,8 +248,8 @@ const Timesheets = () => {
     if (!timesheet) return;
     try {
       const payload = {
-        taskId: '',
-        manualTaskName: '',
+        taskId: 'other',  // This will be converted to null in backend with manualTaskName set to 'Other'
+        manualTaskName: '',  // Backend will set this to 'Other'
         workDescription: '',
         startTime: to24Hour(defaultStart),
         endTime: to24Hour(defaultEnd)
@@ -475,18 +493,24 @@ const Timesheets = () => {
         {/* Timeslot Entries */}
         <div className="space-y-4 overflow-x-auto scrollbar-hide">
           {[...(timesheet?.entries || [])].map((entry) => {
+            // Determine correct task value for dropdown
             let taskValue = '';
             if (entry?.task) {
+              // If entry has a task (ObjectId), use the task ID
               if (typeof entry.task === 'object' && entry.task !== null && entry.task._id) {
                 taskValue = entry.task._id;
               } else if (typeof entry.task === 'string') {
                 taskValue = entry.task;
-              } else {
-                taskValue = '';
               }
-            } else {
-              taskValue = '';
+            } else if (entry?.manualTaskName) {
+              // If no task but has manualTaskName, determine the special values
+              if (entry.manualTaskName === 'Other') {
+                taskValue = 'other';
+              } else if (entry.manualTaskName === 'Internal Works') {
+                taskValue = 'internal-works';
+              }
             }
+            // If still no value, default to empty (which shows "Select task")
             const key = entry._id;
             const startParts = (entryTimeParts[key] && entryTimeParts[key].start) || split24Hour(entry.startTime);
             const endParts = (entryTimeParts[key] && entryTimeParts[key].end) || split24Hour(entry.endTime);
@@ -622,13 +646,14 @@ const Timesheets = () => {
                         disabled={isSaving || isLocked}
                       >
                         <option value="">Select task</option>
+                        <option value="other">Other</option>
                         <option value="internal-works">Internal Works</option>
                         {/* Build dropdown options: all allowed tasks, plus the selected one if missing */}
                         {(() => {
                           const selectedTaskId = typeof entry.task === 'object' && entry.task !== null ? entry.task._id : entry.task;
                           const taskIds = tasks.map(t => t._id);
                           let options = [...tasks];
-                          if (selectedTaskId && !taskIds.includes(selectedTaskId) && selectedTaskId !== 'internal-works') {
+                          if (selectedTaskId && !taskIds.includes(selectedTaskId) && selectedTaskId !== 'internal-works' && selectedTaskId !== 'other') {
                             let selectedTaskObj = null;
                             if (entry.task && typeof entry.task === 'object') {
                               selectedTaskObj = entry.task;

@@ -76,6 +76,18 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    pushSubscription: {
+      endpoint: String,
+      keys: {
+        p256dh: String,
+        auth: String,
+      },
+    },
+    notificationPermission: {
+      type: String,
+      enum: ['default', 'granted', 'denied'],
+      default: 'default',
+    },
   },
   {
     timestamps: true,

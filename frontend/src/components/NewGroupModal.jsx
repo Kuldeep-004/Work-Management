@@ -66,8 +66,8 @@ const NewGroupModal = ({ isOpen, onClose, allUsers, onCreateGroup }) => {
         onClick={onClose}
       ></div>
       
-      {/* Modal */}
-      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[80vh] flex flex-col">
+      {/* Modal - Desktop: small modal, Mobile: fullscreen */}
+      <div className="relative bg-white h-full w-full md:h-auto md:w-auto md:rounded-lg md:shadow-xl md:max-w-md md:mx-4 md:max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between">

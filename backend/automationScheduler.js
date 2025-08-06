@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import Automation from './models/Automation.js';
 import Task from './models/Task.js';
+import { sendTimesheetReminder } from './utils/pushNotificationService.js';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -16,6 +17,17 @@ if (mongoose.connection.readyState === 0) {
 // Run every 5 minutes
 cron.schedule('*/5 * * * *', async () => {
   await runAutomationCheck(false);
+});
+
+// Run timesheet reminders every hour between 9 AM to 8 PM (Monday to Friday)
+cron.schedule('0 9-20 * * 1-5', async () => {
+  console.log('[TimesheetScheduler] Running timesheet reminder job');
+  try {
+    const result = await sendTimesheetReminder();
+    console.log(`[TimesheetScheduler] Sent ${result.sent}/${result.total} timesheet reminders`);
+  } catch (error) {
+    console.error('[TimesheetScheduler] Error sending timesheet reminders:', error);
+  }
 });
 
 // Function to check and process automations

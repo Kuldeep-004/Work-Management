@@ -181,9 +181,27 @@ router.post('/add-entry', protect, async (req, res) => {
       });
     }
     
+    let taskField = null;
+    let manualTaskNameField = manualTaskName || '';
+    
+    // Handle task selection logic
+    if (taskId && taskId.trim() !== '') {
+      if (taskId === 'other') {
+        taskField = null;
+        manualTaskNameField = 'Other';
+      } else if (taskId === 'internal-works') {
+        taskField = null;
+        manualTaskNameField = 'Internal Works';
+      } else {
+        // Regular task ID
+        taskField = taskId;
+        manualTaskNameField = manualTaskName || '';
+      }
+    }
+
     const newEntry = {
-      task: taskId || null,
-      manualTaskName: manualTaskName || '',
+      task: taskField,
+      manualTaskName: manualTaskNameField,
       workDescription: workDescription || '',
       startTime,
       endTime
@@ -198,15 +216,28 @@ router.post('/add-entry', protect, async (req, res) => {
     await timesheet.populate('entries.task', 'title description clientName clientGroup workType');
     
     // Log timesheet entry addition
+    let taskTitle = 'Unnamed task';
+    if (taskField) {
+      try {
+        const task = await Task.findById(taskField);
+        taskTitle = task?.title || 'Unnamed task';
+      } catch (error) {
+        console.error('Error finding task for logging:', error);
+        taskTitle = 'Unnamed task';
+      }
+    } else if (manualTaskNameField) {
+      taskTitle = manualTaskNameField;
+    }
+    
     await ActivityLogger.logSystemActivity(
       req.user._id,
       'timesheet_entry_added',
       timesheet._id,
-      `Added timesheet entry${taskId ? ' for task' : ''} "${manualTaskName || (await Task.findById(taskId))?.title || 'Unnamed task'}"`,
+      `Added timesheet entry${taskField ? ' for task' : ''} "${taskTitle}"`,
       null,
       { 
-        taskId, 
-        manualTaskName, 
+        taskId: taskField, 
+        manualTaskName: manualTaskNameField, 
         workDescription, 
         startTime, 
         endTime 
@@ -671,8 +702,26 @@ router.patch('/entry/:entryId', protect, async (req, res) => {
     
     const entry = timesheet.entries.id(entryId);
     
-    entry.task = taskId || null;
-    entry.manualTaskName = manualTaskName || '';
+    // Handle task selection logic
+    let taskField = null;
+    let manualTaskNameField = manualTaskName || '';
+    
+    if (taskId && taskId.trim() !== '') {
+      if (taskId === 'other') {
+        taskField = null;
+        manualTaskNameField = 'Other';
+      } else if (taskId === 'internal-works') {
+        taskField = null;
+        manualTaskNameField = 'Internal Works';
+      } else {
+        // Regular task ID
+        taskField = taskId;
+        manualTaskNameField = manualTaskName || '';
+      }
+    }
+    
+    entry.task = taskField;
+    entry.manualTaskName = manualTaskNameField;
     entry.workDescription = workDescription || '';
     entry.startTime = startTime;
     entry.endTime = endTime;

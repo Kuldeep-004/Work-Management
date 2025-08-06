@@ -41,9 +41,9 @@ const ChatIcon = () => {
         )}
       </button>
 
-      {/* Chat Window */}
+      {/* Chat Window - Desktop: positioned dropdown, Mobile: fullscreen */}
       {isOpen && (
-        <div className="absolute top-full right-0 mt-2 z-50">
+        <div className="fixed inset-0 md:absolute md:top-full md:right-0 md:mt-2 md:inset-auto z-50">
           <ChatWindow 
             onClose={() => setIsOpen(false)}
             onUnreadCountChange={setUnreadCount}

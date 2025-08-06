@@ -9,16 +9,21 @@ const notificationSchema = new mongoose.Schema({
   task: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Task',
-    required: true
+    required: false
   },
   assigner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false
   },
   message: {
     type: String,
     required: true
+  },
+  type: {
+    type: String,
+    enum: ['task_assignment', 'timesheet_reminder', 'system'],
+    default: 'task_assignment'
   },
   isRead: {
     type: Boolean,

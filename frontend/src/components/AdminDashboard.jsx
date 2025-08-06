@@ -1125,151 +1125,296 @@ const AdminDashboard = () => {
       </div>
       {/* Table and per-tab filters/grouping below summary cards */}
       {/* Filters and Sorting */}
-      <div className="flex flex-nowrap items-center gap-4 mb-4 ">
-        <div className="relative" ref={filterPopupRef}>
-          <button
-            className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 text-sm"
-            onClick={openFilterPopup}
-          >
-            <span>Filter</span>
-            {activeTabObj.filters.length > 0 && (
-              <span className="bg-blue-100 text-blue-800 text-xs font-semibold ml-2 px-2.5 py-0.5 rounded-full">
-                {activeTabObj.filters.length}
-              </span>
-            )}
-          </button>
-          <FilterPopup
-            isOpen={isFilterPopupOpen}
-            onClose={() => setIsFilterPopupOpen(false)}
-            filters={filterDraft}
-            setFilters={filters => {
-              setFilterDraft(filters);
-              // If a filter was deleted, persist immediately
-              if (filters.length < filterDraft.length) {
-                updateActiveTab({ filters });
-              }
-              // If all filters are saved, persist as well
-              else if (filters.length > 0 && filters.every(f => f.saved)) {
-                updateActiveTab({ filters });
-              }
-            }}
-            users={users}
-            clientNames={clientNames}
-            clientGroups={clientGroups}
-            workTypes={workTypes}
-            priorities={priorities}
-          />
-        </div>
-        <input
-          type="text"
-          placeholder="Search tasks..."
-          className="min-w-[300px] max-w-[420px] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-          value={activeTabObj.searchTerm}
-          onChange={e => updateActiveTab({ searchTerm: e.target.value })}
-        />
-        <div className="relative">
-          <button
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
-            onClick={() => setShowColumnDropdown(v => !v)}
-            aria-label="Show/Hide Columns"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
-            Columns
-          </button>
-          {showColumnDropdown && (
-            <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56 animate-fade-in">
-              <div className="font-semibold text-gray-700 mb-2 text-sm">Show/Hide Columns</div>
-              <div className="max-h-56 overflow-y-auto pr-1 custom-scrollbar">
-                {ALL_COLUMNS.map(col => (
-                  <label key={col.id} className="flex items-center space-x-2 mb-1 cursor-pointer hover:bg-blue-50 rounded px-2 py-1 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={activeTabObj.visibleColumns.includes(col.id)}
-                      onChange={() => {
-                        const cols = activeTabObj.visibleColumns || [];
-                        let newCols;
-                        if (cols.includes(col.id)) {
-                          newCols = cols.filter(c => c !== col.id);
-                        } else {
-                          newCols = [...cols, col.id];
-                        }
-                        // Always create a new array to trigger React state update
-                        updateActiveTab({ visibleColumns: [...newCols] });
-                      }}
-                      className="accent-blue-500"
-                    />
-                    <span className="text-gray-800 text-sm">{col.label}</span>
-                  </label>
-                ))}
-              </div>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 mb-4 w-full bg-white rounded-lg shadow-sm p-3">
+        {/* Mobile layout: group buttons in rows, desktop unchanged */}
+        <div className="flex flex-col w-full gap-2 sm:hidden">
+          {/* Row 1: Filter + Search */}
+          <div className="flex w-full gap-2">
+            <div className="relative flex-1" ref={filterPopupRef}>
+              <button
+                className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 text-sm w-full"
+                onClick={openFilterPopup}
+              >
+                <span>Filter</span>
+                {activeTabObj.filters.length > 0 && (
+                  <span className="bg-blue-100 text-blue-800 text-xs font-semibold ml-2 px-2.5 py-0.5 rounded-full">
+                    {activeTabObj.filters.length}
+                  </span>
+                )}
+              </button>
+              <FilterPopup
+                isOpen={isFilterPopupOpen}
+                onClose={() => setIsFilterPopupOpen(false)}
+                filters={filterDraft}
+                setFilters={filters => {
+                  setFilterDraft(filters);
+                  if (filters.length < filterDraft.length) {
+                    updateActiveTab({ filters });
+                  } else if (filters.length > 0 && filters.every(f => f.saved)) {
+                    updateActiveTab({ filters });
+                  }
+                }}
+                users={users}
+                clientNames={clientNames}
+                clientGroups={clientGroups}
+                workTypes={workTypes}
+                priorities={priorities}
+              />
             </div>
-          )}
+            <input
+              type="text"
+              placeholder="Search tasks..."
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+              value={activeTabObj.searchTerm}
+              onChange={e => updateActiveTab({ searchTerm: e.target.value })}
+            />
+          </div>
+          {/* Row 2: Columns + Group By */}
+          <div className="flex w-full gap-2">
+            <div className="relative flex-1">
+              <button
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 w-full transition-colors"
+                onClick={() => setShowColumnDropdown(v => !v)}
+                aria-label="Show/Hide Columns"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                Columns
+              </button>
+              {showColumnDropdown && (
+                <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56 animate-fade-in">
+                  <div className="font-semibold text-gray-700 mb-2 text-sm">Show/Hide Columns</div>
+                  <div className="max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                    {ALL_COLUMNS.map(col => (
+                      <label key={col.id} className="flex items-center space-x-2 mb-1 cursor-pointer hover:bg-blue-50 rounded px-2 py-1 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={activeTabObj.visibleColumns.includes(col.id)}
+                          onChange={() => {
+                            const cols = activeTabObj.visibleColumns || [];
+                            let newCols;
+                            if (cols.includes(col.id)) {
+                              newCols = cols.filter(c => c !== col.id);
+                            } else {
+                              newCols = [...cols, col.id];
+                            }
+                            updateActiveTab({ visibleColumns: [...newCols] });
+                          }}
+                          className="accent-blue-500"
+                        />
+                        <span className="text-gray-800 text-sm">{col.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="relative flex-1 flex items-center">
+              <button
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 w-full transition-colors"
+                onClick={() => setShowGroupByDropdown(v => !v)}
+                type="button"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/></svg>
+                <span className="font-semibold">Group By</span>
+              </button>
+              {showGroupByDropdown && (
+                <div className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44 animate-fade-in" style={{minWidth: '160px'}}>
+                  <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">Group By</div>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${!activeTabObj.sortBy || activeTabObj.sortBy === '' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: '' }); setShowGroupByDropdown(false); }}>None</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'createdAt' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'createdAt' }); setShowGroupByDropdown(false); }}>Assigned On</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'priority' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'priority' }); setShowGroupByDropdown(false); }}>Priority</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'status' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'status' }); setShowGroupByDropdown(false); }}>Stages</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientName' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientName' }); setShowGroupByDropdown(false); }}>Client Name</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientGroup' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientGroup' }); setShowGroupByDropdown(false); }}>Client Group</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'workType' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'workType' }); setShowGroupByDropdown(false); }}>Work Type</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'billed' }); setShowGroupByDropdown(false); }}>Internal Works</button>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Row 3: Download + Select */}
+          <div className="flex w-full gap-2">
+            <button
+              onClick={handlePDFButtonClick}
+              className="flex-1 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 text-sm"
+            >
+              Download
+            </button>
+            <button
+              onClick={toggleBulkSelection}
+              className={`flex-1 flex items-center justify-center w-auto px-4 h-9 rounded-lg focus:outline-none focus:ring-2 shadow-sm transition-colors ${
+                showCheckboxes 
+                  ? 'bg-orange-600 hover:bg-orange-700 text-white focus:ring-orange-500' 
+                  : 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500'
+              }`}
+              title={showCheckboxes ? "Hide Selection Mode" : "Enable Selection Mode"}
+              type="button"
+            >
+              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {showCheckboxes ? 'Exit Selection' : 'Select'}
+            </button>
+          </div>
+          {/* Row 4: Automation + Plus */}
+          <div className="flex w-full gap-2">
+            <button
+              onClick={() => setShowAutomationsModal(true)}
+              className="flex-1 flex items-center justify-center cursor-pointer w-28 h-9 rounded-lg bg-purple-600 hover:bg-purple-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm mr-2"
+              title="Automation"
+              type="button"
+            >
+              Automation
+            </button>
+            <button
+              onClick={() => setCreateModalOpen(true)}
+              className="flex-1 flex items-center justify-center w-8 h-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+              title="Create Task"
+              type="button"
+            >
+              <PlusIcon className="h-6 w-8" />
+            </button>
+          </div>
         </div>
-        {/* Enhanced Group By Dropdown */}
-        <div className="relative flex items-center gap-2">
+        {/* Desktop layout: unchanged */}
+        <div className="hidden sm:flex flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full">
+          {/* ...existing code... (all original button layout for desktop) */}
+          <div className="relative" ref={filterPopupRef}>
+            <button
+              className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 text-sm"
+              onClick={openFilterPopup}
+            >
+              <span>Filter</span>
+              {activeTabObj.filters.length > 0 && (
+                <span className="bg-blue-100 text-blue-800 text-xs font-semibold ml-2 px-2.5 py-0.5 rounded-full">
+                  {activeTabObj.filters.length}
+                </span>
+              )}
+            </button>
+            <FilterPopup
+              isOpen={isFilterPopupOpen}
+              onClose={() => setIsFilterPopupOpen(false)}
+              filters={filterDraft}
+              setFilters={filters => {
+                setFilterDraft(filters);
+                if (filters.length < filterDraft.length) {
+                  updateActiveTab({ filters });
+                } else if (filters.length > 0 && filters.every(f => f.saved)) {
+                  updateActiveTab({ filters });
+                }
+              }}
+              users={users}
+              clientNames={clientNames}
+              clientGroups={clientGroups}
+              workTypes={workTypes}
+              priorities={priorities}
+            />
+          </div>
+          <input
+            type="text"
+            placeholder="Search tasks..."
+            className="min-w-[300px] max-w-[420px] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+            value={activeTabObj.searchTerm}
+            onChange={e => updateActiveTab({ searchTerm: e.target.value })}
+          />
+          <div className="relative">
+            <button
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
+              onClick={() => setShowColumnDropdown(v => !v)}
+              aria-label="Show/Hide Columns"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+              Columns
+            </button>
+            {showColumnDropdown && (
+              <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56 animate-fade-in">
+                <div className="font-semibold text-gray-700 mb-2 text-sm">Show/Hide Columns</div>
+                <div className="max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                  {ALL_COLUMNS.map(col => (
+                    <label key={col.id} className="flex items-center space-x-2 mb-1 cursor-pointer hover:bg-blue-50 rounded px-2 py-1 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={activeTabObj.visibleColumns.includes(col.id)}
+                        onChange={() => {
+                          const cols = activeTabObj.visibleColumns || [];
+                          let newCols;
+                          if (cols.includes(col.id)) {
+                            newCols = cols.filter(c => c !== col.id);
+                          } else {
+                            newCols = [...cols, col.id];
+                          }
+                          updateActiveTab({ visibleColumns: [...newCols] });
+                        }}
+                        className="accent-blue-500"
+                      />
+                      <span className="text-gray-800 text-sm">{col.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="relative flex items-center gap-2">
+            <button
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
+              onClick={() => setShowGroupByDropdown(v => !v)}
+              type="button"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/></svg>
+              <span className="font-semibold">Group By</span>
+            </button>
+            {showGroupByDropdown && (
+              <div className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44 animate-fade-in" style={{minWidth: '160px'}}>
+                <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">Group By</div>
+                <button className={`block w-full text-left px-4 py-2 rounded ${!activeTabObj.sortBy || activeTabObj.sortBy === '' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: '' }); setShowGroupByDropdown(false); }}>None</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'createdAt' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'createdAt' }); setShowGroupByDropdown(false); }}>Assigned On</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'priority' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'priority' }); setShowGroupByDropdown(false); }}>Priority</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'status' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'status' }); setShowGroupByDropdown(false); }}>Stages</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientName' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientName' }); setShowGroupByDropdown(false); }}>Client Name</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientGroup' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientGroup' }); setShowGroupByDropdown(false); }}>Client Group</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'workType' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'workType' }); setShowGroupByDropdown(false); }}>Work Type</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'billed' }); setShowGroupByDropdown(false); }}>Internal Works</button>
+              </div>
+            )}
+          </div>
           <button
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
-            onClick={() => setShowGroupByDropdown(v => !v)}
+            onClick={handlePDFButtonClick}
+            className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 text-sm"
+          >
+            Download
+          </button>
+          <button
+            onClick={toggleBulkSelection}
+            className={`ml-0 flex items-center justify-center w-auto px-4 h-9 rounded-lg focus:outline-none focus:ring-2 shadow-sm transition-colors ${
+              showCheckboxes 
+                ? 'bg-orange-600 hover:bg-orange-700 text-white focus:ring-orange-500' 
+                : 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500'
+            }`}
+            title={showCheckboxes ? "Hide Selection Mode" : "Enable Selection Mode"}
             type="button"
           >
-            {/* Modern grouping icon (e.g., grid or layers) */}
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/></svg>
-            <span className="font-semibold">Group By</span>
+            <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {showCheckboxes ? 'Exit Selection' : 'Select'}
           </button>
-          {/* Remove applied group pill here */}
-          {showGroupByDropdown && (
-            <div className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44 animate-fade-in" style={{minWidth: '160px'}}>
-              <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">Group By</div>
-              <button className={`block w-full text-left px-4 py-2 rounded ${!activeTabObj.sortBy || activeTabObj.sortBy === '' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: '' }); setShowGroupByDropdown(false); }}>None</button>
-              <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'createdAt' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'createdAt' }); setShowGroupByDropdown(false); }}>Assigned On</button>
-              <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'priority' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'priority' }); setShowGroupByDropdown(false); }}>Priority</button>
-              <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'status' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'status' }); setShowGroupByDropdown(false); }}>Stages</button>
-              <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientName' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientName' }); setShowGroupByDropdown(false); }}>Client Name</button>
-              <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientGroup' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientGroup' }); setShowGroupByDropdown(false); }}>Client Group</button>
-              <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'workType' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'workType' }); setShowGroupByDropdown(false); }}>Work Type</button>
-              <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'billed' }); setShowGroupByDropdown(false); }}>Internal Works</button>
-            </div>
-          )}
+          <button
+            onClick={() => setShowAutomationsModal(true)}
+            className="ml-0 flex items-center justify-center cursor-pointer w-28 h-9 rounded-lg bg-purple-600 hover:bg-purple-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm mr-2"
+            title="Automation"
+            type="button"
+          >
+            Automation
+          </button>
+          <button
+            onClick={() => setCreateModalOpen(true)}
+            className="ml-0 flex items-center justify-center w-8 h-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+            title="Create Task"
+            type="button"
+          >
+            <PlusIcon className="h-6 w-8" />
+          </button>
         </div>
-        <button
-          onClick={handlePDFButtonClick}
-          className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 text-sm"
-        >
-          Download
-        </button>
-        {/* Bulk Selection Toggle Button */}
-        <button
-          onClick={toggleBulkSelection}
-          className={`ml-0 flex items-center justify-center w-auto px-4 h-9 rounded-lg focus:outline-none focus:ring-2 shadow-sm transition-colors ${
-            showCheckboxes 
-              ? 'bg-orange-600 hover:bg-orange-700 text-white focus:ring-orange-500' 
-              : 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500'
-          }`}
-          title={showCheckboxes ? "Hide Selection Mode" : "Enable Selection Mode"}
-          type="button"
-        >
-          <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {showCheckboxes ? 'Exit Selection' : 'Select'}
-        </button>
-        {/* Automation Button - left of the + button */}
-        <button
-          onClick={() => setShowAutomationsModal(true)}
-          className="ml-0 flex items-center justify-center cursor-pointer w-28 h-9 rounded-lg bg-purple-600 hover:bg-purple-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm mr-2"
-          title="Automation"
-          type="button"
-        >
-          Automation
-        </button>
-        <button
-          onClick={() => setCreateModalOpen(true)}
-          className="ml-0 flex items-center justify-center w-8 h-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
-          title="Create Task"
-          type="button"
-        >
-          <PlusIcon className="h-6 w-8" />
-        </button>
       </div>
 
       {/* Bulk Actions Bar */}

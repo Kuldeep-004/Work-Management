@@ -113,11 +113,21 @@ const ActivityLogs = () => {
   };
 
   const handleFilterChange = (key, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value,
-      page: 1 // Reset to first page when filter changes
-    }));
+    setFilters(prev => {
+      // If changing page, don't reset to 1
+      if (key === 'page') {
+        return {
+          ...prev,
+          page: value
+        };
+      }
+      // For other filters, reset to first page
+      return {
+        ...prev,
+        [key]: value,
+        page: 1
+      };
+    });
   };
 
   const clearFilters = () => {
@@ -517,10 +527,16 @@ const ActivityLogs = () => {
                     Previous
                   </button>
                   {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
-                    const page = Math.max(1, Math.min(pagination.current - 2 + i, pagination.pages - 4 + i));
+                    // Calculate correct page numbers for pagination
+                    let startPage = Math.max(1, pagination.current - 2);
+                    let endPage = Math.min(pagination.pages, startPage + 4);
+                    // Adjust startPage if endPage is at the end
+                    startPage = Math.max(1, endPage - 4);
+                    const page = startPage + i;
+                    if (page > endPage) return null;
                     return (
                       <button
-                        key={page}
+                        key={`page-btn-${page}`}
                         onClick={() => handleFilterChange('page', page)}
                         className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                           page === pagination.current

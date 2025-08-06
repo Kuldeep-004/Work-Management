@@ -21,6 +21,7 @@ import automationsRouter from './routes/automations.js';
 import activityLogRoutes from './routes/activityLogs.js';
 import chatRoutes from './routes/chats.js';
 import messageRoutes from './routes/messages.js';
+import pushSubscriptionRoutes from './routes/pushSubscription.js';
 import { activityLoggerMiddleware } from './middleware/activityLoggerMiddleware.js';
 import Team from './models/Team.js';
 import User from './models/User.js';
@@ -93,6 +94,7 @@ app.use('/api/automations', automationsRouter);
 app.use('/api/activity-logs', activityLogRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/push-subscription', pushSubscriptionRoutes);
 
 // Socket.IO for real-time chat
 const connectedUsers = new Map();

@@ -174,8 +174,8 @@ const GroupManagementModal = ({ isOpen, onClose, chat, allUsers, onChatUpdate })
   };
 
   return (
-    <div className="fixed inset-0 bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden">
+    <div className="fixed inset-0 bg-opacity-50 flex items-center justify-center z-50 p-0 md:p-4">
+      <div className="bg-white h-full w-full md:h-auto md:w-auto md:rounded-lg md:shadow-xl md:max-w-md md:max-h-[80vh] overflow-hidden">
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
