@@ -40,11 +40,19 @@ const ChatSidebar = ({
         name: chat.name,
         avatar: chat.avatar?.url || null,
         isOnline: false,
-        subtitle: `${chat.participants.length} members`
+        subtitle: `${chat.participants?.length || 0} members`
       };
     } else {
-      const otherParticipant = chat.participants.find(p => p.user._id !== user?._id)?.user;
-      const isOnline = onlineUsers.has(otherParticipant?._id);
+      if (!Array.isArray(chat.participants) || !user || !user._id) {
+        return {
+          name: 'Unknown',
+          avatar: null,
+          isOnline: false,
+          subtitle: 'Offline'
+        };
+      }
+      const otherParticipant = chat.participants.find(p => p?.user && p.user._id !== user._id)?.user;
+      const isOnline = otherParticipant?._id ? onlineUsers.has(otherParticipant._id) : false;
       return {
         name: otherParticipant ? `${otherParticipant.firstName} ${otherParticipant.lastName}` : 'Unknown',
         avatar: otherParticipant?.photo?.url || null,
@@ -89,12 +97,13 @@ const ChatSidebar = ({
   
   // Add users that don't have existing chats (excluding current user)
   filteredUsers.forEach(u => {
-    // Skip current user
-    if (u._id === user?._id) return;
-    
+    // Skip if user or _id is missing
+    if (!u || !u._id || !user || !user._id || u._id === user._id) return;
+
     const hasExistingChat = chats.some(chat => 
-      chat.type === 'private' && 
-      chat.participants.some(p => p.user._id === u._id)
+      chat && chat.type === 'private' && 
+      Array.isArray(chat.participants) &&
+      chat.participants.some(p => p && p.user && p.user._id === u._id)
     );
     if (!hasExistingChat) {
       combinedList.push({

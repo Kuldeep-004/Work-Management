@@ -7,14 +7,48 @@ import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
-// Get all automations for the logged-in user (admin can see all)
+// Get all automations for the logged-in user (admin sees only their own)
 router.get('/', protect, async (req, res) => {
   try {
-    const query = req.user.role === 'Admin' ? {} : { createdBy: req.user._id };
+    const query = { createdBy: req.user._id };
     const automations = await Automation.find(query).sort({ createdAt: -1 });
     res.json(automations);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch automations' });
+  }
+});
+
+// Get automation templates pending verification (MUST be before /:id route)
+router.get('/templates/pending', protect, async (req, res) => {
+  try {
+    // Only admins and task verifiers can see pending templates
+    const isAdmin = req.user.role === 'Admin';
+    const isTaskVerifier = Array.isArray(req.user.role2) 
+      ? req.user.role2.includes('Task Verifier')
+      : req.user.role2 === 'Task Verifier';
+    
+    if (!isAdmin && !isTaskVerifier) {
+      return res.status(403).json({ message: 'Access denied. Admin or Task Verifier role required.' });
+    }
+
+    // Find all automations that have task templates with verificationStatus: 'pending'
+    const automations = await Automation.find({
+      'taskTemplate.verificationStatus': 'pending'
+    })
+    .populate('createdBy', 'firstName lastName profilePicture')
+    .sort({ createdAt: -1 });
+
+    // Filter to only return automations with pending task templates
+    const pendingAutomations = automations.map(automation => ({
+      ...automation.toObject(),
+      taskTemplate: automation.taskTemplate.filter(template => template.verificationStatus === 'pending')
+    })).filter(automation => automation.taskTemplate.length > 0);
+
+    console.log('Found pending automation templates:', pendingAutomations.length);
+    res.json(pendingAutomations);
+  } catch (err) {
+    console.error('Error fetching pending automation templates:', err);
+    res.status(500).json({ message: 'Failed to fetch pending automation templates', error: err.message });
   }
 });
 
@@ -246,7 +280,8 @@ router.post('/:id/tasks', protect, async (req, res) => {
       dueDate,
       targetDate,
       verificationAssignedTo,
-      billed: billed !== undefined ? billed : false
+      billed: billed !== undefined ? billed : false,
+      verificationStatus: 'pending' // Explicitly set pending status for approval
     };
 
     try {
@@ -365,6 +400,153 @@ router.post('/reset-monthly-status', protect, async (req, res) => {
   }
 });
 
+// Get automation templates pending for verification
+router.get('/templates/for-verification', protect, async (req, res) => {
+  try {
+    let isTaskVerifier = false;
+    if (Array.isArray(req.user.role2)) {
+      isTaskVerifier = req.user.role2.includes('Task Verifier');
+    } else {
+      isTaskVerifier = req.user.role2 === 'Task Verifier';
+    }
+    
+    if (req.user.role !== 'Admin' && !isTaskVerifier) {
+      return res.status(403).json({ message: 'Not authorized to verify automation templates' });
+    }
+
+    // Get all automations with pending task templates
+    const automations = await Automation.find({
+      'taskTemplate.verificationStatus': 'pending'
+    })
+    .populate('createdBy', 'firstName lastName photo')
+    .populate('taskTemplate.assignedTo', 'firstName lastName photo')
+    .populate('taskTemplate.verificationAssignedTo', 'firstName lastName photo')
+    .sort({ createdAt: -1 });
+
+    // Extract only pending templates with automation info
+    const pendingTemplates = [];
+    for (const automation of automations) {
+      for (const template of automation.taskTemplate) {
+        if (template.verificationStatus === 'pending') {
+          pendingTemplates.push({
+            _id: template._id,
+            automationId: automation._id,
+            automationName: automation.name,
+            automationDescription: automation.description,
+            createdBy: automation.createdBy,
+            createdAt: automation.createdAt,
+            title: template.title,
+            description: template.description,
+            clientName: template.clientName,
+            clientGroup: template.clientGroup,
+            workType: template.workType,
+            assignedTo: template.assignedTo,
+            priority: template.priority,
+            inwardEntryDate: template.inwardEntryDate,
+            inwardEntryTime: template.inwardEntryTime,
+            dueDate: template.dueDate,
+            targetDate: template.targetDate,
+            verificationAssignedTo: template.verificationAssignedTo,
+            billed: template.billed,
+            verificationStatus: template.verificationStatus,
+            files: template.files
+          });
+        }
+      }
+    }
+
+    res.json(pendingTemplates);
+  } catch (error) {
+    console.error('Error fetching automation templates for verification:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Verify automation template (approve or reject)
+router.post('/templates/:templateId/verify', protect, async (req, res) => {
+  try {
+    let isTaskVerifier = false;
+    if (Array.isArray(req.user.role2)) {
+      isTaskVerifier = req.user.role2.includes('Task Verifier');
+    } else {
+      isTaskVerifier = req.user.role2 === 'Task Verifier';
+    }
+    
+    if (req.user.role !== 'Admin' && !isTaskVerifier) {
+      return res.status(403).json({ message: 'Not authorized to verify automation templates' });
+    }
+
+    const { action, comments } = req.body; // action can be 'approve' or 'reject'
+    const templateId = req.params.templateId;
+
+    // Find the automation containing this template
+    const automation = await Automation.findOne({
+      'taskTemplate._id': templateId
+    });
+
+    if (!automation) {
+      return res.status(404).json({ message: 'Automation template not found' });
+    }
+
+    // Find the specific template
+    const template = automation.taskTemplate.id(templateId);
+    if (!template) {
+      return res.status(404).json({ message: 'Template not found' });
+    }
+
+    if (action === 'approve') {
+      template.verificationStatus = 'completed';
+      await automation.save();
+
+      // Log template approval activity
+      await ActivityLogger.logSystemActivity(
+        req.user._id,
+        'automation_template_approved',
+        automation._id,
+        `Approved automation template "${template.title}" for automation "${automation.name}"`,
+        { verificationStatus: 'pending' },
+        { verificationStatus: 'completed', verificationComments: comments },
+        req,
+        {
+          templateTitle: template.title,
+          automationName: automation.name,
+          clientName: template.clientName
+        }
+      );
+
+      return res.json({ message: 'Automation template approved successfully' });
+    } else if (action === 'reject') {
+      // Log template rejection before removal
+      await ActivityLogger.logSystemActivity(
+        req.user._id,
+        'automation_template_rejected',
+        automation._id,
+        `Rejected and removed automation template "${template.title}" from automation "${automation.name}"`,
+        { verificationStatus: 'pending' },
+        { verificationStatus: 'rejected', verificationComments: comments },
+        req,
+        {
+          templateTitle: template.title,
+          automationName: automation.name,
+          clientName: template.clientName,
+          reason: comments
+        }
+      );
+
+      // Remove the template from the automation
+      automation.taskTemplate.id(templateId).remove();
+      await automation.save();
+
+      return res.json({ message: 'Automation template rejected and removed successfully' });
+    } else {
+      return res.status(400).json({ message: 'Invalid action' });
+    }
+  } catch (error) {
+    console.error('Error verifying automation template:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Delete an automation
 router.delete('/:id', protect, async (req, res) => {
   try {
@@ -407,6 +589,94 @@ router.delete('/:id', protect, async (req, res) => {
   } catch (err) {
     console.error('Error deleting automation:', err);
     res.status(500).json({ message: 'Failed to delete automation', error: err.message });
+  }
+});
+
+// Verify automation template (approve/reject) - moved before /:automationId routes
+router.put('/:automationId/templates/:templateId/verify', protect, async (req, res) => {
+  try {
+    const { action } = req.body; // 'approve' or 'reject'
+    
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ message: 'Action must be either "approve" or "reject"' });
+    }
+
+    // Only admins and task verifiers can verify templates
+    const isAdmin = req.user.role === 'Admin';
+    const isTaskVerifier = Array.isArray(req.user.role2) 
+      ? req.user.role2.includes('Task Verifier')
+      : req.user.role2 === 'Task Verifier';
+    
+    if (!isAdmin && !isTaskVerifier) {
+      return res.status(403).json({ message: 'Access denied. Admin or Task Verifier role required.' });
+    }
+
+    const automation = await Automation.findById(req.params.automationId);
+    if (!automation) {
+      return res.status(404).json({ message: 'Automation not found' });
+    }
+
+    const template = automation.taskTemplate.id(req.params.templateId);
+    if (!template) {
+      return res.status(404).json({ message: 'Template not found' });
+    }
+
+    if (action === 'approve') {
+      // Approve: Set verification status to 'completed'
+      template.verificationStatus = 'completed';
+      await automation.save();
+
+      // Log the approval action
+      await ActivityLogger.logSystemActivity(
+        req.user._id,
+        'automation_task_template_updated',
+        automation._id,
+        `Approved automation template "${template.title}" in automation "${automation.name}"`,
+        null,
+        { 
+          automationName: automation.name,
+          templateTitle: template.title,
+          templateId: template._id,
+          action: 'approved'
+        },
+        req
+      );
+
+      res.json({ 
+        message: `Template approved successfully`,
+        automation,
+        template
+      });
+    } else if (action === 'reject') {
+      // Reject: Remove the template from the automation
+      const templateTitle = template.title;
+      automation.taskTemplate.pull(req.params.templateId);
+      await automation.save();
+
+      // Log the rejection action
+      await ActivityLogger.logSystemActivity(
+        req.user._id,
+        'automation_task_template_deleted',
+        automation._id,
+        `Rejected and removed automation template "${templateTitle}" from automation "${automation.name}"`,
+        null,
+        { 
+          automationName: automation.name,
+          templateTitle: templateTitle,
+          templateId: req.params.templateId,
+          action: 'rejected'
+        },
+        req
+      );
+
+      res.json({ 
+        message: `Template rejected and removed successfully`,
+        automation
+      });
+    }
+  } catch (err) {
+    console.error('Error verifying automation template:', err);
+    res.status(500).json({ message: 'Failed to verify template', error: err.message });
   }
 });
 

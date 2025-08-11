@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import defaultProfile from '../assets/avatar.jpg';
@@ -90,7 +90,6 @@ const STATUS_OPTIONS = [
   { value: 'yet_to_start', label: 'Yet to Start' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'completed', label: 'Completed' },
-  { value: 'reject', label: 'Reject' },
 ];
 
 // Add at the top, after other useRef/useState:
@@ -134,12 +133,38 @@ const AdvancedTaskTable = ({
   const [prevColumnOrder, setPrevColumnOrder] = useState([]);
   const isMounted = useRef(true);
   
-  // Get columns based on task type, or use provided allColumns
-  const ALL_COLUMNS = allColumns || getColumnsForTaskType(taskType);
-  
   // State for dynamic priorities
   const [dynamicPriorities, setDynamicPriorities] = useState([]);
   const [prioritiesLoaded, setPrioritiesLoaded] = useState(false);
+
+  // State for custom columns
+  const [customColumns, setCustomColumns] = useState([]);
+  const [customColumnsLoaded, setCustomColumnsLoaded] = useState(false);
+  
+  // Get columns based on task type, or use provided allColumns, plus custom columns
+  const getExtendedColumns = () => {
+    const baseColumns = allColumns || getColumnsForTaskType(taskType);
+    
+    if (!customColumnsLoaded || customColumns.length === 0) {
+      return baseColumns;
+    }
+
+    // Add custom columns after the base columns
+    const customCols = customColumns.map(col => ({
+      id: `custom_${col.name}`,
+      label: col.label,
+      defaultWidth: 150,
+      isCustom: true,
+      customColumn: col
+    }));
+
+    return [...baseColumns, ...customCols];
+  };
+
+  // Memoized ALL_COLUMNS that updates when custom columns change
+  const ALL_COLUMNS = useMemo(() => {
+    return getExtendedColumns();
+  }, [allColumns, taskType, customColumns, customColumnsLoaded]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -171,6 +196,30 @@ const AdvancedTaskTable = ({
     };
 
     fetchPriorities();
+  }, [user?.token]);
+
+  // Fetch custom columns
+  useEffect(() => {
+    const fetchCustomColumns = async () => {
+      if (!user?.token) return;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/custom-columns`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (response.ok) {
+          const columns = await response.json();
+          setCustomColumns(columns);
+        }
+      } catch (error) {
+        console.error('Error fetching custom columns:', error);
+        setCustomColumns([]);
+      } finally {
+        setCustomColumnsLoaded(true);
+      }
+    };
+
+    fetchCustomColumns();
   }, [user?.token]);
 
   // Get current priority options (dynamic + static fallback)
@@ -215,6 +264,13 @@ const AdvancedTaskTable = ({
   const [showComments, setShowComments] = useState(false);
   const [editingDescriptionTaskId, setEditingDescriptionTaskId] = useState(null);
   const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
+  
+  // Custom field editing states
+  const [editingCustomTextTaskId, setEditingCustomTextTaskId] = useState(null);
+  const [editingCustomTextColumnName, setEditingCustomTextColumnName] = useState('');
+  const [editingCustomTextValue, setEditingCustomTextValue] = useState('');
+  const [editingCustomTagsTaskId, setEditingCustomTagsTaskId] = useState(null);
+  const [editingCustomTagsColumnName, setEditingCustomTagsColumnName] = useState('');
   const [editingPriorityTaskId, setEditingPriorityTaskId] = useState(null);
   const [priorityLoading, setPriorityLoading] = useState(false);
   const priorityDropdownRef = useRef(null);
@@ -230,12 +286,48 @@ const AdvancedTaskTable = ({
   const [verifierLoading, setVerifierLoading] = useState(false);
   const verifierDropdownRef = useRef(null);
 
+
   // State for search in verifier dropdown (should be inside component, not inside render)
   const [verifierSearch, setVerifierSearch] = useState('');
 
   // Add at the top, after other useRef/useState:
   const guideDropdownRef = useRef(null);
   const [openGuideDropdownTaskId, setOpenGuideDropdownTaskId] = useState(null);
+
+  // --- Dropdown close on outside click ---
+  useEffect(() => {
+    function handleClickOutside(event) {
+      // Priority dropdown
+      if (editingPriorityTaskId && priorityDropdownRef.current && !priorityDropdownRef.current.contains(event.target)) {
+        setEditingPriorityTaskId(null);
+      }
+      // Verification dropdown
+      if (editingVerificationTaskId && verificationDropdownRef.current && !verificationDropdownRef.current.contains(event.target)) {
+        setEditingVerificationTaskId(null);
+      }
+      // Status dropdown
+      if (editingStatusTaskId && statusDropdownRef.current && !statusDropdownRef.current.contains(event.target)) {
+        setEditingStatusTaskId(null);
+      }
+      // Verifier dropdown
+      if (editingVerifierTaskId && verifierDropdownRef.current && !verifierDropdownRef.current.contains(event.target)) {
+        setEditingVerifierTaskId(null);
+      }
+      // Guide dropdown
+      if (openGuideDropdownTaskId && guideDropdownRef.current && !guideDropdownRef.current.contains(event.target)) {
+        setOpenGuideDropdownTaskId(null);
+      }
+      // Custom tags dropdown
+      if (editingCustomTagsTaskId && priorityDropdownRef.current && !priorityDropdownRef.current.contains(event.target)) {
+        setEditingCustomTagsTaskId(null);
+        setEditingCustomTagsColumnName('');
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [editingPriorityTaskId, editingVerificationTaskId, editingStatusTaskId, editingVerifierTaskId, openGuideDropdownTaskId, editingCustomTagsTaskId]);
 
   // Row drag-and-drop state
   const [draggedTaskId, setDraggedTaskId] = useState(null);
@@ -472,6 +564,88 @@ const AdvancedTaskTable = ({
       toast.error(error.message || 'Failed to update status');
     }
     setEditingDescriptionTaskId(null);
+  };
+
+  // Handle custom text field editing
+  const handleCustomTextEditSave = async (task, columnName) => {
+    const currentValue = task.customFields?.[columnName] || '';
+    if (editingCustomTextValue === currentValue) {
+      setEditingCustomTextTaskId(null);
+      setEditingCustomTextColumnName('');
+      setEditingCustomTextValue('');
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/custom-fields`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          customFields: {
+            ...task.customFields,
+            [columnName]: editingCustomTextValue
+          }
+        })
+      });
+      
+      if (!response.ok) throw new Error('Failed to update custom field');
+      
+      // Update local state
+      if (onTaskUpdate) {
+        onTaskUpdate(task._id, (prevTask) => ({
+          ...prevTask,
+          customFields: {
+            ...prevTask.customFields,
+            [columnName]: editingCustomTextValue
+          }
+        }));
+      }
+      toast.success('Custom field updated');
+    } catch (error) {
+      toast.error(error.message || 'Failed to update custom field');
+    }
+    
+    setEditingCustomTextTaskId(null);
+    setEditingCustomTextColumnName('');
+    setEditingCustomTextValue('');
+  };
+
+  // Handle custom tags field change
+  const handleCustomTagsChange = async (task, columnName, newValue) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/custom-fields`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          customFields: {
+            ...task.customFields,
+            [columnName]: newValue
+          }
+        })
+      });
+      
+      if (!response.ok) throw new Error('Failed to update custom field');
+      
+      // Update local state
+      if (onTaskUpdate) {
+        onTaskUpdate(task._id, (prevTask) => ({
+          ...prevTask,
+          customFields: {
+            ...prevTask.customFields,
+            [columnName]: newValue
+          }
+        }));
+      }
+      toast.success('Custom field updated');
+    } catch (error) {
+      toast.error(error.message || 'Failed to update custom field');
+    }
   };
 
   const handlePriorityChange = async (task, newPriority) => {
@@ -2120,6 +2294,200 @@ const AdvancedTaskTable = ({
                               );
                             
                             default:
+                              // Check if this is a custom column
+                              if (colId.startsWith('custom_')) {
+                                const customColumnName = colId.replace('custom_', '');
+                                const columnDef = customColumns.find(col => col.name === customColumnName);
+                                const customValue = task.customFields?.[customColumnName];
+                                
+                                if (columnDef) {
+                                  return (
+                                    <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} 
+                                        style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
+                                      <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                                        {columnDef.type === 'checkbox' ? (
+                                          <input 
+                                            type="checkbox" 
+                                            checked={customValue || false}
+                                            onChange={async (e) => {
+                                              const newValue = e.target.checked;
+                                              const prevValue = customValue;
+                                              // Optimistically update local state
+                                              if (onTaskUpdate) {
+                                                onTaskUpdate(task._id, (prevTask) => ({
+                                                  ...prevTask,
+                                                  customFields: {
+                                                    ...prevTask.customFields,
+                                                    [customColumnName]: newValue
+                                                  }
+                                                }));
+                                              }
+                                              // Save to MongoDB
+                                              try {
+                                                const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/custom-fields`, {
+                                                  method: 'PATCH',
+                                                  headers: {
+                                                    'Content-Type': 'application/json',
+                                                    Authorization: `Bearer ${user.token}`,
+                                                  },
+                                                  body: JSON.stringify({
+                                                    customFields: {
+                                                      ...task.customFields,
+                                                      [customColumnName]: newValue
+                                                    }
+                                                  })
+                                                });
+                                                if (!response.ok) {
+                                                  // Revert local state if failed
+                                                  if (onTaskUpdate) {
+                                                    onTaskUpdate(task._id, (prevTask) => ({
+                                                      ...prevTask,
+                                                      customFields: {
+                                                        ...prevTask.customFields,
+                                                        [customColumnName]: prevValue
+                                                      }
+                                                    }));
+                                                  }
+                                                  toast.error('Failed to save changes');
+                                                }
+                                              } catch (error) {
+                                                // Revert local state if error
+                                                if (onTaskUpdate) {
+                                                  onTaskUpdate(task._id, (prevTask) => ({
+                                                    ...prevTask,
+                                                    customFields: {
+                                                      ...prevTask.customFields,
+                                                      [customColumnName]: prevValue
+                                                    }
+                                                  }));
+                                                }
+                                                toast.error('Failed to save changes');
+                                              }
+                                            }}
+                                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                          />
+                                        ) : columnDef.type === 'tags' ? (
+                                          // Tags dropdown (similar to priority)
+                                          <div 
+                                            style={{ 
+                                              cursor: 'pointer',
+                                              position: 'relative',
+                                              zIndex: (editingCustomTagsTaskId === task._id && editingCustomTagsColumnName === customColumnName) ? 50 : 'auto',
+                                            }}
+                                            onClick={e => {
+                                              e.stopPropagation();
+                                              const rect = e.currentTarget.getBoundingClientRect();
+                                              setDropdownPosition({
+                                                top: rect.bottom + window.scrollY,
+                                                left: rect.left + window.scrollX,
+                                              });
+                                              setEditingCustomTagsTaskId(task._id);
+                                              setEditingCustomTagsColumnName(customColumnName);
+                                            }}
+                                          >
+                                            <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                              {customValue || columnDef.defaultValue || 'Select...'}
+                                            </span>
+                                            
+                                            {/* Show dropdown as portal if open */}
+                                            {editingCustomTagsTaskId === task._id && editingCustomTagsColumnName === customColumnName && ReactDOM.createPortal(
+                                              <div
+                                                ref={priorityDropdownRef}
+                                                style={{
+                                                  position: 'absolute',
+                                                  top: dropdownPosition.top,
+                                                  left: dropdownPosition.left,
+                                                  minWidth: 160,
+                                                  background: '#fff',
+                                                  border: '1px solid #e5e7eb',
+                                                  borderRadius: 8,
+                                                  boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                                                  padding: 8,
+                                                  zIndex: 9999,
+                                                }}
+                                              >
+                                                {columnDef.options && columnDef.options.map(option => (
+                                                  <div
+                                                    key={option}
+                                                    style={{
+                                                      display: 'flex',
+                                                      alignItems: 'center',
+                                                      gap: 8,
+                                                      padding: '5px 12px',
+                                                      borderRadius: 6,
+                                                      cursor: 'pointer',
+                                                      background: customValue === option ? '#f3f4f6' : 'transparent',
+                                                      marginBottom: 2,
+                                                      transition: 'background 0.15s',
+                                                    }}
+                                                    onClick={e => {
+                                                      e.stopPropagation();
+                                                      if (customValue !== option) {
+                                                        handleCustomTagsChange(task, customColumnName, option);
+                                                      }
+                                                      setEditingCustomTagsTaskId(null);
+                                                      setEditingCustomTagsColumnName('');
+                                                    }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = customValue === option ? '#f3f4f6' : 'transparent'}
+                                                  >
+                                                    <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                                      {option}
+                                                    </span>
+                                                    {customValue === option && (
+                                                      <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                      </svg>
+                                                    )}
+                                                  </div>
+                                                ))}
+                                              </div>,
+                                              document.body
+                                            )}
+                                          </div>
+                                        ) : (
+                                          // Text field with click-to-edit (similar to description)
+                                          <>
+                                            {editingCustomTextTaskId === task._id && editingCustomTextColumnName === customColumnName ? (
+                                              <textarea
+                                                className="w-full text-sm border-none outline-none bg-white resize-none p-0"
+                                                value={editingCustomTextValue}
+                                                style={{ minHeight: '20px', maxHeight: ' 100px' }}
+                                                onChange={e => setEditingCustomTextValue(e.target.value)}
+                                                onBlur={() => handleCustomTextEditSave(task, customColumnName)}
+                                                onKeyDown={(e) => {
+                                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                                    e.preventDefault();
+                                                    handleCustomTextEditSave(task, customColumnName);
+                                                  } else if (e.key === 'Escape') {
+                                                    setEditingCustomTextTaskId(null);
+                                                    setEditingCustomTextColumnName('');
+                                                    setEditingCustomTextValue('');
+                                                  }
+                                                }}
+                                                autoFocus
+                                              />
+                                            ) : (
+                                              <div
+                                                className="cursor-pointer min-h-1 p-1"
+                                                onClick={() => {
+                                                  setEditingCustomTextTaskId(task._id);
+                                                  setEditingCustomTextColumnName(customColumnName);
+                                                  setEditingCustomTextValue(customValue || columnDef.defaultValue || '');
+                                                }}
+                                              >
+                                                {customValue || columnDef.defaultValue || 'Click to edit...'}
+                                              </div>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    </td>
+                                  );
+                                }
+                              }
+                              
+                              // Default column handling
                               let cellValue = task[colId];
                               if ([
                                 'thirdVerificationAssignedTo',
@@ -2306,9 +2674,9 @@ const AdvancedTaskTable = ({
                                   scrollbarWidth: 'thin',
                                   msOverflowStyle: 'auto',
                                 }}
-                                title={task.status.replace(/_/g, ' ')}
+                                title={task.status ? task.status.replace(/_/g, ' ') : ''}
                               >
-                                {task.status.replace(/_/g, ' ')}
+                                {task.status ? task.status.replace(/_/g, ' ') : ''}
                               </span>
                               {/* Show dropdown as portal if open */}
                               {editingStatusTaskId === task._id && viewType === 'received'
@@ -2982,6 +3350,186 @@ const AdvancedTaskTable = ({
                         );
                       
                       default:
+                        // Check if this is a custom column
+                        if (colId.startsWith('custom_')) {
+                          const customColumnName = colId.replace('custom_', '');
+                          const columnDef = customColumns.find(col => col.name === customColumnName);
+                          const customValue = task.customFields?.[customColumnName];
+                          
+                          if (columnDef) {
+                            return (
+                              <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} 
+                                  style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
+                                <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
+                                  {columnDef.type === 'checkbox' ? (
+                                    <input 
+                                      type="checkbox" 
+                                      checked={customValue || false}
+                                      onChange={async (e) => {
+                                        // Handle checkbox change
+                                        const newValue = e.target.checked;
+                                        if (onTaskUpdate) {
+                                          // Update local state immediately
+                                          onTaskUpdate(task._id, (prevTask) => ({
+                                            ...prevTask,
+                                            customFields: {
+                                              ...prevTask.customFields,
+                                              [customColumnName]: newValue
+                                            }
+                                          }));
+                                          
+                                          // Update backend
+                                          try {
+                                            const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/custom-fields`, {
+                                              method: 'PATCH',
+                                              headers: {
+                                                'Content-Type': 'application/json',
+                                                Authorization: `Bearer ${user.token}`,
+                                              },
+                                              body: JSON.stringify({
+                                                customFields: { [customColumnName]: newValue }
+                                              }),
+                                            });
+                                            if (!response.ok) {
+                                              throw new Error('Failed to update custom field');
+                                            }
+                                          } catch (error) {
+                                            console.error('Error updating custom field:', error);
+                                            // Revert the change on error
+                                            onTaskUpdate(task._id, (prevTask) => ({
+                                              ...prevTask,
+                                              customFields: {
+                                                ...prevTask.customFields,
+                                                [customColumnName]: !newValue
+                                              }
+                                            }));
+                                          }
+                                        }
+                                      }}
+                                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                    />
+                                  ) : columnDef.type === 'tags' ? (
+                                    // Tags dropdown (similar to priority)
+                                    <div 
+                                      style={{ 
+                                        cursor: 'pointer',
+                                        position: 'relative',
+                                        zIndex: (editingCustomTagsTaskId === task._id && editingCustomTagsColumnName === customColumnName) ? 50 : 'auto',
+                                      }}
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        setDropdownPosition({
+                                          top: rect.bottom + window.scrollY,
+                                          left: rect.left + window.scrollX,
+                                        });
+                                        setEditingCustomTagsTaskId(task._id);
+                                        setEditingCustomTagsColumnName(customColumnName);
+                                      }}
+                                    >
+                                      <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                        {customValue || columnDef.defaultValue || 'Select...'}
+                                      </span>
+                                      
+                                      {/* Show dropdown as portal if open */}
+                                      {editingCustomTagsTaskId === task._id && editingCustomTagsColumnName === customColumnName && ReactDOM.createPortal(
+                                        <div
+                                          ref={priorityDropdownRef}
+                                          style={{
+                                            position: 'absolute',
+                                            top: dropdownPosition.top,
+                                            left: dropdownPosition.left,
+                                            minWidth: 160,
+                                            background: '#fff',
+                                            border: '1px solid #e5e7eb',
+                                            borderRadius: 8,
+                                            boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                                            padding: 8,
+                                            zIndex: 9999,
+                                          }}
+                                        >
+                                          {columnDef.options && columnDef.options.map(option => (
+                                            <div
+                                              key={option}
+                                              style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 8,
+                                                padding: '5px 12px',
+                                                borderRadius: 6,
+                                                cursor: 'pointer',
+                                                background: customValue === option ? '#f3f4f6' : 'transparent',
+                                                marginBottom: 2,
+                                                transition: 'background 0.15s',
+                                              }}
+                                              onClick={e => {
+                                                e.stopPropagation();
+                                                if (customValue !== option) {
+                                                  handleCustomTagsChange(task, customColumnName, option);
+                                                }
+                                                setEditingCustomTagsTaskId(null);
+                                                setEditingCustomTagsColumnName('');
+                                              }}
+                                              onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                                              onMouseLeave={e => e.currentTarget.style.background = customValue === option ? '#f3f4f6' : 'transparent'}
+                                            >
+                                              <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                                {option}
+                                              </span>
+                                              {customValue === option && (
+                                                <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>,
+                                        document.body
+                                      )}
+                                    </div>
+                                  ) : (
+                                    // Text field with click-to-edit (similar to description)
+                                    <>
+                                      {editingCustomTextTaskId === task._id && editingCustomTextColumnName === customColumnName ? (
+                                        <textarea
+                                          className="w-full text-sm border-none outline-none bg-white resize-none p-1"
+                                          value={editingCustomTextValue}
+                                          style={{ minHeight: '20px', maxHeight: '100px' }}
+                                          onChange={e => setEditingCustomTextValue(e.target.value)}
+                                          onBlur={() => handleCustomTextEditSave(task, customColumnName)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                              e.preventDefault();
+                                              handleCustomTextEditSave(task, customColumnName);
+                                            } else if (e.key === 'Escape') {
+                                              setEditingCustomTextTaskId(null);
+                                              setEditingCustomTextColumnName('');
+                                              setEditingCustomTextValue('');
+                                            }
+                                          }}
+                                          autoFocus
+                                        />
+                                      ) : (
+                                        <div
+                                          className="cursor-pointer min-h-5 p-1"
+                                          onClick={() => {
+                                            setEditingCustomTextTaskId(task._id);
+                                            setEditingCustomTextColumnName(customColumnName);
+                                            setEditingCustomTextValue(customValue || columnDef.defaultValue || '');
+                                          }}
+                                        >
+                                          {customValue || columnDef.defaultValue || 'Click to edit...'}
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          }
+                        }
+                        
+                        // Default column handling
                         let cellValue = task[colId];
                         if ([
                           'thirdVerificationAssignedTo',

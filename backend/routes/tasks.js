@@ -1,6 +1,7 @@
 import express from 'express';
 import Task from '../models/Task.js';
 import Priority from '../models/Priority.js';
+import CustomColumn from '../models/CustomColumn.js';
 import User from '../models/User.js';
 import { protect } from '../middleware/authMiddleware.js';
 import mongoose from 'mongoose';
@@ -222,7 +223,7 @@ router.get('/', protect, async (req, res) => {
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy createdAt updatedAt files comments billed selfVerification')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy createdAt updatedAt files comments billed selfVerification customFields')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -248,7 +249,7 @@ router.get('/all', protect, async (req, res) => {
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
         .populate('guides', 'firstName lastName photo')
-        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields')
         .sort({ createdAt: -1 });
     } else if (req.user.role === 'Senior') {
       // Senior: see own assigned/received tasks and all tasks assigned to/assigned by Freshers of their team
@@ -276,7 +277,7 @@ router.get('/all', protect, async (req, res) => {
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
         .populate('guides', 'firstName lastName photo')
-        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields')
         .sort({ createdAt: -1 });
     } else if (req.user.role === 'Team Head') {
       // Team Head: see own assigned/received tasks and all tasks assigned by/assigned to any Senior
@@ -301,7 +302,7 @@ router.get('/all', protect, async (req, res) => {
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
         .populate('guides', 'firstName lastName photo')
-        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields')
         .sort({ createdAt: -1 });
     } else {
       return res.status(403).json({ message: 'You are not authorized to access all tasks' });
@@ -337,7 +338,7 @@ router.get('/for-verification', protect, async (req, res) => {
         .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
         .populate('originalAssignee', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
-        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
+        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields')
         .sort({ createdAt: -1 });
       res.json(tasks);
       return;
@@ -362,7 +363,7 @@ router.get('/for-verification', protect, async (req, res) => {
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('originalAssignee', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields')
       .sort({ createdAt: -1 });
     // Filter: if user is first verifier, exclude tasks with status 'first_verified'
     const filteredTasks = tasks.filter(task => {
@@ -395,7 +396,7 @@ router.get('/under-verification', protect, async (req, res) => {
       .populate('originalAssignee', 'firstName lastName photo')
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments billed selfVerification')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments billed selfVerification customFields')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -432,7 +433,7 @@ router.get('/type/:type', protect, async (req, res) => {
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments billed selfVerification')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments taskType createdAt updatedAt files comments billed selfVerification customFields')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -479,7 +480,7 @@ router.get('/assigned', protect, async (req, res) => {
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -573,7 +574,7 @@ router.get('/received', protect, async (req, res) => {
       .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+      .select('title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -596,7 +597,7 @@ router.get('/received/guidance', protect, async (req, res) => {
       .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides')
+      .select('title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -615,7 +616,7 @@ router.get('/:id', protect, async (req, res) => {
       .populate('assignedTo', 'firstName lastName photo group')
       .populate('assignedBy', 'firstName lastName photo group')
       .populate('guides', 'firstName lastName photo')
-      .select('title description clientName clientGroup workType assignedTo assignedBy priority inwardEntryDate inwardEntryTime dueDate targetDate billed');
+      .select('title description clientName clientGroup workType assignedTo assignedBy priority inwardEntryDate inwardEntryTime dueDate targetDate billed customFields');
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
     }
@@ -642,12 +643,36 @@ router.post('/', protect, canAssignTask, async (req, res) => {
       dueDate,
       targetDate,
       verificationAssignedTo,
-      billed
+      billed,
+customFields // Add custom fields to destructuring
     } = req.body;
 
     // Validate priority
     if (priority && !(await isValidPriority(priority))) {
       return res.status(400).json({ message: 'Invalid priority value' });
+    }
+
+    // Debug: Log incoming customFields for PATCH /:taskId/custom-fields
+    if (req.method === 'PATCH' && req.originalUrl.includes('/custom-fields')) {
+      console.log('PATCH /:taskId/custom-fields received customFields:', customFields);
+    }
+
+    // Only process customFields if provided (for PATCH endpoint)
+    let processedCustomFields = undefined;
+    if (customFields) {
+      // Get all active custom columns to validate and set defaults
+      const activeColumns = await CustomColumn.find({ isActive: true });
+      processedCustomFields = {};
+      for (const column of activeColumns) {
+        if (customFields.hasOwnProperty(column.name)) {
+          // Use provided value
+          processedCustomFields[column.name] = customFields[column.name];
+        } else {
+          // Use default value
+          processedCustomFields[column.name] = column.defaultValue;
+        }
+
+      }
     }
 
     const createdTasks = [];
@@ -684,7 +709,8 @@ router.post('/', protect, canAssignTask, async (req, res) => {
         verificationAssignedTo,
         billed: billed !== undefined ? billed : true,
         selfVerification: req.body.selfVerification ?? false,
-        verificationStatus
+        verificationStatus,
+        customFields: processedCustomFields // Add custom fields
       });
       const savedTask = await task.save();
       createdTasks.push(savedTask);
@@ -1733,6 +1759,37 @@ router.put('/:id/guides', protect, async (req, res) => {
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
     }
+    res.json(task);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PATCH /:taskId/custom-fields - update custom fields for a task
+router.patch('/:taskId/custom-fields', protect, async (req, res) => {
+  try {
+    const { customFields } = req.body;
+    const task = await Task.findById(req.params.taskId);
+    
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Update custom fields
+    task.customFields = { ...task.customFields, ...customFields };
+    await task.save();
+
+    // Log the update
+    await ActivityLogger.logTaskActivity(
+      req.user._id,
+      'task_custom_fields_updated',
+      task._id,
+      `Updated custom fields for task "${task.title}"`,
+      null,
+      customFields,
+      req
+    );
+
     res.json(task);
   } catch (error) {
     res.status(500).json({ message: error.message });

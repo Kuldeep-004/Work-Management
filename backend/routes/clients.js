@@ -123,7 +123,7 @@ router.put('/:id', protect, checkRole(['Admin', 'Team Head', 'Senior']), async (
 // Delete a client
 router.delete('/:id', protect, async (req, res) => {
   try {
-    consol
+    
     const client = await Client.findById(req.params.id)
       .populate('group', 'name')
       .populate('workOffered', 'name');

@@ -152,7 +152,7 @@ const Cost = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-100">
-            {users.map((u) => (
+            {users.filter(u => u.status === 'approved').map((u) => (
               <tr key={u._id}>
                 <td className="px-4 py-2 whitespace-nowrap">{u.firstName} {u.lastName}</td>
                 <td className="px-4 py-2 whitespace-nowrap">{u.email}</td>

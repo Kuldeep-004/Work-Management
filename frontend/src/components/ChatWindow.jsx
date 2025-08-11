@@ -172,8 +172,9 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
   const handleUserSelect = async (selectedUser) => {
     // Check if chat already exists
     const existingChat = chats.find(chat => 
-      chat.type === 'private' && 
-      chat.participants.some(p => p.user._id === selectedUser._id)
+      chat && chat.type === 'private' && 
+      Array.isArray(chat.participants) &&
+      chat.participants.some(p => p && p.user && p.user._id === selectedUser?._id)
     );
 
     if (existingChat) {

@@ -22,6 +22,10 @@ const Clients = () => {
     status: 'Individual',
     workOffered: [],
     priority: 'A',
+    workSearch: '',
+    workDropdownOpen: false,
+    groupSearch: '',
+    groupDropdownOpen: false,
   });
   const [groupFormData, setGroupFormData] = useState({
     name: ''
@@ -257,6 +261,9 @@ const Clients = () => {
     );
   }
 
+  // Group search state
+  const [groupSearchTerm, setGroupSearchTerm] = useState("");
+
   return (
     <div className="p-4 sm:p-6 md:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -280,10 +287,24 @@ const Clients = () => {
         </div>
       </div>
 
+      {/* Group Search Bar */}
+      <div className="mb-4 max-w-xs">
+        <input
+          type="text"
+          value={groupSearchTerm}
+          onChange={e => setGroupSearchTerm(e.target.value)}
+          placeholder="Search groups..."
+          className="w-full border rounded-md px-3 py-2 text-sm"
+        />
+      </div>
+
       {/* Clients List */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto scrollbar-hide">
-          {clientGroups.map((group) => {
+          {(groupSearchTerm
+            ? clientGroups.filter(g => g.name.toLowerCase().includes(groupSearchTerm.toLowerCase()))
+            : clientGroups
+          ).map((group) => {
             const groupClients = clients.filter(client => client.group._id === group._id);
             const priorityOrder = { A: 1, B: 2, C: 3, D: 4 };
             const sortedGroupClients = groupClients.sort((a, b) => (priorityOrder[a.priority] || 5) - (priorityOrder[b.priority] || 5));
@@ -385,8 +406,8 @@ const Clients = () => {
 
       {/* Add Client Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-white rounded-lg p-8 w-full max-w-md">
+        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white rounded-lg p-8 w-full max-w-xl">
             <h2 className="text-2xl font-bold mb-6">Add New Client</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -406,20 +427,64 @@ const Clients = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Client Group
                 </label>
-                <div className="flex gap-2">
-                  <select
-                    value={formData.group}
-                    onChange={(e) => setFormData({ ...formData, group: e.target.value })}
-                    className="flex-1 border rounded-md px-3 py-2"
-                    required
-                  >
-                    <option value="">Select a group</option>
-                    {clientGroups.map((group) => (
-                      <option key={group._id} value={group._id}>
-                        {group.name}
-                      </option>
-                    ))}
-                  </select>
+                <div className="flex gap-2 relative">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={formData.groupSearch || ''}
+                      onChange={e => {
+                        setFormData({
+                          ...formData,
+                          groupSearch: e.target.value,
+                          group: ''
+                        });
+                      }}
+                      onFocus={() => setFormData({ ...formData, groupDropdownOpen: true })}
+                      onClick={() => setFormData({ ...formData, groupDropdownOpen: true })}
+                      onBlur={e => {
+                        // Delay to allow click event on dropdown
+                        setTimeout(() => {
+                          setFormData(f => ({ ...f, groupDropdownOpen: false }));
+                        }, 120);
+                      }}
+                      placeholder="Search or select group"
+                      className="w-full border rounded-md px-3 py-2"
+                      autoComplete="off"
+                    />
+                    {formData.groupDropdownOpen && (
+                      <div className="absolute z-50 bg-white border rounded-md mt-1 w-full max-h-40 overflow-y-auto shadow-lg">
+                        {(formData.groupSearch ?
+                          clientGroups.filter(group =>
+                            group.name.toLowerCase().includes((formData.groupSearch || '').toLowerCase())
+                          ) : clientGroups
+                        ).length === 0 ? (
+                          <div className="px-3 py-2 text-gray-400 text-sm">No groups found</div>
+                        ) : (
+                          (formData.groupSearch ?
+                            clientGroups.filter(group =>
+                              group.name.toLowerCase().includes((formData.groupSearch || '').toLowerCase())
+                            ) : clientGroups
+                          ).map(group => (
+                            <div
+                              key={group._id}
+                              className={`px-3 py-2 cursor-pointer hover:bg-blue-100 text-sm ${formData.group === group._id ? 'bg-blue-50 font-semibold' : ''}`}
+                              onMouseDown={e => {
+                                e.preventDefault();
+                                setFormData({
+                                  ...formData,
+                                  group: group._id,
+                                  groupSearch: group.name,
+                                  groupDropdownOpen: false
+                                });
+                              }}
+                            >
+                              {group.name}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => setIsGroupModalOpen(true)}
@@ -428,6 +493,8 @@ const Clients = () => {
                     New Group
                   </button>
                 </div>
+                {/* Hidden select for form validation */}
+                <input type="hidden" required value={formData.group} onChange={() => {}} />
               </div>
 
               <div>
@@ -468,34 +535,75 @@ const Clients = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Work Offered
                 </label>
-                <div className="flex gap-2">
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) {
+                <div className="flex gap-2 relative">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={formData.workSearch || ''}
+                      onChange={e => {
                         setFormData({
                           ...formData,
-                          workOffered: [...formData.workOffered, e.target.value]
+                          workSearch: e.target.value,
+                          workDropdownOpen: true
                         });
-                      }
-                    }}
-                    className="flex-1 border rounded-md px-3 py-2"
-                  >
-                    <option value="">Select work type</option>
-                    {workTypes
-                      .filter(workType => !formData.workOffered.includes(workType._id))
-                      .map((workType, idx) => (
-                        <option key={workType._id ? `${workType._id}-${idx}` : idx} value={workType._id}>
-                          {workType.name}
-                        </option>
-                      ))}
-                  </select>
+                      }}
+                      onFocus={() => setFormData({ ...formData, workDropdownOpen: true })}
+                      onClick={() => setFormData({ ...formData, workDropdownOpen: true })}
+                      onBlur={e => {
+                        setTimeout(() => {
+                          setFormData(f => ({ ...f, workDropdownOpen: false }));
+                        }, 120);
+                      }}
+                      placeholder="Search or select work type"
+                      className="w-full border rounded-md px-3 py-2"
+                      autoComplete="off"
+                    />
+                    {formData.workDropdownOpen && (
+                      <div className="absolute z-50 bg-white border rounded-md mt-1 w-full max-h-40 overflow-y-auto shadow-lg">
+                        {(
+                          (formData.workSearch
+                            ? workTypes.filter(workType =>
+                                workType.name.toLowerCase().includes((formData.workSearch || '').toLowerCase()) &&
+                                !formData.workOffered.includes(workType._id)
+                              )
+                            : workTypes.filter(workType => !formData.workOffered.includes(workType._id))
+                          )
+                        ).length === 0 ? (
+                          <div className="px-3 py-2 text-gray-400 text-sm">No work types found</div>
+                        ) : (
+                          (formData.workSearch
+                            ? workTypes.filter(workType =>
+                                workType.name.toLowerCase().includes((formData.workSearch || '').toLowerCase()) &&
+                                !formData.workOffered.includes(workType._id)
+                              )
+                            : workTypes.filter(workType => !formData.workOffered.includes(workType._id))
+                          ).map(workType => (
+                            <div
+                              key={workType._id}
+                              className={`px-3 py-2 cursor-pointer hover:bg-blue-100 text-sm`}
+                              onMouseDown={e => {
+                                e.preventDefault();
+                                setFormData(f => ({
+                                  ...f,
+                                  workOffered: [...f.workOffered, workType._id],
+                                  workSearch: '',
+                                  workDropdownOpen: false
+                                }));
+                              }}
+                            >
+                              {workType.name}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => setIsWorkTypeModalOpen(true)}
                     className="bg-gray-100 px-3 py-2 rounded-md hover:bg-gray-200"
                   >
-                    New Work Type
+                    New
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-2">
@@ -584,7 +692,7 @@ const Clients = () => {
 
       {/* Add Work Type Modal */}
       {isWorkTypeModalOpen && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center">
+        <div className="fixed inset-0 z-51 bg-black/30 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-white rounded-lg p-8 w-full max-w-md">
             <h2 className="text-2xl font-bold mb-6">Add New Work Type</h2>
             <form onSubmit={handleWorkTypeSubmit} className="space-y-4">

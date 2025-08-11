@@ -6,6 +6,59 @@ import { API_BASE_URL } from '../apiConfig';
 import { ChevronDownIcon, ChevronUpIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 const TeamMembers = () => {
+  // Delete Team handler
+  const handleDeleteTeam = async (teamName) => {
+    const team = teams.find(t => t.name === teamName);
+    if (!team) {
+      toast.error('Team not found');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/teams/${team._id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete team');
+      }
+      setTeams(prev => prev.filter(t => t._id !== team._id));
+      setDeleteConfirm({ show: false, teamName: '' });
+      toast.success('Team deleted successfully!');
+    } catch (error) {
+      toast.error(error.message || 'Failed to delete team');
+    }
+  };
+  // Add Team handler
+  const handleAddTeam = async (e) => {
+    e.preventDefault();
+    if (!newTeamName.trim()) {
+      toast.error('Team name cannot be empty');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/teams`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ name: newTeamName.trim() })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to add team');
+      }
+      const createdTeam = await response.json();
+      setTeams((prev) => [...prev, createdTeam]);
+      setShowAddTeamModal(false);
+      setNewTeamName('');
+      toast.success('Team added successfully!');
+    } catch (error) {
+      toast.error(error.message || 'Failed to add team');
+    }
+  };
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -229,8 +282,8 @@ const TeamMembers = () => {
 
       {/* Add Team Modal */}
       {showAddTeamModal && (
-        <div className="fixed inset-0 backdrop-blur-sm bg-gray-600/30 overflow-y-auto h-full w-full flex items-center justify-center">
-          <div className="relative p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div className="fixed inset-0 z-50 bg-gray-600/30 overflow-y-auto h-full w-full flex items-center justify-center">
+          <div className="relative p-5 border w-96 shadow-lg rounded-md bg-white z-60">
             <div className="mt-3">
               <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">Add New Team</h3>
               <form onSubmit={handleAddTeam}>

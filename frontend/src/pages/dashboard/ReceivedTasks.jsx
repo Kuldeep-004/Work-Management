@@ -45,7 +45,11 @@ const ALL_COLUMNS = [
   { id: 'comments', label: 'Comments' },
 ];
 
-const DEFAULT_TAB = (taskType = 'execution') => {
+const DEFAULT_TAB = (taskType = 'execution', customColumns = []) => {
+  const baseColumns = ALL_COLUMNS.map(col => col.id);
+  const customCols = customColumns.map(col => `custom_${col.name}`);
+  const allColumns = [...baseColumns, ...customCols];
+  
   return {
     id: Date.now(),
     title: 'Tab 1',
@@ -54,9 +58,12 @@ const DEFAULT_TAB = (taskType = 'execution') => {
     sortOrder: 'desc',
     searchTerm: '',
     statusFilter: 'all',
-    visibleColumns: ALL_COLUMNS.map(col => col.id),
-    columnOrder: ALL_COLUMNS.map(col => col.id),
-    columnWidths: Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150])),
+    visibleColumns: allColumns,
+    columnOrder: allColumns,
+    columnWidths: Object.fromEntries([
+      ...ALL_COLUMNS.map(col => [col.id, col.defaultWidth || 150]),
+      ...customColumns.map(col => [`custom_${col.name}`, 150])
+    ]),
     activeTab: taskType,
   };
 };
@@ -92,14 +99,40 @@ const ReceivedTasks = () => {
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
 
-  // Get active tab object (defensive)
-  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0] || DEFAULT_TAB();
+  // Custom columns state
+  const [customColumns, setCustomColumns] = useState([]);
+  const [customColumnsLoaded, setCustomColumnsLoaded] = useState(false);
+
+  // Get active tab object (defensive) - use empty array for customColumns as fallback
+  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0] || DEFAULT_TAB('execution', customColumnsLoaded ? customColumns : []);
+
+  // Get extended columns including custom columns
+  const getExtendedColumns = () => {
+    const baseColumns = [...ALL_COLUMNS];
+    
+    if (!customColumnsLoaded || customColumns.length === 0) {
+      return baseColumns;
+    }
+
+    // Add custom columns after the base columns
+    const customCols = customColumns.map(col => ({
+      id: `custom_${col.name}`,
+      label: col.label,
+      defaultWidth: 150,
+      isCustom: true,
+      customColumn: col
+    }));
+
+    return [...baseColumns, ...customCols];
+  };
+
+  const extendedColumns = getExtendedColumns();
 
   // Tab actions
   const addTab = () => {
     const newId = Date.now();
     const currentTaskType = activeTabObj.activeTab || 'execution';
-    setTabs([...tabs, { ...DEFAULT_TAB(currentTaskType), id: newId, title: `Tab ${tabs.length + 1}` }]);
+    setTabs([...tabs, { ...DEFAULT_TAB(currentTaskType, customColumns), id: newId, title: `Tab ${tabs.length + 1}` }]);
     setActiveTabId(newId);
   };
   const closeTab = (id) => {
@@ -254,6 +287,30 @@ const ReceivedTasks = () => {
       fetchTaskCounts();
     }
   }, [user]);
+
+  // Fetch custom columns
+  useEffect(() => {
+    const fetchCustomColumns = async () => {
+      if (!user?.token) return;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/custom-columns`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (response.ok) {
+          const columns = await response.json();
+          setCustomColumns(columns);
+        }
+      } catch (error) {
+        console.error('Error fetching custom columns:', error);
+        setCustomColumns([]);
+      } finally {
+        setCustomColumnsLoaded(true);
+      }
+    };
+
+    fetchCustomColumns();
+  }, [user?.token]);
 
   useEffect(() => {
     const fetchData = async (url, setter) => {
@@ -615,13 +672,13 @@ const ReceivedTasks = () => {
           setTabs(migratedTabs);
           setActiveTabId(tabStates.activeTabId);
         } else if (isMounted) {
-          const defaultTab = DEFAULT_TAB();
+          const defaultTab = DEFAULT_TAB('execution', customColumns);
           setTabs([defaultTab]);
           setActiveTabId(defaultTab.id);
         }
       } catch {
         if (isMounted) {
-          const defaultTab = DEFAULT_TAB();
+          const defaultTab = DEFAULT_TAB('execution', customColumns);
           setTabs([defaultTab]);
           setActiveTabId(defaultTab.id);
         }
@@ -743,7 +800,7 @@ const ReceivedTasks = () => {
               <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56 animate-fade-in">
                 <div className="font-semibold text-gray-700 mb-2 text-sm">Show/Hide Columns</div>
                 <div className="max-h-56 overflow-y-auto pr-1 custom-scrollbar">
-                  {ALL_COLUMNS.map(col => (
+                  {extendedColumns.map(col => (
                     <label key={col.id} className="flex items-center space-x-2 mb-1 cursor-pointer hover:bg-blue-50 rounded px-2 py-1 transition-colors">
                       <input
                         type="checkbox"
@@ -807,13 +864,27 @@ const ReceivedTasks = () => {
           taskType={activeTabObj.activeTab}
           users={users}
           currentUser={user}
-          onTaskUpdate={(taskId, updater) => {
-            // Update task in the local state
+          onTaskUpdate={async (taskId, updater) => {
+            // Update local state immediately for UI responsiveness
             setTasks(prevTasks => prevTasks.map(task =>
               task._id === taskId ? updater(task) : task
             ));
-            // No need to call fetchTasks here as the AdvancedTaskTable component will
-            // handle refreshing data when needed for priority changes
+            // Debounce backend refetch to allow PATCH to complete and avoid UI flicker
+            setTimeout(async () => {
+              try {
+                const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+                  headers: { Authorization: `Bearer ${user.token}` }
+                });
+                if (res.ok) {
+                  const updatedTask = await res.json();
+                  setTasks(prevTasks => prevTasks.map(task =>
+                    task._id === taskId ? updatedTask : task
+                  ));
+                }
+              } catch (e) {
+                // Optionally handle error
+              }
+            }, 400); // 400ms delay to allow backend to persist change
           }}
           onTaskDelete={handleDeleteTask}
           onStatusChange={handleStatusChange}
@@ -831,7 +902,7 @@ const ReceivedTasks = () => {
           sortBy={activeTabObj.sortBy}
           tabId={activeTabObj.id}
           tabKey="receivedTasks"
-          allColumns={ALL_COLUMNS}
+          allColumns={extendedColumns}
         />
       </ErrorBoundary>
       <CreateTask

@@ -15,7 +15,7 @@ if (mongoose.connection.readyState === 0) {
 }
 
 // Run every 5 minutes
-cron.schedule('*/5 * * * *', async () => {
+cron.schedule('*/1 * * * *', async () => {
   await runAutomationCheck(false);
 });
 
@@ -50,6 +50,7 @@ export const runAutomationCheck = async (isManual = true) => {
     const monthlyAutomations = await Automation.find({ 
       triggerType: 'dayOfMonth',
       dayOfMonth: dayOfMonth,
+      // Remove the verification filter from database query - we'll check this in code
       // Add conditions to check if it hasn't been run this month yet
       $or: [
         // Either lastRunMonth doesn't exist
@@ -165,8 +166,13 @@ export const runAutomationCheck = async (isManual = true) => {
       
       let totalTasksCreated = 0;
       
-      // Process each task template in the array
+      // Process each task template individually - approved templates create tasks, pending ones are skipped
       for (const template of automation.taskTemplate) {
+        // Skip templates that haven't been approved yet - treat each template individually
+        if (!template.verificationStatus || template.verificationStatus !== 'completed') {
+          console.warn(`[AutomationScheduler] Skipping template "${template.title}" in automation ${automation._id}: template not approved yet (status: ${template.verificationStatus || 'undefined'}).`);
+          continue;
+        }
         const {
           title,
           description,
@@ -311,20 +317,41 @@ export const runAutomationCheck = async (isManual = true) => {
       }
       
       // For recurring automations (dayOfMonth, quarterly, halfYearly, yearly), 
-      // update lastRunDate and save for next run
+      // update lastRunDate and save for next run ONLY if tasks were actually created
       if (['dayOfMonth', 'quarterly', 'halfYearly', 'yearly'].includes(automation.triggerType) || !automation.triggerType) {
-        // Update the lastRunDate, lastRunMonth, and lastRunYear to track when it was executed
-        automation.lastRunDate = now;
-        automation.lastRunMonth = now.getMonth();
-        automation.lastRunYear = now.getFullYear();
-        await automation.save();
+        // Count how many approved templates this automation has
+        const approvedTemplateCount = automation.taskTemplate.filter(template => 
+          template.verificationStatus === 'completed'
+        ).length;
         
-        let nextRunInfo = 'next month';
-        if (automation.triggerType === 'quarterly') nextRunInfo = 'next quarter';
-        if (automation.triggerType === 'halfYearly') nextRunInfo = 'in 6 months';
-        if (automation.triggerType === 'yearly') nextRunInfo = 'next year';
+        // Debug logging to see what's happening
+        console.log(`[AutomationScheduler] DEBUG - Automation ${automation._id}: totalTasksCreated=${totalTasksCreated}, approvedTemplateCount=${approvedTemplateCount}, totalTemplates=${automation.taskTemplate.length}`);
         
-        console.log(`[AutomationScheduler] ${automation.triggerType} automation ${automation._id}: Created ${totalTasksCreated} tasks total. Will run ${nextRunInfo}.`);
+        if (totalTasksCreated > 0) {
+          // Update the lastRunDate, lastRunMonth, and lastRunYear to track when it was executed
+          automation.lastRunDate = now;
+          automation.lastRunMonth = now.getMonth();
+          automation.lastRunYear = now.getFullYear();
+          await automation.save();
+          
+          let nextRunInfo = 'next month';
+          if (automation.triggerType === 'quarterly') nextRunInfo = 'next quarter';
+          if (automation.triggerType === 'halfYearly') nextRunInfo = 'in 6 months';
+          if (automation.triggerType === 'yearly') nextRunInfo = 'next year';
+          
+          console.log(`[AutomationScheduler] ${automation.triggerType} automation ${automation._id}: Created ${totalTasksCreated} tasks from ${approvedTemplateCount} approved templates. Will run ${nextRunInfo}.`);
+        } else if (approvedTemplateCount === 0) {
+          // No approved templates at all - don't mark as run, will try again next run
+          console.log(`[AutomationScheduler] ${automation.triggerType} automation ${automation._id}: No approved templates found. Will try again next run.`);
+        } else {
+          // Had approved templates but no tasks were created (maybe due to errors) - still mark as run to avoid infinite retries
+          automation.lastRunDate = now;
+          automation.lastRunMonth = now.getMonth();
+          automation.lastRunYear = now.getFullYear();
+          await automation.save();
+          
+          console.log(`[AutomationScheduler] ${automation.triggerType} automation ${automation._id}: Had ${approvedTemplateCount} approved templates but no tasks were created. Marked as run to avoid infinite retries.`);
+        }
       } 
       // For dateAndTime automations, delete them after execution since they're one-time
       else if (automation.triggerType === 'dateAndTime') {

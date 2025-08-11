@@ -43,30 +43,79 @@ const ALL_COLUMNS = [
   { id: 'comments', label: 'Comments' },
 ];
 
-const DEFAULT_TAB = () => ({
-  id: Date.now(),
-  title: 'Tab 1',
-  filters: [],
-  sortBy: 'createdAt',
-  sortOrder: 'desc',
-  searchTerm: '',
-  statusFilter: 'all',
-  visibleColumns: ALL_COLUMNS.map(col => col.id),
-  activeTab: 'execution',
-});
-
 const AssignedTasks = () => {
   const { user, isAuthenticated } = useAuth();
+  
+  // Custom columns state
+  const [customColumns, setCustomColumns] = useState([]);
+  const [allColumns, setAllColumns] = useState(ALL_COLUMNS);
+
+  // Fetch custom columns
+  useEffect(() => {
+    const fetchCustomColumns = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/custom-columns`);
+        if (response.ok) {
+          const columns = await response.json();
+          setCustomColumns(columns);
+          
+          // Update all columns to include custom columns
+          const customCols = columns.filter(col => col.isActive).map(col => ({
+            id: col.name,
+            label: col.label
+          }));
+          
+          const updatedColumns = [...ALL_COLUMNS, ...customCols];
+          setAllColumns(updatedColumns);
+
+          // Update tabs to include new columns if they don't exist
+          setTabs(prevTabs => {
+            const savedTabs = localStorage.getItem('assignedTasksTabs');
+            if (savedTabs) {
+              const parsedTabs = JSON.parse(savedTabs);
+              // Merge saved tabs with new columns
+              return parsedTabs.map(tab => ({
+                ...tab,
+                visibleColumns: tab.visibleColumns || updatedColumns.map(col => col.id),
+                columnOrder: tab.columnOrder || updatedColumns.map(col => col.id),
+                columnWidths: tab.columnWidths || updatedColumns.reduce((acc, col) => ({ ...acc, [col.id]: 150 }), {}),
+              }));
+            }
+            return [DEFAULT_TAB(updatedColumns)];
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching custom columns:', error);
+      }
+    };
+
+    fetchCustomColumns();
+  }, []);
+
+  const DEFAULT_TAB = (columns = ALL_COLUMNS) => ({
+    id: Date.now(),
+    title: 'Tab 1',
+    filters: [],
+    sortBy: 'createdAt',
+    sortOrder: 'desc',
+    searchTerm: '',
+    statusFilter: 'all',
+    visibleColumns: columns.map(col => col.id),
+    activeTab: 'execution',
+    columnOrder: columns.map(col => col.id),
+    columnWidths: columns.reduce((acc, col) => ({ ...acc, [col.id]: 150 }), {}),
+  });
+
   // Tab state
   const [tabs, setTabs] = useState(() => {
     const saved = localStorage.getItem('assignedTasksTabs');
     if (saved) return JSON.parse(saved);
-    return [DEFAULT_TAB()];
+    return [DEFAULT_TAB(allColumns)];
   });
   const [activeTabId, setActiveTabId] = useState(() => {
     const saved = localStorage.getItem('assignedTasksActiveTabId');
     if (saved) return Number(saved);
-    return (JSON.parse(localStorage.getItem('assignedTasksTabs'))?.[0]?.id) || DEFAULT_TAB().id;
+    return (JSON.parse(localStorage.getItem('assignedTasksTabs'))?.[0]?.id) || DEFAULT_TAB(allColumns).id;
   });
 
   // Keep other state as is, except filters/sort/search/visibleColumns/activeTab, which move to tab object
@@ -92,12 +141,12 @@ const AssignedTasks = () => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   // Get active tab object
-  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0];
+  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0] || DEFAULT_TAB(allColumns);
 
   // Tab actions
   const addTab = () => {
     const newId = Date.now();
-    setTabs([...tabs, { ...DEFAULT_TAB(), id: newId, title: `Tab ${tabs.length + 1}` }]);
+    setTabs([...tabs, { ...DEFAULT_TAB(allColumns), id: newId, title: `Tab ${tabs.length + 1}` }]);
     setActiveTabId(newId);
   };
   const closeTab = (id) => {
@@ -619,6 +668,8 @@ const AssignedTasks = () => {
           storageKeyPrefix="assignedtasks"
           onEditTask={handleEditTask}
           sortBy={activeTabObj.sortBy}
+          dynamicColumns={allColumns}
+          customColumns={customColumns}
         />
       </ErrorBoundary>
       {/* Edit Task Modal */}

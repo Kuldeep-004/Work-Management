@@ -17,6 +17,10 @@ const activityLogSchema = new mongoose.Schema(
         'task_verified', 'task_rejected', 'task_file_uploaded', 'task_file_deleted',
         'task_comment_added', 'task_comment_updated', 'task_comment_deleted',
         'task_due_date_changed', 'task_target_date_changed', 'task_billed_status_changed',
+        'task_custom_fields_updated',
+        // Custom column actions
+        'custom_column_created', 'custom_column_toggled',
+       'custom_column_deleted',
         
         // User actions
         'user_created', 'user_updated', 'user_deleted', 'user_status_changed',

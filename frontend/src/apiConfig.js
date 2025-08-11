@@ -1,6 +1,6 @@
 // Central API config for backend URL
-//export const API_BASE_URL = "http://localhost:5000"; 
-export const API_BASE_URL = "https://api.haacas.com"
+export const API_BASE_URL = "http://localhost:5000"; 
+//export const API_BASE_URL = "https://api.haacas.com"
 
 // Utility for per-user, per-tab state
 export async function fetchTabState(tabKey, token) {
@@ -8,7 +8,9 @@ export async function fetchTabState(tabKey, token) {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error('Failed to fetch tab state');
-  return await res.json();
+  const data = await res.json();
+  if (!data || typeof data !== 'object') return null;
+  return data;
 }
 
 export async function saveTabState(tabKey, state, token) {
@@ -21,5 +23,7 @@ export async function saveTabState(tabKey, state, token) {
     body: JSON.stringify({ state }),
   });
   if (!res.ok) throw new Error('Failed to save tab state');
-  return await res.json();
+  const data = await res.json();
+  if (!data || typeof data !== 'object') return null;
+  return data;
 }

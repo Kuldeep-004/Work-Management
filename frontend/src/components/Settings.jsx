@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../apiConfig';
+import ColumnManagement from './ColumnManagement';
 
 const Settings = () => {
   const { user, updateUser } = useAuth();
@@ -202,7 +203,8 @@ const Settings = () => {
 
   const tabs = [
     'Account settings',
-    ...(user.role === 'Admin' || user.role === 'Team Head' ? ['Priority Management'] : [])
+    ...(user.role === 'Admin' || user.role === 'Team Head' ? ['Priority Management'] : []),
+    ...(user.role === 'Admin' ? ['Column Management'] : [])
   ];
 
   return (
@@ -421,6 +423,10 @@ const Settings = () => {
               )}
             </div>
           </>
+        )}
+
+        {activeTab === 'Column Management' && user.role === 'Admin' && (
+          <ColumnManagement />
         )}
       </div>
     </div>

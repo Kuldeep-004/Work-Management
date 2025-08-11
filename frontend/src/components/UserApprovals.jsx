@@ -37,7 +37,6 @@ const UserApprovals = () => {
         const usersData = await usersRes.json();
         const teamsData = await teamsRes.json();
 
-        console.log('Teams data:', teamsData);
         setPendingUsers(usersData);
         setTeams(teamsData);
         setError(null);

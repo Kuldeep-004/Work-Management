@@ -73,17 +73,26 @@ const ALL_COLUMNS = [
 ];
 
 // 1. Add columnOrder to DEFAULT_TAB
-const DEFAULT_TAB = () => ({
-  id: String(Date.now()),
-  title: 'Tab 1',
-  filters: [],
-  sortBy: 'createdAt',
-  sortOrder: 'desc',
-  searchTerm: '',
-  visibleColumns: ALL_COLUMNS.map(col => col.id),
-  columnWidths: Object.fromEntries(ALL_COLUMNS.map(col => [col.id, col.defaultWidth])),
-  columnOrder: ALL_COLUMNS.map(col => col.id),
-});
+const DEFAULT_TAB = (customColumns = []) => {
+  const baseColumns = ALL_COLUMNS.map(col => col.id);
+  const customCols = customColumns.map(col => `custom_${col.name}`);
+  const allColumns = [...baseColumns, ...customCols];
+  
+  return {
+    id: String(Date.now()),
+    title: 'Tab 1',
+    filters: [],
+    sortBy: 'createdAt',
+    sortOrder: 'desc',
+    searchTerm: '',
+    visibleColumns: allColumns,
+    columnWidths: Object.fromEntries([
+      ...ALL_COLUMNS.map(col => [col.id, col.defaultWidth]),
+      ...customColumns.map(col => [`custom_${col.name}`, 150])
+    ]),
+    columnOrder: allColumns,
+  };
+};
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -98,6 +107,10 @@ const AdminDashboard = () => {
   const [error, setError] = useState(null);
   const [hoveredTask, setHoveredTask] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
+  
+  // Custom columns state
+  const [customColumns, setCustomColumns] = useState([]);
+  const [customColumnsLoaded, setCustomColumnsLoaded] = useState(false);
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isFilterPopupOpen, setIsFilterPopupOpen] = useState(false);
@@ -168,12 +181,34 @@ const AdminDashboard = () => {
   };
 
   // Get active tab object
-  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0] || DEFAULT_TAB();
+  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0] || DEFAULT_TAB(customColumnsLoaded ? customColumns : []);
+
+  // Get extended columns including custom columns
+  const getExtendedColumns = () => {
+    const baseColumns = [...ALL_COLUMNS];
+    
+    if (!customColumnsLoaded || customColumns.length === 0) {
+      return baseColumns;
+    }
+
+    // Add custom columns after the base columns
+    const customCols = customColumns.map(col => ({
+      id: `custom_${col.name}`,
+      label: col.label,
+      defaultWidth: 150,
+      isCustom: true,
+      customColumn: col
+    }));
+
+    return [...baseColumns, ...customCols];
+  };
+
+  const extendedColumns = getExtendedColumns();
 
   // Tab actions
   const addTab = async () => {
     const newId = String(Date.now());
-    const newTabs = [...tabs, { ...DEFAULT_TAB(), id: newId, title: `Tab ${tabs.length + 1}` }];
+    const newTabs = [...tabs, { ...DEFAULT_TAB(customColumns), id: newId, title: `Tab ${tabs.length + 1}` }];
     setTabs(newTabs);
     setActiveTabId(newId);
 
@@ -232,13 +267,13 @@ const AdminDashboard = () => {
           setTabs(tabStates.tabs);
           setActiveTabId(tabStates.activeTabId);
         } else if (isMounted) {
-          const def = { ...DEFAULT_TAB() };
+          const def = { ...DEFAULT_TAB(customColumns) };
           setTabs([def]);
           setActiveTabId(def.id);
         }
       } catch {
         if (isMounted) {
-          const def = { ...DEFAULT_TAB() };
+          const def = { ...DEFAULT_TAB(customColumns) };
           setTabs([def]);
           setActiveTabId(def.id);
         }
@@ -248,6 +283,30 @@ const AdminDashboard = () => {
     })();
     return () => { isMounted = false; };
   }, [user]);
+
+  // Fetch custom columns
+  useEffect(() => {
+    const fetchCustomColumns = async () => {
+      if (!user?.token) return;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/custom-columns`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (response.ok) {
+          const columns = await response.json();
+          setCustomColumns(columns);
+        }
+      } catch (error) {
+        console.error('Error fetching custom columns:', error);
+        setCustomColumns([]);
+      } finally {
+        setCustomColumnsLoaded(true);
+      }
+    };
+
+    fetchCustomColumns();
+  }, [user?.token]);
 
   // Save tabs and activeTabId to backend whenever they change (after load)
   useEffect(() => {
@@ -1184,7 +1243,7 @@ const AdminDashboard = () => {
                 <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56 animate-fade-in">
                   <div className="font-semibold text-gray-700 mb-2 text-sm">Show/Hide Columns</div>
                   <div className="max-h-56 overflow-y-auto pr-1 custom-scrollbar">
-                    {ALL_COLUMNS.map(col => (
+                    {extendedColumns.map(col => (
                       <label key={col.id} className="flex items-center space-x-2 mb-1 cursor-pointer hover:bg-blue-50 rounded px-2 py-1 transition-colors">
                         <input
                           type="checkbox"
@@ -1330,7 +1389,7 @@ const AdminDashboard = () => {
               <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56 animate-fade-in">
                 <div className="font-semibold text-gray-700 mb-2 text-sm">Show/Hide Columns</div>
                 <div className="max-h-56 overflow-y-auto pr-1 custom-scrollbar">
-                  {ALL_COLUMNS.map(col => (
+                  {extendedColumns.map(col => (
                     <label key={col.id} className="flex items-center space-x-2 mb-1 cursor-pointer hover:bg-blue-50 rounded px-2 py-1 transition-colors">
                       <input
                         type="checkbox"
@@ -1490,6 +1549,7 @@ const AdminDashboard = () => {
           filters={isFilterPopupOpen ? filterDraft : activeTabObj.filters}
           tabKey="adminDashboard"
           tabId={activeTabObj.id}
+          allColumns={extendedColumns}
           // Bulk selection props
           enableBulkSelection={showCheckboxes}
           selectedTasks={selectedTasks}

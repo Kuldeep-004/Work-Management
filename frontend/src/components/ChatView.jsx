@@ -271,13 +271,20 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
       return {
         name: chat.name,
         avatar: chat.avatar?.url || null,
-        subtitle: `${chat.participants.length} members`,
+        subtitle: `${chat.participants?.length || 0} members`,
         isOnline: false
       };
     } else {
-      const otherParticipant = chat.participants.find(p => p.user._id !== user?._id)?.user;
-      const isOnline = onlineUsers.has(otherParticipant?._id);
-      console.log(otherParticipant);
+      if (!Array.isArray(chat.participants) || !user || !user._id) {
+        return {
+          name: 'Unknown',
+          avatar: null,
+          subtitle: 'Offline',
+          isOnline: false
+        };
+      }
+      const otherParticipant = chat.participants.find(p => p?.user && p.user._id !== user._id)?.user;
+      const isOnline = otherParticipant?._id ? onlineUsers.has(otherParticipant._id) : false;
       // Use lastOnline from otherParticipant if available
       const lastSeen = otherParticipant?.lastSeen;
       return {

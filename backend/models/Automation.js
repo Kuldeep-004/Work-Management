@@ -26,6 +26,11 @@ const automationSchema = new mongoose.Schema({
     targetDate: String,
     verificationAssignedTo: mongoose.Schema.Types.ObjectId,
     billed: Boolean,
+    verificationStatus: {
+      type: String,
+      enum: ['pending', 'completed'],
+      default: 'pending'
+    },
     files: [{
       filename: String,
       originalName: String,
