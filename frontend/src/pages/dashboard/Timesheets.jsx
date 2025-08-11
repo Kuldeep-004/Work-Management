@@ -156,9 +156,8 @@ const Timesheets = () => {
   const saveEntry = async (entry, returnSaved = false, tempId = null) => {
     if (!entry) return;
     // Prevent saving if neither a task nor a manual task is selected
-    const isInternalWorks = entry.task === 'internal-works' || entry.manualTaskName === 'Internal Works';
     const isOther = entry.task === 'other' || entry.manualTaskName === 'Other';
-    if (!entry.task && !isInternalWorks && !isOther) {
+    if (!entry.task && !isOther) {
       toast.error('Please select a task before saving.');
       return;
     }
@@ -175,9 +174,6 @@ const Timesheets = () => {
       // Handle task vs manual task logic
       if (entry.task === 'other') {
         payload.taskId = 'other';
-        payload.manualTaskName = '';
-      } else if (entry.task === 'internal-works') {
-        payload.taskId = 'internal-works';
         payload.manualTaskName = '';
       } else if (entry.task) {
         // Regular task ID
@@ -252,7 +248,8 @@ const Timesheets = () => {
         manualTaskName: '',  // Backend will set this to 'Other'
         workDescription: '',
         startTime: to24Hour(defaultStart),
-        endTime: to24Hour(defaultEnd)
+        endTime: to24Hour(defaultEnd),
+        date: selectedDate.toISOString().split('T')[0] // Pass the selected date
       };
       const res = await fetch(`${API_BASE_URL}/api/timesheets/add-entry`, {
         method: 'POST',
@@ -306,14 +303,24 @@ const Timesheets = () => {
     return date.toDateString() === today.toDateString();
   };
 
+  const isYesterday = (date) => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return date.toDateString() === yesterday.toDateString();
+  };
+
+  const isEditableDate = (date) => {
+    return isToday(date) || isYesterday(date);
+  };
+
   const isEditable = (timesheet) => {
     if (!timesheet) return false;
-    // If timesheet is completed, it's not editable
+    // If timesheet is completed/submitted, it's not editable regardless of date
     if (timesheet.isCompleted) return false;
-    // If it's today, it's editable
-    if (isToday(selectedDate)) return true;
-    // For previous days, only editable if not completed
-    return !timesheet.isCompleted;
+    // Only allow editing for today and yesterday
+    if (!isEditableDate(selectedDate)) return false;
+    // If it passes both checks, it's editable
+    return true;
   };
 
   const handleDateChange = (date) => {
@@ -415,6 +422,9 @@ const Timesheets = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             {isToday(selectedDate) ? 'Today' : selectedDate.toLocaleDateString()}
+            {isEditableDate(selectedDate) && (
+              <span className="text-xs bg-green-500 px-1 rounded">Editable</span>
+            )}
           </button>
           {showCalendar && (
             <div className="absolute right-0 top-full mt-2 z-10 calendar-container">
@@ -430,6 +440,40 @@ const Timesheets = () => {
         </div>
       </div>
       <div className="space-y-6">
+        {/* Information Banner */}
+        {!isEditableDate(selectedDate) && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-blue-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="text-blue-800 font-medium">View Only Mode</p>
+                <p className="text-blue-700 text-sm">
+                  You can only edit timesheets for today and yesterday. This timesheet is read-only.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Warning Banner for Yesterday's Unsubmitted Timesheet */}
+        {isYesterday(selectedDate) && timesheet && !timesheet.isCompleted && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-amber-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <div>
+                <p className="text-amber-800 font-medium">Yesterday's Timesheet Not Submitted</p>
+                <p className="text-amber-700 text-sm">
+                  Don't forget to submit your timesheet for yesterday before it becomes read-only.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Summary Card */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
@@ -437,10 +481,14 @@ const Timesheets = () => {
               <h3 className="text-lg font-semibold text-gray-800">{formatDate(timesheet?.date)}</h3>
               <p className="text-gray-600 mt-1">
                 {isToday(selectedDate) 
-                  ? 'Today\'s timesheet' 
-                  : timesheet?.isCompleted 
-                    ? 'Previous timesheet (Submitted)' 
-                    : 'Previous timesheet (Not submitted)'
+                  ? 'Today\'s timesheet - Editable' 
+                  : isYesterday(selectedDate)
+                    ? timesheet?.isCompleted 
+                      ? 'Yesterday\'s timesheet (Submitted)' 
+                      : 'Yesterday\'s timesheet - Editable'
+                    : timesheet?.isCompleted 
+                      ? 'Previous timesheet (Submitted) - View Only' 
+                      : 'Previous timesheet (Not submitted) - View Only'
                 }
               </p>
             </div>
@@ -451,7 +499,7 @@ const Timesheets = () => {
           </div>
         </div>
         {/* Submit Button */}
-        {timesheet && !timesheet.isCompleted && (
+        {timesheet && !timesheet.isCompleted && isEditableDate(selectedDate) && (
           <div>
             <button
               className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
@@ -506,8 +554,6 @@ const Timesheets = () => {
               // If no task but has manualTaskName, determine the special values
               if (entry.manualTaskName === 'Other') {
                 taskValue = 'other';
-              } else if (entry.manualTaskName === 'Internal Works') {
-                taskValue = 'internal-works';
               }
             }
             // If still no value, default to empty (which shows "Select task")
@@ -647,13 +693,12 @@ const Timesheets = () => {
                       >
                         <option value="">Select task</option>
                         <option value="other">Other</option>
-                        <option value="internal-works">Internal Works</option>
                         {/* Build dropdown options: all allowed tasks, plus the selected one if missing */}
                         {(() => {
                           const selectedTaskId = typeof entry.task === 'object' && entry.task !== null ? entry.task._id : entry.task;
                           const taskIds = tasks.map(t => t._id);
                           let options = [...tasks];
-                          if (selectedTaskId && !taskIds.includes(selectedTaskId) && selectedTaskId !== 'internal-works' && selectedTaskId !== 'other') {
+                          if (selectedTaskId && !taskIds.includes(selectedTaskId) && selectedTaskId !== 'other') {
                             let selectedTaskObj = null;
                             if (entry.task && typeof entry.task === 'object') {
                               selectedTaskObj = entry.task;

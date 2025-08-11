@@ -39,8 +39,10 @@ const NotificationBell = () => {
         })
       ]);
       if (notificationsRes.ok && unreadRes.ok) {
-        const notificationsData = await notificationsRes.json();
+        let notificationsData = await notificationsRes.json();
         const unreadData = await unreadRes.json();
+        // Filter out timesheet reminder notifications
+        notificationsData = notificationsData.filter(n => n.type !== 'timesheet_reminder');
         setNotifications(notificationsData);
         setUnreadCount(unreadData.count);
       }

@@ -1,26 +1,85 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { API_BASE_URL } from '../apiConfig';
+import toast from 'react-hot-toast';
 
 const Notes = () => {
+  const { user } = useAuth();
   const [note, setNote] = useState('');
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Load note from localStorage on mount
+  // Load note from MongoDB on mount
   useEffect(() => {
-    const userId = localStorage.getItem('userId') || 'guest';
-    const savedNote = localStorage.getItem(`note_${userId}`);
-    if (savedNote) setNote(savedNote);
-  }, []);
+    const fetchNote = async () => {
+      if (!user?.token) {
+        setLoading(false);
+        return;
+      }
 
-  // Auto-save note to localStorage
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/notes`, {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setNote(data.content || '');
+        } else {
+          console.error('Failed to fetch note');
+        }
+      } catch (error) {
+        console.error('Error fetching note:', error);
+        toast.error('Failed to load your notes');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNote();
+  }, [user]);
+
+  // Auto-save note to MongoDB
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      const userId = localStorage.getItem('userId') || 'guest';
-      localStorage.setItem(`note_${userId}`, note);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 1000);
+    if (!user?.token || loading) return;
+
+    const timeout = setTimeout(async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/notes`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${user.token}`,
+          },
+          body: JSON.stringify({ content: note }),
+        });
+
+        if (response.ok) {
+          setSaved(true);
+          setTimeout(() => setSaved(false), 1000);
+        } else {
+          console.error('Failed to save note');
+        }
+      } catch (error) {
+        console.error('Error saving note:', error);
+      }
     }, 500);
+
     return () => clearTimeout(timeout);
-  }, [note]);
+  }, [note, user, loading]);
+
+  if (loading) {
+    return (
+      <div className="max-w-2xl mx-auto mt-10 p-6 bg-white rounded-lg shadow-lg border border-gray-200">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-300 rounded w-1/3 mb-4"></div>
+          <div className="h-64 bg-gray-300 rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto mt-10 p-6 bg-white rounded-lg shadow-lg border border-gray-200 animate-fade-in">
@@ -40,7 +99,7 @@ const Notes = () => {
         <span className={`text-xs ${saved ? 'text-green-600' : 'text-gray-400'} transition-all`}>
           {saved ? 'Saved!' : 'Auto-saving...'}
         </span>
-        <span className="text-xs text-gray-400">Your notes are private and saved only for you.</span>
+        <span className="text-xs text-gray-400">Your notes are private and saved securely in the cloud.</span>
       </div>
     </div>
   );

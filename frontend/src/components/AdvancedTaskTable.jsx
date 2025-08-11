@@ -1861,6 +1861,8 @@ const AdvancedTaskTable = ({
                               
                             case 'selfVerification':
                               const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
+                              const [isUpdating, setIsUpdating] = React.useState(false);
+                              
                               return (
                                 <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
                                   style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
@@ -1868,9 +1870,10 @@ const AdvancedTaskTable = ({
                                   <input
                                     type="checkbox"
                                     checked={!!task.selfVerification}
-                                    disabled={!canEditSelfVerification}
+                                    disabled={!canEditSelfVerification || isUpdating}
                                     onChange={canEditSelfVerification ? async (e) => {
                                       const checked = e.target.checked;
+                                      setIsUpdating(true);
                                       try {
                                         const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}`, {
                                           method: 'PUT',
@@ -1882,10 +1885,31 @@ const AdvancedTaskTable = ({
                                         });
                                         if (!response.ok) throw new Error('Failed to update self verification');
                                         const updatedTask = await response.json();
-                                        if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
+                                        console.log('Updated task received:', updatedTask);
+                                        
+                                        // Update task in state immediately
+                                        if (onTaskUpdate) {
+                                          onTaskUpdate(task._id, (prevTask) => ({
+                                            ...prevTask,
+                                            selfVerification: updatedTask.selfVerification
+                                          }));
+                                        }
+                                        
+                                        // Also force refresh of tasks if refetchTasks is available
+                                        if (refetchTasks) {
+                                          setTimeout(() => refetchTasks(), 200);
+                                        }
+                                        
                                         toast.success('Self Verification updated');
                                       } catch (err) {
+                                        console.error('Error updating self verification:', err);
                                         toast.error('Failed to update Self Verification');
+                                        // Revert checkbox state on error by forcing a re-render
+                                        if (refetchTasks) {
+                                          refetchTasks();
+                                        }
+                                      } finally {
+                                        setIsUpdating(false);
                                       }
                                     } : undefined}
                                   />
@@ -2917,6 +2941,8 @@ const AdvancedTaskTable = ({
                       
                       case 'selfVerification':
                         const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
+                        const [isUpdating2, setIsUpdating2] = React.useState(false);
+                        
                         return (
                           <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
                             style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
@@ -2924,9 +2950,10 @@ const AdvancedTaskTable = ({
                               <input
                                 type="checkbox"
                                 checked={!!task.selfVerification}
-                                disabled={!canEditSelfVerification}
+                                disabled={!canEditSelfVerification || isUpdating2}
                                 onChange={canEditSelfVerification ? async (e) => {
                                   const checked = e.target.checked;
+                                  setIsUpdating2(true);
                                   try {
                                     const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}`, {
                                       method: 'PUT',
@@ -2938,10 +2965,31 @@ const AdvancedTaskTable = ({
                                     });
                                     if (!response.ok) throw new Error('Failed to update self verification');
                                     const updatedTask = await response.json();
-                                    if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
+                                    console.log('Updated task received:', updatedTask);
+                                    
+                                    // Update task in state immediately
+                                    if (onTaskUpdate) {
+                                      onTaskUpdate(task._id, (prevTask) => ({
+                                        ...prevTask,
+                                        selfVerification: updatedTask.selfVerification
+                                      }));
+                                    }
+                                    
+                                    // Also force refresh of tasks if refetchTasks is available
+                                    if (refetchTasks) {
+                                      setTimeout(() => refetchTasks(), 200);
+                                    }
+                                    
                                     toast.success('Self Verification updated');
                                   } catch (err) {
+                                    console.error('Error updating self verification:', err);
                                     toast.error('Failed to update Self Verification');
+                                    // Revert checkbox state on error by forcing a re-render
+                                    if (refetchTasks) {
+                                      refetchTasks();
+                                    }
+                                  } finally {
+                                    setIsUpdating2(false);
                                   }
                                 } : undefined}
                               />

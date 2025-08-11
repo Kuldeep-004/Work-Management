@@ -204,7 +204,7 @@ const Settings = () => {
   const tabs = [
     'Account settings',
     ...(user.role === 'Admin' || user.role === 'Team Head' ? ['Priority Management'] : []),
-    ...(user.role === 'Admin' ? ['Column Management'] : [])
+    ...(user.role === 'Admin' ? ['Attributes'] : [])
   ];
 
   return (
@@ -425,7 +425,7 @@ const Settings = () => {
           </>
         )}
 
-        {activeTab === 'Column Management' && user.role === 'Admin' && (
+        {activeTab === 'Attributes' && user.role === 'Admin' && (
           <ColumnManagement />
         )}
       </div>

@@ -38,6 +38,7 @@ const Dashboard = () => {
           <Route path="team" element={<TeamMembers />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="cost" element={<Cost />} />
+          <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
           <Route path="user-approvals" element={<UserApprovals />} />
           <Route path="blocked-users" element={<BlockedUsers />} />
@@ -87,6 +88,7 @@ const Dashboard = () => {
           <Route path="subordinate-timesheets" element={<SubordinateTimesheets />} />
           <Route path="notes" element={<Notes />} />
           <Route path="announcements" element={<Announcements />} />
+          <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
           <Route path="clients" element={<Clients />} />
           <Route path="timesheets" element={<Timesheets />} />

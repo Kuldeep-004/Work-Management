@@ -66,14 +66,7 @@ export const sendTimesheetReminder = async () => {
     });
 
     const promises = users.map(async (user) => {
-      // Create notification record
-      await Notification.create({
-        recipient: user._id,
-        message: 'Fill The Timesheets',
-        type: 'timesheet_reminder'
-      });
-
-      // Send push notification
+      // Only send push notification, do NOT create Notification document
       return sendPushNotification(
         user._id,
         'Timesheet Reminder',

@@ -390,10 +390,12 @@ const ReceivedTasks = () => {
       // For completed tab, only show tasks where assignedTo is current user and status is completed
       if (activeTabObj.activeTab === 'completed' && (!task.assignedTo || (task.assignedTo._id !== user._id && task.assignedTo !== user._id || task.status !== 'completed'))) return false;
 
-      // For receivedVerification tab, only show tasks where status is not completed and latest verifier is current user
+      // For receivedVerification tab, additional frontend filtering is not needed 
+      // as backend now handles the verification accepted filtering
       if (activeTabObj.activeTab === 'receivedVerification') {
         if (task.status === 'completed') return false;
-        // Find the latest assigned verifier (from 1st to 5th)
+        // Backend already filters by verification != 'accepted' and latest verifier check
+        // So we just need to verify the latest verifier is current user
         const verifierFields = [
           'verificationAssignedTo',
           'secondVerificationAssignedTo',
@@ -869,22 +871,24 @@ const ReceivedTasks = () => {
             setTasks(prevTasks => prevTasks.map(task =>
               task._id === taskId ? updater(task) : task
             ));
-            // Debounce backend refetch to allow PATCH to complete and avoid UI flicker
-            setTimeout(async () => {
-              try {
-                const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
-                  headers: { Authorization: `Bearer ${user.token}` }
-                });
-                if (res.ok) {
-                  const updatedTask = await res.json();
-                  setTasks(prevTasks => prevTasks.map(task =>
-                    task._id === taskId ? updatedTask : task
-                  ));
-                }
-              } catch (e) {
-                // Optionally handle error
+            
+            // Instead of debouncing, try to fetch immediately after a short delay
+            // This ensures we get the latest data from backend
+            try {
+              await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to allow backend processing
+              const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+                headers: { Authorization: `Bearer ${user.token}` }
+              });
+              if (res.ok) {
+                const updatedTask = await res.json();
+                console.log('Re-fetched task after update:', updatedTask);
+                setTasks(prevTasks => prevTasks.map(task =>
+                  task._id === taskId ? updatedTask : task
+                ));
               }
-            }, 400); // 400ms delay to allow backend to persist change
+            } catch (e) {
+              console.error('Error re-fetching task after update:', e);
+            }
           }}
           onTaskDelete={handleDeleteTask}
           onStatusChange={handleStatusChange}

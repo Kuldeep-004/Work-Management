@@ -35,6 +35,7 @@ const DashboardLayout = ({ children }) => {
           // { id: 'assigned-tasks', label: 'Task Assigned By Me', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' }, // HIDDEN TEMPORARILY
           { id: 'billed-tasks', label: 'Billed Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/billed-tasks' },
           { id: 'unbilled-tasks', label: 'UnBilled Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/unbilled-tasks' },
+          { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'subordinate-timesheets', label: 'Subordinate Timesheets', icon: ClipboardDocumentListIcon, path: '/dashboard/subordinate-timesheets' },
           { id: 'task-verification', label: 'Tasks Pending For Approval', icon: ShieldCheckIcon, path: '/dashboard/task-verification' },

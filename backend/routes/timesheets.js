@@ -7,6 +7,20 @@ import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
+// Helper function to check if a date is editable (today or yesterday)
+const isEditableDate = (date) => {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  
+  const yesterday = new Date(today);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  
+  const targetDate = new Date(date);
+  targetDate.setUTCHours(0, 0, 0, 0);
+  
+  return targetDate.getTime() === today.getTime() || targetDate.getTime() === yesterday.getTime();
+};
+
 // Get timeslots
 router.get('/timeslots', protect, (req, res) => {
   try {
@@ -149,23 +163,35 @@ router.get('/date/:date', protect, async (req, res) => {
   }
 });
 
-// Add entry to today's timesheet
+// Add entry to timesheet (today or yesterday only)
 router.post('/add-entry', protect, async (req, res) => {
   try {
-    const { taskId, manualTaskName, workDescription, startTime, endTime } = req.body;
+    const { taskId, manualTaskName, workDescription, startTime, endTime, date } = req.body;
 
-    // Get today's timesheet
-    const todayDate = new Date();
-    todayDate.setUTCHours(0, 0, 0, 0);
+    // Determine target date (default to today)
+    let targetDate;
+    if (date) {
+      targetDate = new Date(date);
+    } else {
+      targetDate = new Date();
+    }
+    targetDate.setUTCHours(0, 0, 0, 0);
     
-    const tomorrowDate = new Date(todayDate);
-    tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+    // Validate that the date is editable (today or yesterday only)
+    if (!isEditableDate(targetDate)) {
+      return res.status(400).json({ 
+        message: 'You can only add entries for today or yesterday.' 
+      });
+    }
+    
+    const nextDate = new Date(targetDate);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
     
     let timesheet = await Timesheet.findOne({
       user: req.user._id,
       date: {
-        $gte: todayDate,
-        $lt: tomorrowDate
+        $gte: targetDate,
+        $lt: nextDate
       }
     });
     
@@ -176,7 +202,7 @@ router.post('/add-entry', protect, async (req, res) => {
     if (!timesheet) {
       timesheet = new Timesheet({
         user: req.user._id,
-        date: todayDate,
+        date: targetDate,
         entries: []
       });
     }
@@ -264,6 +290,13 @@ router.delete('/entry/:entryId', protect, async (req, res) => {
     
     if (!timesheet) {
       return res.status(404).json({ message: 'Entry not found' });
+    }
+    
+    // Validate that the timesheet date is editable (today or yesterday only)
+    if (!isEditableDate(timesheet.date)) {
+      return res.status(400).json({ 
+        message: 'You can only delete entries for today or yesterday.' 
+      });
     }
     
     if (timesheet.isCompleted) {
@@ -694,6 +727,13 @@ router.patch('/entry/:entryId', protect, async (req, res) => {
     
     if (!timesheet) {
       return res.status(404).json({ message: 'Entry not found' });
+    }
+    
+    // Validate that the timesheet date is editable (today or yesterday only)
+    if (!isEditableDate(timesheet.date)) {
+      return res.status(400).json({ 
+        message: 'You can only edit entries for today or yesterday.' 
+      });
     }
     
     if (timesheet.isCompleted) {

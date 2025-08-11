@@ -144,17 +144,29 @@ router.get('/assigned/counts', protect, async (req, res) => {
 // Get task counts for received tasks
 router.get('/received/counts', protect, async (req, res) => {
   try {
-    // Execution: not completed, no verifiers, assigned to current user
+    // Execution: Rule 1 (old): not completed, no verifiers, assigned to current user
+    // Rule 2 (new): not completed, verification is accepted, assigned to current user (even if has verifiers)
+    // These rules work as "OR" to each other
     const executionCount = await Task.countDocuments({
       status: { $ne: 'completed' },
       assignedTo: req.user._id,
-      verificationAssignedTo: { $exists: false },
-      secondVerificationAssignedTo: { $exists: false },
-      thirdVerificationAssignedTo: { $exists: false },
-      fourthVerificationAssignedTo: { $exists: false },
-      fifthVerificationAssignedTo: { $exists: false }
+      $or: [
+        // Rule 1: no verifiers
+        {
+          verificationAssignedTo: { $exists: false },
+          secondVerificationAssignedTo: { $exists: false },
+          thirdVerificationAssignedTo: { $exists: false },
+          fourthVerificationAssignedTo: { $exists: false },
+          fifthVerificationAssignedTo: { $exists: false }
+        },
+        // Rule 2: verification is accepted (even if has verifiers)
+        {
+          verification: 'accepted'
+        }
+      ]
     });
     // Received for verification: not completed, user is the latest assigned verifier
+    // AND verification is not accepted
     const verifierFields = [
       'verificationAssignedTo',
       'secondVerificationAssignedTo',
@@ -172,13 +184,16 @@ router.get('/received/counts', protect, async (req, res) => {
     });
     const receivedVerificationCount = await Task.countDocuments({
       status: { $ne: 'completed' },
+      verification: { $ne: 'accepted' }, // Don't count tasks with verification accepted
       $or: orConditions
     });
     // Issued for verification: not completed, first verifier is set, assigned to current user
+    // AND verification is not accepted
     const issuedVerificationCount = await Task.countDocuments({
       status: { $ne: 'completed' },
       assignedTo: req.user._id,
-      verificationAssignedTo: { $exists: true, $ne: null }
+      verificationAssignedTo: { $exists: true, $ne: null },
+      verification: { $ne: 'accepted' } // Don't count tasks with verification accepted
     });
     // Completed: status is completed and assignedTo is current user
     const completedCount = await Task.countDocuments({
@@ -496,19 +511,32 @@ router.get('/received', protect, async (req, res) => {
     let query = {};
     switch (tab) {
       case 'execution':
-        // Tasks for execution: not completed, no verifiers, assigned to current user
+        // Tasks for execution: 
+        // Rule 1 (old): not completed, no verifiers, assigned to current user
+        // Rule 2 (new): not completed, verification is accepted, assigned to current user (even if has verifiers)
+        // These rules work as "OR" to each other
         query = {
           status: { $ne: 'completed' },
           assignedTo: req.user._id,
-          verificationAssignedTo: { $exists: false },
-          secondVerificationAssignedTo: { $exists: false },
-          thirdVerificationAssignedTo: { $exists: false },
-          fourthVerificationAssignedTo: { $exists: false },
-          fifthVerificationAssignedTo: { $exists: false }
+          $or: [
+            // Rule 1: no verifiers
+            {
+              verificationAssignedTo: { $exists: false },
+              secondVerificationAssignedTo: { $exists: false },
+              thirdVerificationAssignedTo: { $exists: false },
+              fourthVerificationAssignedTo: { $exists: false },
+              fifthVerificationAssignedTo: { $exists: false }
+            },
+            // Rule 2: verification is accepted (even if has verifiers)
+            {
+              verification: 'accepted'
+            }
+          ]
         };
         break;
       case 'receivedVerification': {
-        // Tasks where status is not completed and user is the latest assigned verifier
+        // Tasks where status is not completed, user is the latest assigned verifier
+        // AND verification is not accepted
         const verifierFields = [
           'verificationAssignedTo',
           'secondVerificationAssignedTo',
@@ -527,16 +555,19 @@ router.get('/received', protect, async (req, res) => {
         });
         query = {
           status: { $ne: 'completed' },
+          verification: { $ne: 'accepted' }, // Don't show tasks with verification accepted
           $or: orConditions
         };
         break;
       }
       case 'issuedVerification':
         // Tasks issued for verification: not completed, first verifier is set, assigned to current user
+        // AND verification is not accepted
         query = {
           status: { $ne: 'completed' },
           assignedTo: req.user._id,
-          verificationAssignedTo: { $exists: true, $ne: null }
+          verificationAssignedTo: { $exists: true, $ne: null },
+          verification: { $ne: 'accepted' } // Don't show tasks with verification accepted
         };
         break;
       case 'completed':
@@ -555,14 +586,26 @@ router.get('/received', protect, async (req, res) => {
         break;
       default:
         // Default to execution tab
+        // Rule 1 (old): not completed, no verifiers, assigned to current user
+        // Rule 2 (new): not completed, verification is accepted, assigned to current user (even if has verifiers)
+        // These rules work as "OR" to each other
         query = {
           status: { $ne: 'completed' },
           assignedTo: req.user._id,
-          verificationAssignedTo: { $exists: false },
-          secondVerificationAssignedTo: { $exists: false },
-          thirdVerificationAssignedTo: { $exists: false },
-          fourthVerificationAssignedTo: { $exists: false },
-          fifthVerificationAssignedTo: { $exists: false }
+          $or: [
+            // Rule 1: no verifiers
+            {
+              verificationAssignedTo: { $exists: false },
+              secondVerificationAssignedTo: { $exists: false },
+              thirdVerificationAssignedTo: { $exists: false },
+              fourthVerificationAssignedTo: { $exists: false },
+              fifthVerificationAssignedTo: { $exists: false }
+            },
+            // Rule 2: verification is accepted (even if has verifiers)
+            {
+              verification: 'accepted'
+            }
+          ]
         };
     }
     const tasks = await Task.find(query)
@@ -613,10 +656,17 @@ router.get('/:id', protect, async (req, res) => {
       return res.status(400).json({ message: 'Invalid task ID' });
     }
     const task = await Task.findById(req.params.id)
-      .populate('assignedTo', 'firstName lastName photo group')
-      .populate('assignedBy', 'firstName lastName photo group')
+      .populate('assignedTo', 'firstName lastName photo')
+      .populate('assignedBy', 'firstName lastName photo')
+      .populate('verificationAssignedTo', 'firstName lastName photo')
+      .populate('secondVerificationAssignedTo', 'firstName lastName photo')
+      .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
+      .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
+      .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description clientName clientGroup workType assignedTo assignedBy priority inwardEntryDate inwardEntryTime dueDate targetDate billed customFields');
+      .populate('files.uploadedBy', 'firstName lastName photo')
+      .populate('comments.createdBy', 'firstName lastName photo')
+      .select('title description clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo priority status verification inwardEntryDate dueDate targetDate billed selfVerification guides files comments verificationStatus verificationComments createdAt updatedAt customFields');
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
     }
@@ -781,8 +831,16 @@ router.put('/:id', protect, async (req, res) => {
       req.params.id,
       req.body,
       { new: true }
-    ).populate('assignedTo', 'firstName lastName photo group')
-     .populate('assignedBy', 'firstName lastName photo group');
+    ).populate('assignedTo', 'firstName lastName photo')
+     .populate('assignedBy', 'firstName lastName photo')
+     .populate('verificationAssignedTo', 'firstName lastName photo')
+     .populate('secondVerificationAssignedTo', 'firstName lastName photo')
+     .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
+     .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
+     .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
+     .populate('guides', 'firstName lastName photo')
+     .populate('files.uploadedBy', 'firstName lastName photo')
+     .populate('comments.createdBy', 'firstName lastName photo');
 
     // Log task update activity
     await ActivityLogger.logTaskActivity(
@@ -1066,15 +1124,13 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
       task.fifthVerificationAssignedTo = undefined;
       task.verification = 'pending';
       task.status = 'yet_to_start';
+      // Set selfVerification to false when rejecting
+      task.selfVerification = false;
     } else if (verification === 'accepted') {
-      // Clear all verifiers and send task back to executor
-      task.verificationAssignedTo = undefined;
-      task.secondVerificationAssignedTo = undefined;
-      task.thirdVerificationAssignedTo = undefined;
-      task.fourthVerificationAssignedTo = undefined;
-      task.fifthVerificationAssignedTo = undefined;
-      task.verification = 'pending';
+      // When accepting, keep verifiers intact and just update verification status
+      task.verification = 'accepted';
       // Keep status as is - task goes back to executor for execution
+      // Don't clear verifiers - they stay intact
     } else {
       // For 'pending' and 'next verification', just update the verification field
       task.verification = verification;
@@ -1119,14 +1175,16 @@ router.delete('/:id', protect, async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // Remove restriction: allow any authenticated user to delete any task
-    // Previously:
-    // const taskCreatorId = task.assignedBy.toString();
-    // const taskAssigneeId = task.assignedTo.toString();
-    // const userId = req.user._id.toString();
-    // if (taskCreatorId !== userId && taskAssigneeId !== userId) {
-    //   return res.status(403).json({ message: 'Not authorized to delete this task' });
-    // }
+    // Log the delete action before actually deleting
+    await ActivityLogger.logTaskActivity(
+      req.user._id,
+      'task_deleted',
+      task._id,
+      `Deleted task "${task.title}"`,
+      task.toObject(),
+      null,
+      req
+    );
 
     await Task.findByIdAndDelete(req.params.id);
     res.json({ message: 'Task deleted successfully' });
@@ -1792,6 +1850,105 @@ router.patch('/:taskId/custom-fields', protect, async (req, res) => {
 
     res.json(task);
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get analytics data for the current user
+router.get('/analytics/data', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Get all tasks
+    const allTasks = await Task.find().populate('assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo');
+
+    // Total tasks assigned to current user
+    const totalTasks = allTasks.filter(task => 
+      task.assignedTo._id.toString() === userId.toString()
+    ).length;
+
+    // Execution tasks: Rule 1 (old): tasks assigned to current user with no verifiers and status not completed
+    // Rule 2 (new): tasks assigned to current user with verification accepted and status not completed
+    // These rules work as "OR" to each other
+    const executionTasks = allTasks.filter(task => 
+      task.assignedTo._id.toString() === userId.toString() &&
+      task.status !== 'completed' &&
+      (
+        // Rule 1: no verifiers
+        (!task.verificationAssignedTo &&
+         !task.secondVerificationAssignedTo &&
+         !task.thirdVerificationAssignedTo &&
+         !task.fourthVerificationAssignedTo &&
+         !task.fifthVerificationAssignedTo) ||
+        // Rule 2: verification is accepted (even if has verifiers)
+        task.verification === 'accepted'
+      )
+    ).length;
+
+    // Helper function to check if user is the latest verifier
+    const isLatestVerifier = (task, userId) => {
+      const verifiers = [
+        task.fifthVerificationAssignedTo,
+        task.fourthVerificationAssignedTo,
+        task.thirdVerificationAssignedTo,
+        task.secondVerificationAssignedTo,
+        task.verificationAssignedTo
+      ].filter(v => v); // Remove null/undefined values
+
+      if (verifiers.length === 0) return false;
+      
+      // Return true if user is the latest (first non-null) verifier
+      return verifiers[0]._id.toString() === userId.toString();
+    };
+
+    // Verification tasks: tasks where current user is the latest verifier, status not completed
+    // AND verification is not accepted
+    const verificationTasks = allTasks.filter(task => 
+      task.status !== 'completed' &&
+      task.verification !== 'accepted' && // Don't count tasks with verification accepted
+      isLatestVerifier(task, userId)
+    ).length;
+
+    // Issued for verification: tasks assigned to current user with verifiers, status not completed
+    // AND verification is not accepted
+    const issuedForVerificationTasks = allTasks.filter(task => 
+      task.assignedTo._id.toString() === userId.toString() &&
+      task.status !== 'completed' &&
+      task.verification !== 'accepted' && // Don't count tasks with verification accepted
+      (task.verificationAssignedTo || 
+       task.secondVerificationAssignedTo || 
+       task.thirdVerificationAssignedTo || 
+       task.fourthVerificationAssignedTo || 
+       task.fifthVerificationAssignedTo)
+    ).length;
+
+    // Priority distribution for tasks assigned to current user
+    const userTasks = allTasks.filter(task => 
+      task.assignedTo._id.toString() === userId.toString()
+    );
+
+    const priorityDistribution = {
+      urgent: userTasks.filter(task => task.priority === 'urgent').length,
+      today: userTasks.filter(task => task.priority === 'today').length,
+      regular: userTasks.filter(task => task.priority === 'regular').length,
+      inOneWeek: userTasks.filter(task => task.priority === 'inOneWeek' || task.priority === 'thisWeek').length,
+      inFifteenDays: userTasks.filter(task => task.priority === 'inFifteenDays').length,
+      inOneMonth: userTasks.filter(task => task.priority === 'inOneMonth' || task.priority === 'thisMonth').length,
+    };
+
+    const analyticsData = {
+      totalTasks,
+      executionTasks,
+      verificationTasks,
+      issuedForVerificationTasks,
+      priorityDistribution
+    };
+
+    res.json(analyticsData);
+  } catch (error) {
+    console.error('Error fetching analytics data:', error);
     res.status(500).json({ message: error.message });
   }
 });

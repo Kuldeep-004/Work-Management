@@ -7,11 +7,12 @@ const Analytics = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState({
     totalTasks: 0,
-    completedTasks: 0,
-    inProgressTasks: 0,
-    yetToStartTasks: 0,
+    executionTasks: 0,
+    verificationTasks: 0,
+    issuedForVerificationTasks: 0,
     priorityDistribution: {
       urgent: 0,
+      today: 0,
       regular: 0,
       inOneWeek: 0,
       inFifteenDays: 0,
@@ -23,29 +24,20 @@ const Analytics = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/tasks`, {
+        const response = await fetch(`${API_BASE_URL}/api/tasks/analytics/data`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
         });
-        const tasks = await response.json();
-
-        const stats = {
-          totalTasks: tasks.length,
-          completedTasks: tasks.filter((task) => task.status === 'completed').length,
-          inProgressTasks: tasks.filter((task) => task.status === 'in_progress').length,
-          yetToStartTasks: tasks.filter((task) => task.status === 'yet_to_start').length,
-          priorityDistribution: {
-            urgent: tasks.filter((task) => task.priority === 'urgent').length,
-            regular: tasks.filter((task) => task.priority === 'regular').length,
-            inOneWeek: tasks.filter((task) => task.priority === 'inOneWeek').length,
-            inFifteenDays: tasks.filter((task) => task.priority === 'inFifteenDays').length,
-            inOneMonth: tasks.filter((task) => task.priority === 'inOneMonth').length,
-          },
-        };
-
-        setStats(stats);
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch analytics data');
+        }
+        
+        const analyticsData = await response.json();
+        setStats(analyticsData);
       } catch (error) {
+        console.error('Error fetching analytics:', error);
         toast.error('Failed to fetch analytics');
       } finally {
         setLoading(false);
@@ -72,27 +64,33 @@ const Analytics = () => {
           <p className="text-3xl font-bold text-blue-600">{stats.totalTasks}</p>
         </div>
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Completed</h3>
-          <p className="text-3xl font-bold text-green-600">{stats.completedTasks}</p>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Task For Execution</h3>
+          <p className="text-3xl font-bold text-green-600">{stats.executionTasks}</p>
         </div>
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">In Progress</h3>
-          <p className="text-3xl font-bold text-yellow-600">{stats.inProgressTasks}</p>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Task For Verification</h3>
+          <p className="text-3xl font-bold text-yellow-600">{stats.verificationTasks}</p>
         </div>
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Yet to Start</h3>
-          <p className="text-3xl font-bold text-purple-600">{stats.yetToStartTasks}</p>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Issued for Verification</h3>
+          <p className="text-3xl font-bold text-purple-600">{stats.issuedForVerificationTasks}</p>
         </div>
 
         {/* Priority Distribution */}
         <div className="col-span-full bg-white rounded-lg shadow-md p-6">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Priority Distribution</h3>
-          <div className="grid grid-cols-5 gap-4">
+          <div className="grid grid-cols-6 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-red-600">
                 {stats.priorityDistribution.urgent}
               </div>
               <div className="text-sm text-gray-600">Urgent</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600">
+                {stats.priorityDistribution.today}
+              </div>
+              <div className="text-sm text-gray-600">Today</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-gray-600">
@@ -101,7 +99,7 @@ const Analytics = () => {
               <div className="text-sm text-gray-600">Regular</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">
+              <div className="text-2xl font-bold text-green-600">
                 {stats.priorityDistribution.inOneWeek}
               </div>
               <div className="text-sm text-gray-600">1 Week</div>
