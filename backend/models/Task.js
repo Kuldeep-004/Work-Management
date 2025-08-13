@@ -43,7 +43,7 @@ const taskSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    default: 'Yet to Start',
+    default: 'yet_to_start',
     validate: {
       validator: async function(value) {
         // Check if status exists in TaskStatus collection and is active
