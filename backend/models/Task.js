@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import TaskStatus from './TaskStatus.js';
 
 const taskSchema = new mongoose.Schema({
   title: {
@@ -41,8 +42,19 @@ const taskSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: [ 'yet_to_start', 'in_progress', 'completed'],
-    default: 'yet_to_start'
+    required: true,
+    default: 'Yet to Start',
+    validate: {
+      validator: async function(value) {
+        // Check if status exists in TaskStatus collection and is active
+        const validStatus = await TaskStatus.findOne({ 
+          name: value, 
+          isActive: true 
+        });
+        return validStatus !== null;
+      },
+      message: 'Invalid task status. Status must be an active status in the system.'
+    }
   },
   priority: {
     type: String,

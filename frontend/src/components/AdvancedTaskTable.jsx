@@ -88,9 +88,9 @@ const VERIFICATION_OPTIONS = [
 ];
 
 const STATUS_OPTIONS = [
-  { value: 'yet_to_start', label: 'Yet to Start' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'completed', label: 'Completed' },
+  { value: 'Yet to Start', label: 'Yet to Start' },
+  { value: 'In Progress', label: 'In Progress' },
+  { value: 'Completed', label: 'Completed' },
 ];
 
 // Add at the top, after other useRef/useState:
@@ -137,6 +137,10 @@ const AdvancedTaskTable = ({
   // State for dynamic priorities
   const [dynamicPriorities, setDynamicPriorities] = useState([]);
   const [prioritiesLoaded, setPrioritiesLoaded] = useState(false);
+
+  // State for dynamic task statuses
+  const [dynamicTaskStatuses, setDynamicTaskStatuses] = useState([]);
+  const [taskStatusesLoaded, setTaskStatusesLoaded] = useState(false);
 
   // State for custom columns
   const [customColumns, setCustomColumns] = useState([]);
@@ -197,6 +201,31 @@ const AdvancedTaskTable = ({
     };
 
     fetchPriorities();
+  }, [user?.token]);
+
+  // Fetch dynamic task statuses
+  useEffect(() => {
+    const fetchTaskStatuses = async () => {
+      if (!user?.token) return;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/task-statuses`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (response.ok) {
+          const statuses = await response.json();
+          setDynamicTaskStatuses(statuses);
+        }
+      } catch (error) {
+        console.error('Error fetching task statuses:', error);
+        // Fallback to static status options if fetch fails
+        setDynamicTaskStatuses(STATUS_OPTIONS);
+      } finally {
+        setTaskStatusesLoaded(true);
+      }
+    };
+
+    fetchTaskStatuses();
   }, [user?.token]);
 
   // Fetch custom columns
@@ -354,6 +383,13 @@ const AdvancedTaskTable = ({
 
   // Helper functions
   const getStatusColor = (status) => {
+    // Find the status in dynamic task statuses first
+    const dynamicStatus = dynamicTaskStatuses.find(s => s.name === status);
+    if (dynamicStatus && !dynamicStatus.isDefault) {
+      return null; // Return null to indicate we should use inline styles for custom statuses only
+    }
+    
+    // Use hardcoded colors for default statuses (even if they exist in dynamic array)
     switch (status) {
       case 'completed':
         return 'bg-green-100 text-green-800';
@@ -365,6 +401,30 @@ const AdvancedTaskTable = ({
         return 'bg-gray-100 text-gray-800';
     }
   };
+
+  // Get inline styles for dynamic status colors (only for custom/non-default statuses)
+  const getStatusStyles = (status) => {
+    const dynamicStatus = dynamicTaskStatuses.find(s => s.name === status);
+    if (dynamicStatus && !dynamicStatus.isDefault) {
+      const hex = dynamicStatus.color;
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+      const textColor = brightness > 128 ? '#000000' : '#FFFFFF';
+      
+      return {
+        backgroundColor: hex,
+        color: textColor
+      };
+    }
+    return null;
+  };
+
+  // Get current status options (dynamic or static fallback)
+  const currentStatusOptions = taskStatusesLoaded && dynamicTaskStatuses.length > 0 
+    ? dynamicTaskStatuses.map(s => ({ value: s.name, label: s.name }))
+    : STATUS_OPTIONS;
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -934,7 +994,7 @@ const AdvancedTaskTable = ({
   if (shouldGroup) {
     let options = {};
     if (groupField === 'priority') PRIORITY_OPTIONS.forEach(opt => options[opt.value] = opt.label);
-    if (groupField === 'status') STATUS_OPTIONS.forEach(opt => options[opt.value] = opt.label);
+    if (groupField === 'status') currentStatusOptions.forEach(opt => options[opt.value] = opt.label);
     if (groupField === 'billed') {
       options[true] = 'Yes';
       options[false] = 'No';
@@ -1651,7 +1711,12 @@ const AdvancedTaskTable = ({
                                   <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
                                     style={{ width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden' }}>
                                   <div className="overflow-x-auto whitespace-nowrap" style={{ width: '100%', maxWidth: '100%' }}>
-                                    <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getStatusColor(task.status)}`}>{STATUS_OPTIONS.find(opt => opt.value === task.status)?.label || task.status}</span>
+                                    <span 
+                                      className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getStatusColor(task.status) || ''}`}
+                                      style={getStatusStyles(task.status) || {}}
+                                    >
+                                      {currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
+                                    </span>
                                   </div>
                                 </td>
                               );
@@ -1684,10 +1749,11 @@ const AdvancedTaskTable = ({
                               >
                                 <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
                                   <span
-                                    className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}
+                                    className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status) || ''}`}
                                     style={{
                                       display: 'inline-block',
                                       whiteSpace: 'nowrap',
+                                      ...getStatusStyles(task.status),
                                       overflowX: 'auto',
                                       textOverflow: 'ellipsis',
                                       maxWidth: '100%',
@@ -1695,9 +1761,9 @@ const AdvancedTaskTable = ({
                                       scrollbarWidth: 'thin',
                                       msOverflowStyle: 'auto',
                                     }}
-                                    title={task.status.replace(/_/g, ' ')}
+                                    title={currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
                                   >
-                                    {task.status.replace(/_/g, ' ')}
+                                    {currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
                                   </span>
                                   {/* Show dropdown as portal if open */}
                                   {editingStatusTaskId === task._id && viewType === 'received'
@@ -1719,8 +1785,8 @@ const AdvancedTaskTable = ({
                                         >
                                           {(
                                             viewType === 'received' && taskType === 'execution'
-                                              ? STATUS_OPTIONS.filter(opt => opt.value !== 'reject')
-                                              : STATUS_OPTIONS
+                                              ? currentStatusOptions.filter(opt => opt.value !== 'reject')
+                                              : currentStatusOptions
                                           ).map(opt => (
                                             <div
                                               key={opt.value}
@@ -1744,7 +1810,12 @@ const AdvancedTaskTable = ({
                                               onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
                                               onMouseLeave={e => e.currentTarget.style.background = task.status === opt.value ? '#f3f4f6' : 'transparent'}
                                             >
-                                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(opt.value)}`}>{opt.label}</span>
+                                              <span 
+                                                className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(opt.value) || ''}`}
+                                                style={getStatusStyles(opt.value) || {}}
+                                              >
+                                                {opt.label}
+                                              </span>
                                               {task.status === opt.value && (
                                                 <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -2774,8 +2845,13 @@ const AdvancedTaskTable = ({
                             <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
                               style={{ width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden' }}>
                               <div className="overflow-x-auto whitespace-nowrap" style={{ width: '100%', maxWidth: '100%' }}>
-                                <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getStatusColor(task.status)}`}>{STATUS_OPTIONS.find(opt => opt.value === task.status)?.label || task.status}</span>
-                              </div>
+                                <span 
+                                  className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getStatusColor(task.status) || ''}`}
+                                  style={getStatusStyles(task.status) || {}}
+                                >
+                                  {currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
+                                </span>
+              </div>
                             </td>
                           );
                         }
@@ -2807,20 +2883,21 @@ const AdvancedTaskTable = ({
                           >
                             <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
                               <span
-                                className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}
+                                className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status) || ''}`}
                                 style={{
                                   display: 'inline-block',
                                   whiteSpace: 'nowrap',
                                   overflowX: 'auto',
+                                  ...getStatusStyles(task.status),
                                   textOverflow: 'ellipsis',
                                   maxWidth: '100%',
                                   verticalAlign: 'middle',
                                   scrollbarWidth: 'thin',
                                   msOverflowStyle: 'auto',
                                 }}
-                                title={task.status ? task.status.replace(/_/g, ' ') : ''}
+                                title={currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
                               >
-                                {task.status ? task.status.replace(/_/g, ' ') : ''}
+                                {currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
                               </span>
                               {/* Show dropdown as portal if open */}
                               {editingStatusTaskId === task._id && viewType === 'received'
@@ -2842,8 +2919,8 @@ const AdvancedTaskTable = ({
                                     >
                                       {(
                                         viewType === 'received' && taskType === 'execution'
-                                          ? STATUS_OPTIONS.filter(opt => opt.value !== 'reject')
-                                          : STATUS_OPTIONS
+                                          ? currentStatusOptions.filter(opt => opt.value !== 'reject')
+                                          : currentStatusOptions
                                       ).map(opt => (
                                         <div
                                           key={opt.value}
@@ -2867,7 +2944,12 @@ const AdvancedTaskTable = ({
                                           onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
                                           onMouseLeave={e => e.currentTarget.style.background = task.status === opt.value ? '#f3f4f6' : 'transparent'}
                                         >
-                                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(opt.value)}`}>{opt.label}</span>
+                                          <span 
+                                            className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(opt.value) || ''}`}
+                                            style={getStatusStyles(opt.value) || {}}
+                                          >
+                                            {opt.label}
+                                          </span>
                                           {task.status === opt.value && (
                                             <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />

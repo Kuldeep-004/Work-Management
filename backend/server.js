@@ -24,6 +24,7 @@ import chatRoutes from './routes/chats.js';
 import messageRoutes from './routes/messages.js';
 import pushSubscriptionRoutes from './routes/pushSubscription.js';
 import noteRoutes from './routes/notes.js';
+import taskStatusRoutes from './routes/taskStatuses.js';
 import { activityLoggerMiddleware } from './middleware/activityLoggerMiddleware.js';
 import Team from './models/Team.js';
 import User from './models/User.js';
@@ -99,6 +100,7 @@ app.use('/api/chats', chatRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/push-subscription', pushSubscriptionRoutes);
 app.use('/api/notes', noteRoutes);
+app.use('/api/task-statuses', taskStatusRoutes);
 
 // Socket.IO for real-time chat
 const connectedUsers = new Map();

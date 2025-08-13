@@ -191,23 +191,19 @@ const UserApprovals = () => {
                       <option key={role} value={role}>{role}</option>
                     ))}
                   </select>
-                  {selectedRoles[pendingUser._id] !== 'Senior' && (
-                    <select
-                      value={selectedTeams[pendingUser._id] || ''}
-                      onChange={(e) => setSelectedTeams(prev => ({
-                        ...prev,
-                        [pendingUser._id]: e.target.value
-                      }))}
-                      className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">Select Team</option>
-                      {teams
-                        .filter(team => team.name !== 'Senior')
-                        .map(team => (
-                          <option key={team._id} value={team._id}>{team.name}</option>
-                        ))}
-                    </select>
-                  )}
+                  <select
+                    value={selectedTeams[pendingUser._id] || ''}
+                    onChange={(e) => setSelectedTeams(prev => ({
+                      ...prev,
+                      [pendingUser._id]: e.target.value
+                    }))}
+                    className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Select Team</option>
+                    {teams.map(team => (
+                      <option key={team._id} value={team._id}>{team.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="flex flex-row space-x-4 w-full justify-center min-w-[220px]">
                   <button
