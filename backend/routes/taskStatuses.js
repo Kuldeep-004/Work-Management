@@ -19,19 +19,19 @@ const adminOrTeamHead = (req, res, next) => {
 const initializeDefaultStatuses = async () => {
   const defaultStatuses = [
     { 
-      name: 'Yet to Start', 
+      name: 'yet_to_start', 
       color: 'bg-gray-100 text-gray-800', 
       isDefault: true, 
       order: 1 
     },
     { 
-      name: 'In Progress', 
+      name: 'in_progress', 
       color: 'bg-blue-100 text-blue-800', 
       isDefault: true, 
       order: 2 
     },
     { 
-      name: 'Completed', 
+      name: 'completed', 
       color: 'bg-green-100 text-green-800', 
       isDefault: true, 
       order: 3 
