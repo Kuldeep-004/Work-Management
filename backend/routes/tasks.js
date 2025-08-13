@@ -1096,7 +1096,7 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    const { verification } = req.body;
+    const { verification, remarks } = req.body;
 
     // Validate verification value
     const validVerifications = ['pending', 'rejected', 'accepted', 'next verification'];
@@ -1109,28 +1109,68 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
     
     // Handle different verification statuses
     if (verification === 'rejected') {
-      // Check if there are any comments on the task
-      if (!task.comments || task.comments.length === 0) {
+      // Require remarks for rejection
+      if (!remarks || !remarks.trim()) {
         return res.status(400).json({ 
-          message: 'Please add a comment before rejecting the task' 
+          message: 'Remarks are required when rejecting verification' 
         });
       }
       
-      // Clear all verifiers and set status back to pending
+      // Clear all verifiers and set verification to pending (not rejected)
       task.verificationAssignedTo = undefined;
       task.secondVerificationAssignedTo = undefined;
       task.thirdVerificationAssignedTo = undefined;
       task.fourthVerificationAssignedTo = undefined;
       task.fifthVerificationAssignedTo = undefined;
-      task.verification = 'pending';
+      task.verification = 'pending'; // Set to pending instead of rejected
       task.status = 'yet_to_start';
       // Set selfVerification to false when rejecting
       task.selfVerification = false;
+      // Save remarks
+      task.verificationRemarks = remarks.trim();
+
+      // Create notification for the assigned user
+      if (task.assignedTo) {
+        const rejectionMessage = `${req.user.firstName} ${req.user.lastName} has rejected ${task.title} with remarks "${remarks.trim()}"`;
+        
+        const notification = new Notification({
+          recipient: task.assignedTo._id,
+          task: task._id,
+          assigner: req.user._id,
+          message: rejectionMessage,
+          type: 'verification_rejected'
+        });
+        await notification.save();
+      }
+
     } else if (verification === 'accepted') {
+      // Require remarks for acceptance
+      if (!remarks || !remarks.trim()) {
+        return res.status(400).json({ 
+          message: 'Remarks are required when accepting verification' 
+        });
+      }
+      
       // When accepting, keep verifiers intact and just update verification status
       task.verification = 'accepted';
       // Keep status as is - task goes back to executor for execution
       // Don't clear verifiers - they stay intact
+      // Save remarks
+      task.verificationRemarks = remarks.trim();
+
+      // Create notification for the assigned user
+      if (task.assignedTo) {
+        const acceptanceMessage = `${req.user.firstName} ${req.user.lastName} has accepted ${task.title} with remarks "${remarks.trim()}"`;
+        
+        const notification = new Notification({
+          recipient: task.assignedTo._id,
+          task: task._id,
+          assigner: req.user._id,
+          message: acceptanceMessage,
+          type: 'verification_accepted'
+        });
+        await notification.save();
+      }
     } else {
       // For 'pending' and 'next verification', just update the verification field
       task.verification = verification;
@@ -1139,6 +1179,29 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
     await task.save();
 
     console.log('Verification updated successfully');
+
+    // Log verification activity
+    if (verification === 'rejected') {
+      await ActivityLogger.logTaskActivity(
+        req.user._id,
+        'task_verification_rejected',
+        task._id,
+        `Rejected verification for task "${task.title}"${remarks ? ` with remarks: "${remarks}"` : ''}`,
+        { verification: task.verification, verificationRemarks: task.verificationRemarks },
+        { verification: 'rejected', verificationRemarks: remarks },
+        req
+      );
+    } else if (verification === 'accepted') {
+      await ActivityLogger.logTaskActivity(
+        req.user._id,
+        'task_verification_accepted',
+        task._id,
+        `Accepted verification for task "${task.title}"${remarks ? ` with remarks: "${remarks}"` : ''}`,
+        { verification: task.verification, verificationRemarks: task.verificationRemarks },
+        { verification: 'accepted', verificationRemarks: remarks },
+        req
+      );
+    }
 
     // Fetch the updated task with all populated fields
     const updatedTask = await Task.findById(task._id)
@@ -1755,7 +1818,7 @@ router.get('/unique/work-types', protect, async (req, res) => {
 // PATCH /:taskId/verifier - update the first or second verifier for a task
 router.patch('/:taskId/verifier', protect, async (req, res) => {
   try {
-    const { verificationAssignedTo, secondVerificationAssignedTo, thirdVerificationAssignedTo, fourthVerificationAssignedTo, fifthVerificationAssignedTo } = req.body;
+    const { verificationAssignedTo, secondVerificationAssignedTo, thirdVerificationAssignedTo, fourthVerificationAssignedTo, fifthVerificationAssignedTo, verification } = req.body;
     if (!verificationAssignedTo && !secondVerificationAssignedTo && !thirdVerificationAssignedTo && !fourthVerificationAssignedTo && !fifthVerificationAssignedTo) {
       return res.status(400).json({ message: 'At least one verifier is required' });
     }
@@ -1768,6 +1831,12 @@ router.patch('/:taskId/verifier', protect, async (req, res) => {
     if (task.verification === 'next verification') {
       task.verification = 'pending';
       console.log('Changed verification from "next verification" to "pending" after assigning verifier');
+    }
+    
+    // Check if verification status should be changed from "accepted" to "pending" (for execution tab)
+    if (verification === 'pending' && task.verification === 'accepted') {
+      task.verification = 'pending';
+      console.log('Changed verification from "accepted" to "pending" after assigning new verifier in execution tab');
     }
     
     // Allow any authenticated user to update any verifier

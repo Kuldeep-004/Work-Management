@@ -5,6 +5,7 @@ import defaultProfile from '../assets/avatar.jpg';
 import FileUpload from './FileUpload';
 import FileList from './FileList';
 import TaskComments from './TaskComments';
+import VerificationRemarksModal from './VerificationRemarksModal';
 import { API_BASE_URL } from '../apiConfig';
 import ReactDOM from 'react-dom';
 import React from 'react';
@@ -264,6 +265,12 @@ const AdvancedTaskTable = ({
   const [showComments, setShowComments] = useState(false);
   const [editingDescriptionTaskId, setEditingDescriptionTaskId] = useState(null);
   const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
+  
+  // Verification remarks modal state
+  const [showRemarksModal, setShowRemarksModal] = useState(false);
+  const [remarksModalTask, setRemarksModalTask] = useState(null);
+  const [remarksModalType, setRemarksModalType] = useState('accepted');
+  const [remarksModalLoading, setRemarksModalLoading] = useState(false);
   
   // Custom field editing states
   const [editingCustomTextTaskId, setEditingCustomTextTaskId] = useState(null);
@@ -714,6 +721,17 @@ const AdvancedTaskTable = ({
 
   const handleVerificationChange = async (task, newVerification) => {
     console.log('Starting verification update for task:', task._id, 'new verification:', newVerification);
+    
+    // If it's accepted or rejected, show the remarks modal
+    if (newVerification === 'accepted' || newVerification === 'rejected') {
+      setRemarksModalTask(task);
+      setRemarksModalType(newVerification);
+      setShowRemarksModal(true);
+      setEditingVerificationTaskId(null);
+      return;
+    }
+
+    // For other statuses (pending, next verification), proceed directly
     setVerificationLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verification`, {
@@ -758,6 +776,61 @@ const AdvancedTaskTable = ({
     }
     setVerificationLoading(false);
     setEditingVerificationTaskId(null);
+  };
+
+  // Handle verification with remarks
+  const handleVerificationWithRemarks = async (remarks) => {
+    setRemarksModalLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${remarksModalTask._id}/verification`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ 
+          verification: remarksModalType,
+          remarks: remarks 
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update verification');
+      }
+      
+      const updatedTask = await response.json();
+      
+      if (onTaskUpdate) {
+        onTaskUpdate(remarksModalTask._id, () => updatedTask);
+      }
+      
+      // Update the task in orderedTasks without changing positions
+      const updatedOrderedTasks = orderedTasks.map(t => 
+        t._id === remarksModalTask._id ? { ...t, ...updatedTask } : t
+      );
+      setOrderedTasks(updatedOrderedTasks);
+      
+      // Refresh tasks from backend if refetchTasks is available
+      if (refetchTasks) {
+        refetchTasks();
+      }
+      
+      toast.success(`Task ${remarksModalType} successfully`);
+      setShowRemarksModal(false);
+    } catch (error) {
+      console.error('Error updating verification:', error);
+      toast.error(error.message || 'Failed to update verification');
+    }
+    setRemarksModalLoading(false);
+  };
+
+  // Close remarks modal
+  const closeRemarksModal = () => {
+    setShowRemarksModal(false);
+    setRemarksModalTask(null);
+    setRemarksModalType('accepted');
+    setRemarksModalLoading(false);
   };
 
   const handleStatusChangeLocal = async (task, newStatus) => {
@@ -1295,6 +1368,10 @@ const AdvancedTaskTable = ({
       </div>
     );
   }
+
+  // Fix: move selfVerification update state hooks to top level to avoid hook order issues
+  const [isUpdating, setIsUpdating] = React.useState(false);
+  const [isUpdating2, setIsUpdating2] = React.useState(false);
 
   return (
     <>
@@ -1861,7 +1938,6 @@ const AdvancedTaskTable = ({
                               
                             case 'selfVerification':
                               const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
-                              const [isUpdating, setIsUpdating] = React.useState(false);
                               
                               return (
                                 <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
@@ -1870,8 +1946,8 @@ const AdvancedTaskTable = ({
                                   <input
                                     type="checkbox"
                                     checked={!!task.selfVerification}
-                                    disabled={!canEditSelfVerification || isUpdating}
-                                    onChange={canEditSelfVerification ? async (e) => {
+                                    disabled={!!task.selfVerification || !canEditSelfVerification || isUpdating}
+                                    onChange={(!task.selfVerification && canEditSelfVerification) ? async (e) => {
                                       const checked = e.target.checked;
                                       setIsUpdating(true);
                                       try {
@@ -1886,7 +1962,6 @@ const AdvancedTaskTable = ({
                                         if (!response.ok) throw new Error('Failed to update self verification');
                                         const updatedTask = await response.json();
                                         console.log('Updated task received:', updatedTask);
-                                        
                                         // Update task in state immediately
                                         if (onTaskUpdate) {
                                           onTaskUpdate(task._id, (prevTask) => ({
@@ -1894,7 +1969,6 @@ const AdvancedTaskTable = ({
                                             selfVerification: updatedTask.selfVerification
                                           }));
                                         }
-                                        
                                         // Also force refresh of tasks if refetchTasks is available
                                         if (refetchTasks) {
                                           setTimeout(() => refetchTasks(), 200);
@@ -1969,6 +2043,44 @@ const AdvancedTaskTable = ({
                                   (viewType === 'received' && taskType === 'execution' && !!task.selfVerification)
                                   || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier)
                                   || (viewType === 'received' && taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id);
+                              }
+                              
+                              // NEW: For issuedVerification tab, only allow editing the latest non-empty verifier
+                              if (taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id) {
+                                // Find the latest non-empty verifier
+                                let latestNonEmptyVerifierIndex = -1;
+                                for (let i = verifierFields.length - 1; i >= 0; i--) {
+                                  if (task[verifierFields[i]]) {
+                                    latestNonEmptyVerifierIndex = i;
+                                    break;
+                                  }
+                                }
+                                
+                                // Only allow editing the latest non-empty verifier
+                                if (latestNonEmptyVerifierIndex !== -1 && colIdx === latestNonEmptyVerifierIndex) {
+                                  canEditThisVerifier = true;
+                                } else if (latestNonEmptyVerifierIndex !== -1) {
+                                  canEditThisVerifier = false; // Don't allow editing other verifiers
+                                }
+                              }
+                              
+                              // NEW: For execution tab with verification accepted, allow next empty verifier assignment
+                              if (taskType === 'execution' && task.verification === 'accepted') {
+                                // Find the next empty verifier position
+                                let nextEmptyVerifierIndex = -1;
+                                for (let i = 0; i < verifierFields.length; i++) {
+                                  if (!task[verifierFields[i]]) {
+                                    nextEmptyVerifierIndex = i;
+                                    break;
+                                  }
+                                }
+                                
+                                // Only allow dropdown for the next empty verifier position
+                                if (colIdx === nextEmptyVerifierIndex && nextEmptyVerifierIndex !== -1) {
+                                  canEditThisVerifier = true;
+                                } else if (task.verification === 'accepted') {
+                                  canEditThisVerifier = false; // Don't allow editing other verifiers when verification is accepted
+                                }
                               }
                               
                               // NEW: For receivedVerification tab, handle verification status logic
@@ -2090,13 +2202,21 @@ const AdvancedTaskTable = ({
                                                   if (verifierLoading || (task[colId] && task[colId]._id === u._id)) return;
                                                   setVerifierLoading(true);
                                                   try {
+                                                    // Prepare the request body
+                                                    const requestBody = { [colId]: u._id };
+                                                    
+                                                    // If this is execution tab with verification accepted, also set verification to pending
+                                                    if (taskType === 'execution' && task.verification === 'accepted') {
+                                                      requestBody.verification = 'pending';
+                                                    }
+                                                    
                                                     const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verifier`, {
                                                       method: 'PATCH',
                                                       headers: {
                                                         'Content-Type': 'application/json',
                                                         Authorization: `Bearer ${currentUser.token}`,
                                                       },
-                                                      body: JSON.stringify({ [colId]: u._id }),
+                                                      body: JSON.stringify(requestBody),
                                                     });
                                                     if (!response.ok) throw new Error('Failed to update verifier');
                                                     const updatedTask = await response.json();
@@ -2941,7 +3061,6 @@ const AdvancedTaskTable = ({
                       
                       case 'selfVerification':
                         const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
-                        const [isUpdating2, setIsUpdating2] = React.useState(false);
                         
                         return (
                           <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
@@ -2950,8 +3069,8 @@ const AdvancedTaskTable = ({
                               <input
                                 type="checkbox"
                                 checked={!!task.selfVerification}
-                                disabled={!canEditSelfVerification || isUpdating2}
-                                onChange={canEditSelfVerification ? async (e) => {
+                                disabled={!!task.selfVerification || !canEditSelfVerification || isUpdating2}
+                                onChange={(!task.selfVerification && canEditSelfVerification) ? async (e) => {
                                   const checked = e.target.checked;
                                   setIsUpdating2(true);
                                   try {
@@ -2966,7 +3085,6 @@ const AdvancedTaskTable = ({
                                     if (!response.ok) throw new Error('Failed to update self verification');
                                     const updatedTask = await response.json();
                                     console.log('Updated task received:', updatedTask);
-                                    
                                     // Update task in state immediately
                                     if (onTaskUpdate) {
                                       onTaskUpdate(task._id, (prevTask) => ({
@@ -2974,7 +3092,6 @@ const AdvancedTaskTable = ({
                                         selfVerification: updatedTask.selfVerification
                                       }));
                                     }
-                                    
                                     // Also force refresh of tasks if refetchTasks is available
                                     if (refetchTasks) {
                                       setTimeout(() => refetchTasks(), 200);
@@ -3049,6 +3166,44 @@ const AdvancedTaskTable = ({
                             (viewType === 'received' && taskType === 'execution' && !!task.selfVerification)
                             || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier)
                             || (viewType === 'received' && taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id);
+                        }
+                        
+                        // NEW: For issuedVerification tab, only allow editing the latest non-empty verifier
+                        if (taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id) {
+                          // Find the latest non-empty verifier
+                          let latestNonEmptyVerifierIndex = -1;
+                          for (let i = verifierFields.length - 1; i >= 0; i--) {
+                            if (task[verifierFields[i]]) {
+                              latestNonEmptyVerifierIndex = i;
+                              break;
+                            }
+                          }
+                          
+                          // Only allow editing the latest non-empty verifier
+                          if (latestNonEmptyVerifierIndex !== -1 && colIdx === latestNonEmptyVerifierIndex) {
+                            canEditThisVerifier = true;
+                          } else if (latestNonEmptyVerifierIndex !== -1) {
+                            canEditThisVerifier = false; // Don't allow editing other verifiers
+                          }
+                        }
+                        
+                        // NEW: For execution tab with verification accepted, allow next empty verifier assignment
+                        if (taskType === 'execution' && task.verification === 'accepted') {
+                          // Find the next empty verifier position
+                          let nextEmptyVerifierIndex = -1;
+                          for (let i = 0; i < verifierFields.length; i++) {
+                            if (!task[verifierFields[i]]) {
+                              nextEmptyVerifierIndex = i;
+                              break;
+                            }
+                          }
+                          
+                          // Only allow dropdown for the next empty verifier position
+                          if (colIdx === nextEmptyVerifierIndex && nextEmptyVerifierIndex !== -1) {
+                            canEditThisVerifier = true;
+                          } else if (task.verification === 'accepted') {
+                            canEditThisVerifier = false; // Don't allow editing other verifiers when verification is accepted
+                          }
                         }
                         
                         // NEW: For receivedVerification tab, handle verification status logic
@@ -3170,13 +3325,21 @@ const AdvancedTaskTable = ({
                                             if (verifierLoading || (task[colId] && task[colId]._id === u._id)) return;
                                             setVerifierLoading(true);
                                             try {
+                                              // Prepare the request body
+                                              const requestBody = { [colId]: u._id };
+                                              
+                                              // If this is execution tab with verification accepted, also set verification to pending
+                                              if (taskType === 'execution' && task.verification === 'accepted') {
+                                                requestBody.verification = 'pending';
+                                              }
+                                              
                                               const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verifier`, {
                                                 method: 'PATCH',
                                                 headers: {
                                                   'Content-Type': 'application/json',
                                                   Authorization: `Bearer ${currentUser.token}`,
                                                 },
-                                                body: JSON.stringify({ [colId]: u._id }),
+                                                body: JSON.stringify(requestBody),
                                               });
                                               if (!response.ok) throw new Error('Failed to update verifier');
                                               const updatedTask = await response.json();
@@ -3666,6 +3829,16 @@ const AdvancedTaskTable = ({
             </div>
           </div>
         )}
+
+        {/* Verification Remarks Modal */}
+        <VerificationRemarksModal
+          isOpen={showRemarksModal}
+          onClose={closeRemarksModal}
+          onSubmit={handleVerificationWithRemarks}
+          task={remarksModalTask}
+          verificationType={remarksModalType}
+          loading={remarksModalLoading}
+        />
       </div>
     </>
   );

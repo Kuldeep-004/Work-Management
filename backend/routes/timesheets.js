@@ -7,18 +7,36 @@ import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
-// Helper function to check if a date is editable (today or yesterday)
+// Helper function to check if a timesheet is editable based on submission status
+const isTimesheetEditable = async (userId, date) => {
+  try {
+    const targetDate = new Date(date);
+    targetDate.setUTCHours(0, 0, 0, 0);
+    
+    const nextDate = new Date(targetDate);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    
+    const timesheet = await Timesheet.findOne({
+      user: userId,
+      date: {
+        $gte: targetDate,
+        $lt: nextDate
+      }
+    });
+    
+    // If timesheet doesn't exist, it's editable (can be created)
+    // If timesheet exists but not completed, it's editable
+    return !timesheet || !timesheet.isCompleted;
+  } catch (error) {
+    return false;
+  }
+};
+
+// Legacy helper function maintained for backwards compatibility
 const isEditableDate = (date) => {
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  
-  const yesterday = new Date(today);
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  
-  const targetDate = new Date(date);
-  targetDate.setUTCHours(0, 0, 0, 0);
-  
-  return targetDate.getTime() === today.getTime() || targetDate.getTime() === yesterday.getTime();
+  // This function is no longer used for date restrictions
+  // Keep it for any potential legacy code references
+  return true;
 };
 
 // Get timeslots
@@ -177,10 +195,11 @@ router.post('/add-entry', protect, async (req, res) => {
     }
     targetDate.setUTCHours(0, 0, 0, 0);
     
-    // Validate that the date is editable (today or yesterday only)
-    if (!isEditableDate(targetDate)) {
+    // Check if the timesheet for this date is editable (not submitted)
+    const canEdit = await isTimesheetEditable(req.user._id, targetDate);
+    if (!canEdit) {
       return res.status(400).json({ 
-        message: 'You can only add entries for today or yesterday.' 
+        message: 'Cannot add entries to a submitted timesheet.' 
       });
     }
     
@@ -292,15 +311,11 @@ router.delete('/entry/:entryId', protect, async (req, res) => {
       return res.status(404).json({ message: 'Entry not found' });
     }
     
-    // Validate that the timesheet date is editable (today or yesterday only)
-    if (!isEditableDate(timesheet.date)) {
-      return res.status(400).json({ 
-        message: 'You can only delete entries for today or yesterday.' 
-      });
-    }
-    
+    // Check if the timesheet is editable (not submitted)
     if (timesheet.isCompleted) {
-      return res.status(400).json({ message: 'Timesheet already submitted. No more changes allowed.' });
+      return res.status(400).json({ 
+        message: 'Cannot delete entries from a submitted timesheet.' 
+      });
     }
     
     // Find the entry to log before deletion
@@ -729,15 +744,11 @@ router.patch('/entry/:entryId', protect, async (req, res) => {
       return res.status(404).json({ message: 'Entry not found' });
     }
     
-    // Validate that the timesheet date is editable (today or yesterday only)
-    if (!isEditableDate(timesheet.date)) {
-      return res.status(400).json({ 
-        message: 'You can only edit entries for today or yesterday.' 
-      });
-    }
-    
+    // Check if the timesheet is editable (not submitted)
     if (timesheet.isCompleted) {
-      return res.status(400).json({ message: 'Timesheet already submitted. No more changes allowed.' });
+      return res.status(400).json({ 
+        message: 'Cannot edit entries in a submitted timesheet.' 
+      });
     }
     
     const entry = timesheet.entries.id(entryId);

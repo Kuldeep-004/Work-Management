@@ -17,7 +17,7 @@ const activityLogSchema = new mongoose.Schema(
         'task_verified', 'task_rejected', 'task_file_uploaded', 'task_file_deleted',
         'task_comment_added', 'task_comment_updated', 'task_comment_deleted',
         'task_due_date_changed', 'task_target_date_changed', 'task_billed_status_changed',
-        'task_custom_fields_updated',
+        'task_custom_fields_updated', 'task_verification_accepted', 'task_verification_rejected',
         // Custom column actions
         'custom_column_created', 'custom_column_toggled',
        'custom_column_deleted',
@@ -62,6 +62,7 @@ const activityLogSchema = new mongoose.Schema(
         // Notification actions
         'notification_created', 'notification_sent', 'notification_read',
         'notification_deleted', 'notifications_mark_all_read',
+        'push_notification_unsubscribed',
         
         // System actions
         'system_backup_created', 'system_update',

@@ -127,7 +127,7 @@ const UnBilledTasks = () => {
         ]);
         if (!tasksResponse.ok) throw new Error('Failed to fetch tasks');
         let tasksData = await tasksResponse.json();
-        tasksData = tasksData.filter(task => task.billed === false && task.status !== 'completed');
+        tasksData = tasksData.filter(task => task.billed === true && task.status !== 'completed');
 
         // Get rowOrder from tabState
         let order = [];

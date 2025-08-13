@@ -309,18 +309,16 @@ const Timesheets = () => {
     return date.toDateString() === yesterday.toDateString();
   };
 
+  // Updated to allow editing of any date as long as timesheet is not submitted
   const isEditableDate = (date) => {
-    return isToday(date) || isYesterday(date);
+    // Allow editing of any previous date - no date restrictions
+    return true;
   };
 
   const isEditable = (timesheet) => {
-    if (!timesheet) return false;
-    // If timesheet is completed/submitted, it's not editable regardless of date
-    if (timesheet.isCompleted) return false;
-    // Only allow editing for today and yesterday
-    if (!isEditableDate(selectedDate)) return false;
-    // If it passes both checks, it's editable
-    return true;
+    if (!timesheet) return true; // Allow creating new timesheet entries for any date
+    // Only check if timesheet is completed/submitted - no date restrictions
+    return !timesheet.isCompleted;
   };
 
   const handleDateChange = (date) => {
@@ -422,8 +420,11 @@ const Timesheets = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             {isToday(selectedDate) ? 'Today' : selectedDate.toLocaleDateString()}
-            {isEditableDate(selectedDate) && (
+            {isEditable(timesheet) && (
               <span className="text-xs bg-green-500 px-1 rounded">Editable</span>
+            )}
+            {timesheet && timesheet.isCompleted && (
+              <span className="text-xs bg-red-500 text-white px-1 rounded">Submitted</span>
             )}
           </button>
           {showCalendar && (
@@ -440,17 +441,17 @@ const Timesheets = () => {
         </div>
       </div>
       <div className="space-y-6">
-        {/* Information Banner */}
-        {!isEditableDate(selectedDate) && (
+        {/* Information Banner - Show when timesheet is submitted */}
+        {timesheet && timesheet.isCompleted && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-center">
               <svg className="w-5 h-5 text-blue-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <div>
-                <p className="text-blue-800 font-medium">View Only Mode</p>
+                <p className="text-blue-800 font-medium">Timesheet Submitted</p>
                 <p className="text-blue-700 text-sm">
-                  You can only edit timesheets for today and yesterday. This timesheet is read-only.
+                  This timesheet has been submitted and is now read-only. No further changes can be made.
                 </p>
               </div>
             </div>
@@ -499,7 +500,7 @@ const Timesheets = () => {
           </div>
         </div>
         {/* Submit Button */}
-        {timesheet && !timesheet.isCompleted && isEditableDate(selectedDate) && (
+        {timesheet && !timesheet.isCompleted && (
           <div>
             <button
               className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"

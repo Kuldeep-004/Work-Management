@@ -115,7 +115,7 @@ const BilledTasks = () => {
         });
         if (!response.ok) throw new Error('Failed to fetch tasks');
         let data = await response.json();
-        data = data.filter(task => task.billed === true && task.status !== 'completed');
+        data = data.filter(task => task.billed === false && task.status !== 'completed');
         
         // Apply row order if available
         if (rowOrder.length > 0) {
