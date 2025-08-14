@@ -381,6 +381,10 @@ const AdvancedTaskTable = ({
   // Add a new variable:
   const isColumnOrderControlled = typeof columnOrder !== 'undefined' && typeof setColumnOrder === 'function';
 
+  // Fix: move selfVerification update state hooks to top level to avoid hook order issues
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isUpdating2, setIsUpdating2] = useState(false);
+
   // Helper functions
   const getStatusColor = (status) => {
     // Find the status in dynamic task statuses first
@@ -1436,10 +1440,6 @@ const AdvancedTaskTable = ({
     );
   }
 
-  // Fix: move selfVerification update state hooks to top level to avoid hook order issues
-  const [isUpdating, setIsUpdating] = React.useState(false);
-  const [isUpdating2, setIsUpdating2] = React.useState(false);
-
   return (
     <>
       <div className="pt-4 bg-gray-50 min-h-screen">
@@ -1710,9 +1710,10 @@ const AdvancedTaskTable = ({
                             
                             case 'status':
                               // Show colored status but disable interaction in 'Task Issued For Verification' and 'Task For Guidance' tabs in Received Tasks
+                              // Allow interaction in 'completed' tab
                               if (
                                 viewType === 'received' &&
-                                (taskType === 'issuedVerification' || taskType === 'guidance' || taskType === 'completed')
+                                (taskType === 'issuedVerification' || taskType === 'guidance')
                               ) {
                                 return (
                                   <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
@@ -2844,9 +2845,10 @@ const AdvancedTaskTable = ({
                       
                       case 'status':
                         // Show colored status but disable interaction in 'Task Issued For Verification' and 'Task For Guidance' tabs in Received Tasks
+                        // Allow interaction in 'completed' tab
                         if (
                           viewType === 'received' &&
-                          (taskType === 'issuedVerification' || taskType === 'guidance' || taskType === 'completed')
+                          (taskType === 'issuedVerification' || taskType === 'guidance')
                         ) {
                           return (
                             <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}

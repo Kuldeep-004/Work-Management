@@ -215,6 +215,58 @@ router.post('/groups', protect, checkRole(['Admin', 'Team Head']), async (req, r
   }
 });
 
+// Update a client group
+router.put('/groups/:id', protect, checkRole(['Admin', 'Team Head', 'Senior']), async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    // Basic validation
+    if (!name) {
+      return res.status(400).json({ msg: 'Name is required' });
+    }
+
+    let group = await ClientGroup.findById(req.params.id);
+    if (!group) {
+      return res.status(404).json({ msg: 'Client group not found' });
+    }
+
+    // Check if another group with the same name already exists
+    const existingGroup = await ClientGroup.findOne({ 
+      name, 
+      _id: { $ne: req.params.id } 
+    });
+    if (existingGroup) {
+      return res.status(400).json({ msg: 'A group with this name already exists' });
+    }
+
+    // Store old name for activity log
+    const oldName = group.name;
+
+    // Update group
+    group.name = name;
+    await group.save();
+
+    // Log client group update
+    await ActivityLogger.logClientActivity(
+      req.user._id,
+      'client_group_updated',
+      group._id,
+      `Updated client group from "${oldName}" to "${name}"`,
+      { name: oldName },
+      { name },
+      req
+    );
+
+    res.json(group);
+  } catch (err) {
+    console.error(err.message);
+    if (err.kind === 'ObjectId') {
+      return res.status(404).json({ msg: 'Client group not found' });
+    }
+    res.status(500).send('Server Error');
+  }
+});
+
 // Delete a client group
 router.delete('/groups/:id', protect, async (req, res) => {
   try {

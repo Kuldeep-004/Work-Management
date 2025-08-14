@@ -16,6 +16,8 @@ const Clients = () => {
   const [isWorkTypeModalOpen, setIsWorkTypeModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editClientId, setEditClientId] = useState(null);
+  const [isEditGroupModalOpen, setIsEditGroupModalOpen] = useState(false);
+  const [editGroupId, setEditGroupId] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     group: '',
@@ -39,6 +41,9 @@ const Clients = () => {
     status: 'Individual',
     workOffered: [],
     priority: 'A',
+  });
+  const [editGroupFormData, setEditGroupFormData] = useState({
+    name: ''
   });
 
   const fetchClients = async () => {
@@ -246,6 +251,37 @@ const Clients = () => {
     }
   };
 
+  const handleEditGroup = (group) => {
+    setEditGroupId(group._id);
+    setEditGroupFormData({ name: group.name });
+    setIsEditGroupModalOpen(true);
+  };
+
+  const handleEditGroupSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/clients/groups/${editGroupId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify(editGroupFormData),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.msg || 'Failed to update group');
+      }
+      await fetchClientGroups();
+      setIsEditGroupModalOpen(false);
+      setEditGroupFormData({ name: '' });
+      setEditGroupId(null);
+      toast.success('Client group updated successfully');
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
   // Redirect Fresher users
   if (user.role === 'Fresher') {
     navigate('/dashboard', { replace: true });
@@ -301,106 +337,127 @@ const Clients = () => {
       {/* Clients List */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto scrollbar-hide">
-          {(groupSearchTerm
-            ? clientGroups.filter(g => g.name.toLowerCase().includes(groupSearchTerm.toLowerCase()))
-            : clientGroups
-          ).map((group) => {
-            const groupClients = clients.filter(client => client.group._id === group._id);
-            const priorityOrder = { A: 1, B: 2, C: 3, D: 4 };
-            const sortedGroupClients = groupClients.sort((a, b) => (priorityOrder[a.priority] || 5) - (priorityOrder[b.priority] || 5));
-            return (
-              <div key={group._id} className="mb-4 border border-gray-200 rounded-lg shadow-sm bg-white">
-                <div className="bg-gray-100 px-4 py-2 rounded-t-lg border-b border-gray-200 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-gray-800 tracking-wide">{group.name}</h3>
-                  <button
-                    onClick={() => handleDeleteGroup(group._id)}
-                    className="text-red-600 hover:text-red-800 transition-colors ml-2"
-                    title="Delete group"
-                  >
-                    <TrashIcon className="h-5 w-5" />
-                  </button>
-                </div>
-                <div className="overflow-x-auto w-full">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-white">
-                      <tr>
-                        <th className="w-1/4 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-                        <th className="w-1/6 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Priority</th>
-                        <th className="w-1/6 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="w-1/3 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Work Offered</th>
-                        <th className="w-20 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-100">
-                      {sortedGroupClients.length === 0 ? (
+          {(() => {
+            // Lowercase search term for case-insensitive match
+            const searchTerm = groupSearchTerm.trim().toLowerCase();
+            // Filter groups: show if group name matches OR any client in group matches
+            const filteredGroups = searchTerm
+              ? clientGroups.filter(group => {
+                  const groupNameMatch = group.name.toLowerCase().includes(searchTerm);
+                  const groupClients = clients.filter(client => client.group._id === group._id);
+                  const clientNameMatch = groupClients.some(client => client.name.toLowerCase().includes(searchTerm));
+                  return groupNameMatch || clientNameMatch;
+                })
+              : clientGroups;
+            return filteredGroups.map((group) => {
+              const groupClients = clients.filter(client => client.group._id === group._id);
+              const priorityOrder = { A: 1, B: 2, C: 3, D: 4 };
+              const sortedGroupClients = groupClients.sort((a, b) => (priorityOrder[a.priority] || 5) - (priorityOrder[b.priority] || 5));
+              return (
+                <div key={group._id} className="mb-4 border border-gray-200 rounded-lg shadow-sm bg-white">
+                  <div className="bg-gray-100 px-4 py-2 rounded-t-lg border-b border-gray-200 flex items-center justify-between">
+                    <h3 className="text-base font-semibold text-gray-800 tracking-wide">{group.name}</h3>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleEditGroup(group)}
+                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                        title="Edit group"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487a2.1 2.1 0 1 1 2.97 2.97L7.5 19.789l-4 1 1-4 12.362-12.302z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteGroup(group._id)}
+                        className="text-red-600 hover:text-red-800 transition-colors"
+                        title="Delete group"
+                      >
+                        <TrashIcon className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto w-full">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-white">
                         <tr>
-                          <td colSpan={5} className="px-4 py-4 text-center text-gray-400 text-sm">No clients in this group.</td>
+                          <th className="w-2/5 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+                          <th className="w-1/6 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Priority</th>
+                          <th className="w-1/6 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                          <th className="w-1/3 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Work Offered</th>
+                          <th className="w-20 px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
-                      ) : (
-                        sortedGroupClients.map((client) => (
-                          <tr key={client._id}>
-                            <td className="w-1/4 px-4 py-2">
-                              <div className="w-32 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm">{client.name}</div>
-                            </td>
-                            <td className="w-1/6 px-4 py-2">
-                              <div className="w-10 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm font-semibold">{client.priority}</div>
-                            </td>
-                            <td className="w-1/6 px-4 py-2">
-                              <div className="w-24 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm">{client.status}</div>
-                            </td>
-                            <td className="w-1/3 px-4 py-2">
-                              <div className="w-48 overflow-x-auto whitespace-nowrap scrollbar-hide">
-                                <div className="flex flex-wrap gap-1">
-                                  {client.workOffered.map((work, idx) => (
-                                    <span
-                                      key={work._id ? `${work._id}-${idx}` : idx}
-                                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
-                                    >
-                                      {work.name}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="w-20 px-4 py-2 whitespace-nowrap">
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  onClick={() => {
-                                    setEditClientId(client._id);
-                                    setEditFormData({
-                                      name: client.name,
-                                      group: client.group._id,
-                                      status: client.status,
-                                      workOffered: client.workOffered.map(w => w._id),
-                                      priority: client.priority
-                                    });
-                                    setIsEditModalOpen(true);
-                                  }}
-                                  className="text-blue-600 hover:text-blue-800 transition-colors"
-                                  title="Edit client"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487a2.1 2.1 0 1 1 2.97 2.97L7.5 19.789l-4 1 1-4 12.362-12.302z" />
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteClient(client._id)}
-                                  className="text-red-600 hover:text-red-800 transition-colors"
-                                  title="Delete client"
-                                >
-                                  <TrashIcon className="h-5 w-5" />
-                                </button>
-                              </div>
-                            </td>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-100">
+                        {sortedGroupClients.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-4 text-center text-gray-400 text-sm">No clients in this group.</td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                        ) : (
+                          sortedGroupClients.map((client) => (
+                            <tr key={client._id}>
+                              <td className="w-1/4 px-4 py-2">
+                              <div className="w-80 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm">{client.name}</div>
+                              </td>
+                              <td className="w-1/6 px-4 py-2">
+                                <div className="w-10 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm font-semibold">{client.priority}</div>
+                              </td>
+                              <td className="w-1/6 px-4 py-2">
+                                <div className="w-24 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm">{client.status}</div>
+                              </td>
+                              <td className="w-1/3 px-4 py-2">
+                                <div className="w-48 overflow-x-auto whitespace-nowrap scrollbar-hide">
+                                  <div className="flex flex-wrap gap-1">
+                                    {client.workOffered.map((work, idx) => (
+                                      <span
+                                        key={work._id ? `${work._id}-${idx}` : idx}
+                                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
+                                      >
+                                        {work.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="w-20 px-4 py-2 whitespace-nowrap">
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    onClick={() => {
+                                      setEditClientId(client._id);
+                                      setEditFormData({
+                                        name: client.name,
+                                        group: client.group._id,
+                                        status: client.status,
+                                        workOffered: client.workOffered.map(w => w._id),
+                                        priority: client.priority
+                                      });
+                                      setIsEditModalOpen(true);
+                                    }}
+                                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                                    title="Edit client"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487a2.1 2.1 0 1 1 2.97 2.97L7.5 19.789l-4 1 1-4 12.362-12.302z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteClient(client._id)}
+                                    className="text-red-600 hover:text-red-800 transition-colors"
+                                    title="Delete client"
+                                  >
+                                    <TrashIcon className="h-5 w-5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
         </div>
       </div>
 
@@ -841,6 +898,45 @@ const Clients = () => {
                   type="submit"
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
                 >Update Client</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Group Modal */}
+      {isEditGroupModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white rounded-lg p-8 w-full max-w-md">
+            <h2 className="text-2xl font-bold mb-6">Edit Client Group</h2>
+            <form onSubmit={handleEditGroupSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Group Name
+                </label>
+                <input
+                  type="text"
+                  value={editGroupFormData.name}
+                  onChange={(e) => setEditGroupFormData({ ...editGroupFormData, name: e.target.value })}
+                  className="w-full border rounded-md px-3 py-2"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsEditGroupModalOpen(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  Update Group
+                </button>
               </div>
             </form>
           </div>

@@ -62,7 +62,7 @@ const NewGroupModal = ({ isOpen, onClose, allUsers, onCreateGroup }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div 
-        className="absolute inset-0  bg-opacity-30 backdrop-blur-md"
+        className="absolute inset-0 bg-opacity-30 backdrop-blur-md"
         onClick={onClose}
       ></div>
       

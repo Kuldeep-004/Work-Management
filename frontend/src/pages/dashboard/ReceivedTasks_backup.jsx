@@ -223,8 +223,232 @@ const ReceivedTasks = () => {
     }
   };
 
-  // ALL USEEFFECTS - moved before any early returns to avoid hook order issues
+  // useEffects - moved to top level to avoid hook order issues
   useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/users/except-me`, {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to fetch users');
+        }
+
+        const data = await res.json();
+        setUsers(data);
+      } catch (err) {
+        console.error('Error fetching users:', err);
+        toast.error('Failed to fetch users');
+      } finally {
+        setUsersLoaded(true); // NEW
+      }
+    };
+
+    if (user && user.token) {
+      setUsersLoaded(false); // NEW: reset before fetching
+      fetchUsers();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user && user.token) {
+      setTasksLoaded(false); // NEW: reset before fetching
+      fetchTasksAndTabState();
+    }
+    // eslint-disable-next-line
+  }, [user, activeTabObj.activeTab]);
+
+  // Fetch task counts for each tab
+  useEffect(() => {
+    const fetchTaskCounts = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/tasks/received/counts`, {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setTaskCounts(data);
+        }
+      } catch (error) {
+        console.error('Error fetching task counts:', error);
+      }
+    };
+
+    if (user && user.token) {
+      fetchTaskCounts();
+    }
+  }, [user]);
+
+  // Fetch custom columns
+  useEffect(() => {
+    const fetchCustomColumns = async () => {
+      if (!user?.token) return;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/custom-columns`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (response.ok) {
+          const columns = await response.json();
+          setCustomColumns(columns);
+        }
+      } catch (error) {
+        console.error('Error fetching custom columns:', error);
+        setCustomColumns([]);
+      } finally {
+        setCustomColumnsLoaded(true);
+      }
+    };
+
+    fetchCustomColumns();
+  }, [user?.token]);
+
+  // Load tab state
+  useEffect(() => {
+    const loadTabState = async () => {
+      if (!user?.token) return;
+      
+      try {
+        const tabState = await fetchTabState('receivedTasks', user.token);
+        if (tabState && Array.isArray(tabState.tabs) && tabState.tabs.length > 0) {
+          // Ensure each tab has the latest column structure
+          const updatedTabs = tabState.tabs.map(tab => {
+            const defaultTab = DEFAULT_TAB(tab.activeTab || 'execution', customColumns);
+            return {
+              ...defaultTab,
+              ...tab,
+              visibleColumns: tab.visibleColumns || defaultTab.visibleColumns,
+              columnOrder: tab.columnOrder || defaultTab.columnOrder,
+              columnWidths: { ...defaultTab.columnWidths, ...(tab.columnWidths || {}) },
+            };
+          });
+          setTabs(updatedTabs);
+          setActiveTabId(tabState.activeTabId || updatedTabs[0]?.id);
+        } else {
+          // Create default tab
+          const defaultTab = DEFAULT_TAB('execution', customColumns);
+          setTabs([defaultTab]);
+          setActiveTabId(defaultTab.id);
+        }
+      } catch (error) {
+        console.error('Error loading tab state:', error);
+        // Fallback to default tab
+        const defaultTab = DEFAULT_TAB('execution', customColumns);
+        setTabs([defaultTab]);
+        setActiveTabId(defaultTab.id);
+      } finally {
+        setTabsLoaded(true);
+      }
+    };
+
+    if (customColumnsLoaded) {
+      loadTabState();
+    }
+  }, [user?.token, customColumnsLoaded, customColumns]);
+
+  // Save tab state when tabs change
+  useEffect(() => {
+    const saveTabStateData = async () => {
+      if (!user?.token || !tabsLoaded || tabs.length === 0) return;
+      
+      try {
+        const tabState = {
+          tabs,
+          activeTabId,
+          rowOrder
+        };
+        await saveTabState('receivedTasks', tabState, user.token);
+      } catch (error) {
+        console.error('Error saving tab state:', error);
+      }
+    };
+
+    saveTabStateData();
+  }, [tabs, activeTabId, rowOrder, user?.token, tabsLoaded]);
+
+  // Load filters and work types
+  useEffect(() => {
+    const loadFiltersAndWorkTypes = async () => {
+      try {
+        const [clientNamesRes, clientGroupsRes, workTypesRes, prioritiesRes, taskHoursRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/clients/names`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          }),
+          fetch(`${API_BASE_URL}/api/clients/groups`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          }),
+          fetch(`${API_BASE_URL}/api/tasks/work-types`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          }),
+          fetch(`${API_BASE_URL}/api/priorities`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          }),
+          fetch(`${API_BASE_URL}/api/tasks/task-hours`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          })
+        ]);
+
+        if (clientNamesRes.ok) {
+          const clientNames = await clientNamesRes.json();
+          setClientNames(clientNames);
+        }
+
+        if (clientGroupsRes.ok) {
+          const clientGroups = await clientGroupsRes.json();
+          setClientGroups(clientGroups);
+        }
+
+        if (workTypesRes.ok) {
+          const workTypes = await workTypesRes.json();
+          setWorkTypes(workTypes);
+        }
+
+        if (prioritiesRes.ok) {
+          const priorities = await prioritiesRes.json();
+          setPriorities(priorities);
+        }
+
+        if (taskHoursRes.ok) {
+          const taskHours = await taskHoursRes.json();
+          setTaskHours(taskHours);
+        }
+      } catch (error) {
+        console.error('Error loading filters and work types:', error);
+        toast.error('Failed to load filters');
+      }
+    };
+
+    if (user && user.token) {
+      loadFiltersAndWorkTypes();
+    }
+  }, [user]);
+
+  // Effect to close dropdowns on click outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (columnsDropdownRef.current && !columnsDropdownRef.current.contains(event.target)) {
+        setShowColumnDropdown(false);
+      }
+      if (filterPopupRef.current && !filterPopupRef.current.contains(event.target)) {
+        setIsFilterPopupOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  if (!isAuthenticated()) {
+    return null;
+  }
     const fetchUsers = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/users/except-me`, {
@@ -697,11 +921,6 @@ const ReceivedTasks = () => {
   // Combine all loading states
   const isPageLoading = !tabsLoaded || !usersLoaded || !tasksLoaded;
 
-  // Early return checks - after all hooks to avoid hook order violations
-  if (!isAuthenticated()) {
-    return null;
-  }
-
   if (isPageLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -846,7 +1065,8 @@ const ReceivedTasks = () => {
                 <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientName' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientName' }); setShowGroupByDropdown(false); }}>Client Name</button>
                 <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientGroup' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientGroup' }); setShowGroupByDropdown(false); }}>Client Group</button>
                 <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'workType' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'workType' }); setShowGroupByDropdown(false); }}>Work Type</button>
-                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'billed' }); setShowGroupByDropdown(false); }}>Internal Work</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'billed' }); setShowGroupByDropdown(false); }}>Billed</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'billed' }); setShowGroupByDropdown(false); }}>Billed</button>
               </div>
             )}
           </div>
