@@ -60,8 +60,8 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
-// Create new task status (Admin and Team Head only)
-router.post('/', protect, adminOrTeamHead, async (req, res) => {
+// Create new task status (All authenticated users can create)
+router.post('/', protect, async (req, res) => {
   try {
     const { name, color } = req.body;
 
@@ -75,13 +75,46 @@ router.post('/', protect, adminOrTeamHead, async (req, res) => {
       return res.status(409).json({ message: 'Task status already exists' });
     }
 
+    // Convert hex color to Tailwind classes if needed
+    let processedColor = color || 'bg-purple-100 text-purple-800';
+    
+    // If the color is a hex value, convert it to a Tailwind class
+    if (processedColor.startsWith('#')) {
+      const hexToTailwind = {
+        '#EF4444': 'bg-red-100 text-red-800',
+        '#DC2626': 'bg-red-100 text-red-800',
+        '#F59E0B': 'bg-yellow-100 text-yellow-800',
+        '#D97706': 'bg-yellow-100 text-yellow-800',
+        '#10B981': 'bg-green-100 text-green-800',
+        '#059669': 'bg-green-100 text-green-800',
+        '#3B82F6': 'bg-blue-100 text-blue-800',
+        '#2563EB': 'bg-blue-100 text-blue-800',
+        '#6366F1': 'bg-indigo-100 text-indigo-800',
+        '#4F46E5': 'bg-indigo-100 text-indigo-800',
+        '#8B5CF6': 'bg-purple-100 text-purple-800',
+        '#7C3AED': 'bg-purple-100 text-purple-800',
+        '#EC4899': 'bg-pink-100 text-pink-800',
+        '#DB2777': 'bg-pink-100 text-pink-800',
+        '#F97316': 'bg-orange-100 text-orange-800',
+        '#EA580C': 'bg-orange-100 text-orange-800',
+        '#14B8A6': 'bg-teal-100 text-teal-800',
+        '#0D9488': 'bg-teal-100 text-teal-800',
+        '#06B6D4': 'bg-cyan-100 text-cyan-800',
+        '#0891B2': 'bg-cyan-100 text-cyan-800',
+        '#6B7280': 'bg-gray-100 text-gray-800',
+        '#4B5563': 'bg-gray-100 text-gray-800'
+      };
+      
+      processedColor = hexToTailwind[processedColor.toUpperCase()] || 'bg-purple-100 text-purple-800';
+    }
+
     // Get next order number
     const maxOrder = await TaskStatus.findOne().sort({ order: -1 });
     const nextOrder = maxOrder ? maxOrder.order + 1 : 4;
 
     const taskStatus = new TaskStatus({
       name,
-      color: color || 'bg-purple-100 text-purple-800',
+      color: processedColor,
       order: nextOrder,
       isDefault: false
     });
@@ -89,14 +122,14 @@ router.post('/', protect, adminOrTeamHead, async (req, res) => {
     await taskStatus.save();
 
     // Log activity
-    await ActivityLogger.logSystemActivity(
-      req.user._id,
-      'task_status_created',
-      taskStatus._id,
-      `Created task status "${name}"`,
-      null,
-      { name: taskStatus.name, color: taskStatus.color }
-    );
+    await ActivityLogger.log({
+      userId: req.user._id,
+      action: 'task_status_created',
+      entity: 'TaskStatus',
+      entityId: taskStatus._id,
+      description: `Created task status "${name}"`,
+      newValues: { name: taskStatus.name, color: taskStatus.color }
+    });
 
     res.status(201).json(taskStatus);
   } catch (error) {
@@ -119,21 +152,52 @@ router.put('/:id', protect, adminOrTeamHead, async (req, res) => {
       return res.status(400).json({ message: 'Cannot change name of default task status' });
     }
 
+    // Process color if provided
+    let processedColor = color;
+    if (color && color.startsWith('#')) {
+      const hexToTailwind = {
+        '#EF4444': 'bg-red-100 text-red-800',
+        '#DC2626': 'bg-red-100 text-red-800',
+        '#F59E0B': 'bg-yellow-100 text-yellow-800',
+        '#D97706': 'bg-yellow-100 text-yellow-800',
+        '#10B981': 'bg-green-100 text-green-800',
+        '#059669': 'bg-green-100 text-green-800',
+        '#3B82F6': 'bg-blue-100 text-blue-800',
+        '#2563EB': 'bg-blue-100 text-blue-800',
+        '#6366F1': 'bg-indigo-100 text-indigo-800',
+        '#4F46E5': 'bg-indigo-100 text-indigo-800',
+        '#8B5CF6': 'bg-purple-100 text-purple-800',
+        '#7C3AED': 'bg-purple-100 text-purple-800',
+        '#EC4899': 'bg-pink-100 text-pink-800',
+        '#DB2777': 'bg-pink-100 text-pink-800',
+        '#F97316': 'bg-orange-100 text-orange-800',
+        '#EA580C': 'bg-orange-100 text-orange-800',
+        '#14B8A6': 'bg-teal-100 text-teal-800',
+        '#0D9488': 'bg-teal-100 text-teal-800',
+        '#06B6D4': 'bg-cyan-100 text-cyan-800',
+        '#0891B2': 'bg-cyan-100 text-cyan-800',
+        '#6B7280': 'bg-gray-100 text-gray-800',
+        '#4B5563': 'bg-gray-100 text-gray-800'
+      };
+      
+      processedColor = hexToTailwind[color.toUpperCase()] || color;
+    }
+
     if (name) taskStatus.name = name;
-    if (color) taskStatus.color = color;
+    if (processedColor) taskStatus.color = processedColor;
     if (order !== undefined) taskStatus.order = order;
 
     await taskStatus.save();
 
     // Log activity
-    await ActivityLogger.logSystemActivity(
-      req.user._id,
-      'task_status_updated',
-      taskStatus._id,
-      `Updated task status "${taskStatus.name}"`,
-      null,
-      { name: taskStatus.name, color, order }
-    );
+    await ActivityLogger.log({
+      userId: req.user._id,
+      action: 'task_status_updated',
+      entity: 'TaskStatus',
+      entityId: taskStatus._id,
+      description: `Updated task status "${taskStatus.name}"`,
+      newValues: { name: taskStatus.name, color: processedColor, order }
+    });
 
     res.json(taskStatus);
   } catch (error) {
@@ -165,14 +229,14 @@ router.delete('/:id', protect, adminOrTeamHead, async (req, res) => {
     await TaskStatus.findByIdAndDelete(req.params.id);
 
     // Log activity
-    await ActivityLogger.logSystemActivity(
-      req.user._id,
-      'task_status_deleted',
-      req.params.id,
-      `Deleted task status "${taskStatus.name}"`,
-      null,
-      { name: taskStatus.name }
-    );
+    await ActivityLogger.log({
+      userId: req.user._id,
+      action: 'task_status_deleted',
+      entity: 'TaskStatus',
+      entityId: req.params.id,
+      description: `Deleted task status "${taskStatus.name}"`,
+      oldValues: { name: taskStatus.name }
+    });
 
     res.json({ message: 'Task status deleted successfully' });
   } catch (error) {
@@ -210,14 +274,13 @@ router.post('/reorder', protect, adminOrTeamHead, async (req, res) => {
     }
 
     // Log activity
-    await ActivityLogger.logSystemActivity(
-      req.user._id,
-      'task_statuses_reordered',
-      null,
-      'Reordered task statuses',
-      null,
-      { newOrder: statusOrder }
-    );
+    await ActivityLogger.log({
+      userId: req.user._id,
+      action: 'task_status_reordered',
+      entity: 'TaskStatus',
+      description: 'Reordered task statuses',
+      newValues: { newOrder: statusOrder }
+    });
 
     const reorderedStatuses = await TaskStatus.find({ isActive: true }).sort({ order: 1, createdAt: 1 });
     res.json(reorderedStatuses);

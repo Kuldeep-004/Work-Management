@@ -5,6 +5,7 @@ import defaultProfile from '../assets/avatar.jpg';
 import FileUpload from './FileUpload';
 import FileList from './FileList';
 import { API_BASE_URL } from '../apiConfig';
+import TaskStatusDropdown from './TaskStatusDropdown';
 
 // Accept new props for automation task creation
 const AutomationTask = ({
@@ -46,7 +47,8 @@ const AutomationTask = ({
     inwardEntryTime: '',
     dueDate: '',
     targetDate: '',
-    billed: false // default to No (Internal Works)
+    billed: false, // default to No (Internal Works)
+    status: 'yet_to_start' // default to yet_to_start
   });
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -319,7 +321,8 @@ const AutomationTask = ({
         inwardEntryTime: convertedTime,
         dueDate: initialData.dueDate ? initialData.dueDate.split('T')[0] : '',
         targetDate: initialData.targetDate ? initialData.targetDate.split('T')[0] : '',
-        billed: typeof initialData.billed === 'boolean' ? initialData.billed : true
+        billed: typeof initialData.billed === 'boolean' ? initialData.billed : true,
+        status: initialData.status || 'yet_to_start' // Use yet_to_start as fallback
       });
       setClientSearchTerm(initialData.clientName || '');
       const assignedToRaw = Array.isArray(initialData.assignedTo)
@@ -336,19 +339,30 @@ const AutomationTask = ({
       setSelectedUsers(selected);
     } else if (mode === 'create' && isOpen) {
       const { date, time } = getCurrentDateTime();
-      setFormData({
-        title: '',
-        description: '',
-        clientName: '',
-        clientGroup: '',
-        workType: [],
-        assignedTo: [],
-        priority: 'today',
-        inwardEntryDate: date,
-        inwardEntryTime: time,
-        dueDate: '',
-        targetDate: '',
-        billed: false
+      
+      // Only reset form data if it's not already initialized (when modal first opens)
+      setFormData(prev => {
+        // If the form already has data (user has been using it), don't reset the status
+        if (prev.title || prev.status !== 'yet_to_start') {
+          return prev; // Keep existing data
+        }
+        
+        // Initialize form for first time
+        return {
+          title: '',
+          description: '',
+          clientName: '',
+          clientGroup: '',
+          workType: [],
+          assignedTo: [],
+          priority: 'today',
+          inwardEntryDate: date,
+          inwardEntryTime: time,
+          dueDate: '',
+          targetDate: '',
+          billed: false,
+          status: 'yet_to_start' // Use yet_to_start as default
+        };
       });
       setClientSearchTerm('');
       setSelectedUsers([]);
@@ -761,7 +775,8 @@ const AutomationTask = ({
       inwardEntryTime: time,
       dueDate: '',
       targetDate: '',
-      billed: false
+      billed: false,
+      status: 'yet_to_start' // Use yet_to_start as default
     });
     setIsModalOpen(true);
   };
@@ -780,7 +795,8 @@ const AutomationTask = ({
       inwardEntryTime: '',
       dueDate: '',
       targetDate: '',
-      billed: false
+      billed: false,
+      status: 'yet_to_start' // Use yet_to_start as default
     });
     setSelectedFiles([]);
     setTaskFiles([]);
@@ -1163,17 +1179,16 @@ const AutomationTask = ({
                     <input
                       type="text"
                       value={(() => {
-                        // Find unique team heads for selected users
-                        const heads = [];
+                        const teamIds = new Set();
                         selectedUsers.forEach(u => {
-                          if (!u.team) return;
-                          const head = users.find(
-                            x => x.team && x.team.toString() === u.team.toString() && x.role === 'Team Head'
-                          );
-                          if (head && !heads.some(h => h._id === head._id)) heads.push(head);
+                          if (u.team) teamIds.add(u.team.toString());
                         });
+                        const heads = users.filter(
+                          x => x.team && teamIds.has(x.team.toString()) && x.role === 'Team Head'
+                        );
                         if (heads.length === 0) return '';
-                        return heads.map(h => `${h.firstName} ${h.lastName}`).join(', ');
+                        const uniqueHeads = Array.from(new Map(heads.map(h => [h._id, h])).values());
+                        return uniqueHeads.map(h => `${h.firstName} ${h.lastName}`).join(', ');
                       })()}
                       className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700"
                       readOnly
@@ -1181,16 +1196,30 @@ const AutomationTask = ({
                     />
                   </div>
                 </div>
-                {/* Status in one row, Work Type under Status */}
+                {/* Task Status Dropdown */}
                 <div className="md:col-span-2 mt-2">
-                  <label className="block text-sm font-medium text-gray-700 ">
-                    Status
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Task Status <span className="text-red-500">*</span>
+                  </label>
+                  <TaskStatusDropdown
+                    value={formData.status}
+                    onChange={(status) => setFormData({ ...formData, status })}
+                    excludeCompleted={true}
+                    className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                {/* Description/Notes */}
+                <div className="md:col-span-2 mt-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description/Notes
                   </label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     rows="3"
+                    placeholder="Enter task description or notes..."
                   />
                 </div>
                 <div className="md:col-span-2 mt-2">

@@ -181,6 +181,7 @@ export const runAutomationCheck = async (isManual = true) => {
           workType,
           assignedTo,
           priority,
+          status, // Add status field
           inwardEntryDate,
           inwardEntryTime,
           dueDate,
@@ -289,6 +290,7 @@ export const runAutomationCheck = async (isManual = true) => {
             assignedTo: userId,
             assignedBy: assignedById,
             priority,
+            status: status || 'yet_to_start', // Use template status or default
             inwardEntryDate: combinedInwardEntryDate || new Date(),
             // Only include dueDate and targetDate if they were specified in the template
             ...(dueDate ? { dueDate: new Date(dueDate) } : {}),
@@ -296,8 +298,7 @@ export const runAutomationCheck = async (isManual = true) => {
             verificationAssignedTo: verificationAssignedToId,
             billed: billed !== undefined ? billed : true,
             selfVerification: false,
-            verificationStatus: 'completed',
-            status: 'yet_to_start' // Make sure we set the correct status
+            verificationStatus: 'completed'
           });
           
           try {

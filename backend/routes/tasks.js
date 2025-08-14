@@ -694,7 +694,8 @@ router.post('/', protect, canAssignTask, async (req, res) => {
       targetDate,
       verificationAssignedTo,
       billed,
-customFields // Add custom fields to destructuring
+      status, // Add status to destructuring
+      customFields // Add custom fields to destructuring
     } = req.body;
 
     // Validate priority
@@ -753,6 +754,7 @@ customFields // Add custom fields to destructuring
         assignedTo: userId,
         assignedBy: req.user._id,
         priority,
+        status: status || 'yet_to_start', // Use provided status or default
         inwardEntryDate: combinedInwardEntryDate,
         dueDate,
         targetDate,

@@ -385,11 +385,18 @@ const AdvancedTaskTable = ({
   const getStatusColor = (status) => {
     // Find the status in dynamic task statuses first
     const dynamicStatus = dynamicTaskStatuses.find(s => s.name === status);
-    if (dynamicStatus && !dynamicStatus.isDefault) {
-      return null; // Return null to indicate we should use inline styles for custom statuses only
+    if (dynamicStatus) {
+      // If it's a Tailwind class, return it directly
+      if (dynamicStatus.color && !dynamicStatus.color.startsWith('#')) {
+        return dynamicStatus.color;
+      }
+      // If it's a hex color, return null to use inline styles
+      if (dynamicStatus.color && dynamicStatus.color.startsWith('#')) {
+        return null;
+      }
     }
     
-    // Use hardcoded colors for default statuses (even if they exist in dynamic array)
+    // Use hardcoded colors for default statuses if not found in dynamic statuses
     switch (status) {
       case 'completed':
         return 'bg-green-100 text-green-800';
@@ -402,10 +409,10 @@ const AdvancedTaskTable = ({
     }
   };
 
-  // Get inline styles for dynamic status colors (only for custom/non-default statuses)
+  // Get inline styles for dynamic status colors (only for hex colors)
   const getStatusStyles = (status) => {
     const dynamicStatus = dynamicTaskStatuses.find(s => s.name === status);
-    if (dynamicStatus && !dynamicStatus.isDefault) {
+    if (dynamicStatus && dynamicStatus.color && dynamicStatus.color.startsWith('#')) {
       const hex = dynamicStatus.color;
       const r = parseInt(hex.slice(1, 3), 16);
       const g = parseInt(hex.slice(3, 5), 16);

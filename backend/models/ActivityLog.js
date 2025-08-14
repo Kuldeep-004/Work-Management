@@ -22,6 +22,9 @@ const activityLogSchema = new mongoose.Schema(
         'custom_column_created', 'custom_column_toggled',
        'custom_column_deleted',
         
+        // Task Status actions
+        'task_status_created', 'task_status_updated', 'task_status_deleted', 'task_status_reordered',
+        
         // User actions
         'user_created', 'user_updated', 'user_deleted', 'user_status_changed',
         'user_role_changed', 'user_team_changed', 'user_approved', 'user_rejected',
@@ -89,7 +92,7 @@ const activityLogSchema = new mongoose.Schema(
       required: true,
       enum: [
         'Task', 'User', 'Team', 'Client', 'ClientGroup', 'WorkType', 
-        'Priority', 'Automation', 'Timesheet', 'Announcement', 
+        'Priority', 'TaskStatus', 'Automation', 'Timesheet', 'Announcement', 
         'Notification', 'File', 'System', 'Settings', 'Chat', 'Message'
       ]
     },

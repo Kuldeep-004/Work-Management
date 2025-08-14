@@ -560,8 +560,8 @@ const Settings = () => {
                       <div className="flex items-center space-x-4">
                         <div 
                           className="w-4 h-4 rounded-full border border-gray-300"
-                          style={{ backgroundColor: status.color }}
-                          title={`Status color: ${status.color}`}
+                          style={{ backgroundColor: status.hexColor || status.color }}
+                          title={`Status color: ${status.hexColor || status.color}`}
                         ></div>
                         <div>
                           <span className="font-medium text-gray-900">{status.name}</span>

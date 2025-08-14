@@ -1086,17 +1086,18 @@ const AutomationPopup = ({
                     <input
                       type="text"
                       value={(() => {
-                        // Find unique team heads for selected users
-                        const heads = [];
+                        // Collect all unique team heads for the teams of selected users
+                        const teamIds = new Set();
                         selectedUsers.forEach(u => {
-                          if (!u.team) return;
-                          const head = users.find(
-                            x => x.team && x.team.toString() === u.team.toString() && x.role === 'Team Head'
-                          );
-                          if (head && !heads.some(h => h._id === head._id)) heads.push(head);
+                          if (u.team) teamIds.add(u.team.toString());
                         });
+                        const heads = users.filter(
+                          x => x.team && teamIds.has(x.team.toString()) && x.role === 'Team Head'
+                        );
                         if (heads.length === 0) return '';
-                        return heads.map(h => `${h.firstName} ${h.lastName}`).join(', ');
+                        // Remove duplicates by _id
+                        const uniqueHeads = Array.from(new Map(heads.map(h => [h._id, h])).values());
+                        return uniqueHeads.map(h => `${h.firstName} ${h.lastName}`).join(', ');
                       })()}
                       className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700"
                       readOnly

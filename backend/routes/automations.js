@@ -245,6 +245,7 @@ router.post('/:id/tasks', protect, async (req, res) => {
       workType,
       assignedTo,
       priority,
+      status, // Add status field
       inwardEntryDate,
       inwardEntryTime,
       dueDate,
@@ -275,6 +276,7 @@ router.post('/:id/tasks', protect, async (req, res) => {
       workType: Array.isArray(workType) ? workType : [],
       assignedTo: Array.isArray(assignedTo) ? assignedTo : [assignedTo].filter(Boolean),
       priority,
+      status: status || 'yet_to_start', // Add status field with default
       inwardEntryDate,
       inwardEntryTime,
       dueDate,

@@ -20,6 +20,7 @@ const automationSchema = new mongoose.Schema({
     workType: [String],
     assignedTo: [mongoose.Schema.Types.ObjectId],
     priority: String,
+    status: { type: String, default: 'yet_to_start' }, // Add status field
     inwardEntryDate: String,
     inwardEntryTime: String,
     dueDate: String,
