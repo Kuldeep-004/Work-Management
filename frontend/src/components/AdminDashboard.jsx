@@ -243,6 +243,29 @@ const AdminDashboard = () => {
     setTabs(tabs.map(tab => {
       if (tab.id !== activeTabId) return tab;
       let newTab = { ...tab, ...patch };
+      // If grouping by 'priority', always reset groupOrder to fixed order
+      if (patch.groupBy === 'priority') {
+        // Build fixed group order: default priorities first, then custom
+        const defaultPriorityNames = [
+          'urgent',
+          'today',
+          'lessThan3Days',
+          'thisWeek',
+          'thisMonth',
+          'regular',
+          'filed',
+          'dailyWorksOffice',
+          'monthlyWorks'
+        ];
+        let groupOrder = [...defaultPriorityNames];
+        // Add custom priorities (not in default list) at the end
+        priorities
+          .filter(p => !defaultPriorityNames.includes(p.name))
+          .forEach(priority => {
+            groupOrder.push(priority.name);
+          });
+        newTab.groupOrder = groupOrder;
+      }
       if (patch.visibleColumns) {
         // Remove hidden columns from order, add new visible columns at the end
         const currentOrder = newTab.columnOrder || ALL_COLUMNS.map(col => col.id);
@@ -474,11 +497,30 @@ const AdminDashboard = () => {
     if (!Array.isArray(tasks)) return [];
     const filters = filtersToUse || activeTabObj.filters;
 
-    // Priority order mapping for sorting - generate dynamically from priorities
+    // Priority order mapping for sorting - default priorities first, then custom
+    const defaultPriorityNames = [
+      'urgent',
+      'today',
+      'lessThan3Days',
+      'thisWeek',
+      'thisMonth',
+      'regular',
+      'filed',
+      'dailyWorksOffice',
+      'monthlyWorks'
+    ];
     const priorityOrder = {};
-    priorities.forEach((priority, index) => {
-      priorityOrder[priority.name] = priority.order || (priority.isDefault ? index + 1 : index + 100);
+    // Add default priorities in fixed order
+    let order = 1;
+    defaultPriorityNames.forEach(name => {
+      priorityOrder[name] = order++;
     });
+    // Add custom priorities (not in default list) at the end
+    priorities
+      .filter(p => !defaultPriorityNames.includes(p.name))
+      .forEach((priority, idx) => {
+        priorityOrder[priority.name] = 100 + idx;
+      });
 
     let filteredTasks = tasks.filter(task => {
       // Exclude tasks with verificationStatus 'pending'

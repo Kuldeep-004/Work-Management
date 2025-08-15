@@ -29,6 +29,7 @@ const Settings = () => {
   const [loadingTaskStatuses, setLoadingTaskStatuses] = useState(false);
   const [newStatusData, setNewStatusData] = useState({ name: '', color: '#6B7280' });
   const [addingStatus, setAddingStatus] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -289,6 +290,61 @@ const Settings = () => {
     }
   };
 
+  // Database backup function (Admin only)
+  const handleBackup = async () => {
+    if (!confirm('This will create a backup of the entire database. This may take a few minutes. Continue?')) {
+      return;
+    }
+
+    setIsBackingUp(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/backup/database`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create backup');
+      }
+
+      // Get the filename from the response headers
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'database-backup.gz';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Create a blob from the response
+      const blob = await response.blob();
+      
+      // Create a temporary URL for the blob
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create a temporary anchor element and trigger download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast.success('Database backup downloaded successfully');
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
   const tabs = [
     'Account settings',
     ...(user.role === 'Admin' || user.role === 'Team Head' ? ['Priority Management', 'Stages'] : []),
@@ -299,6 +355,33 @@ const Settings = () => {
     <div className="bg-white min-h-screen">
       {/* Profile Card */}
       <div className="bg-[#485bbd] px-4 sm:px-8 py-4 flex flex-col md:flex-row items-center gap-4 md:gap-6 relative">
+        {/* Admin Backup Button */}
+        {user.role === 'Admin' && (
+          <button
+            onClick={handleBackup}
+            disabled={isBackingUp}
+            className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Download Database Backup"
+          >
+            {isBackingUp ? (
+              <>
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Creating...
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+                Backup DB
+              </>
+            )}
+          </button>
+        )}
+        
         <div className="flex flex-col md:flex-row items-center w-full md:w-auto gap-4">
           <div className="relative">
             <img

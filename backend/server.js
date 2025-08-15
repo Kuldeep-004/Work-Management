@@ -1,3 +1,5 @@
+//mongorestore --gzip --archive=database-backup.gz --nsFrom='Work.*' --nsTo='test11.*' "mongodb+srv://kuldeep:12312@cluster0.vnqof.mongodb.net"
+
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -25,6 +27,7 @@ import messageRoutes from './routes/messages.js';
 import pushSubscriptionRoutes from './routes/pushSubscription.js';
 import noteRoutes from './routes/notes.js';
 import taskStatusRoutes from './routes/taskStatuses.js';
+import backupRoutes from './routes/backup.js';
 import { activityLoggerMiddleware } from './middleware/activityLoggerMiddleware.js';
 import Team from './models/Team.js';
 import User from './models/User.js';
@@ -101,6 +104,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/push-subscription', pushSubscriptionRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/task-statuses', taskStatusRoutes);
+app.use('/api/backup', backupRoutes);
 
 // Socket.IO for real-time chat
 const connectedUsers = new Map();

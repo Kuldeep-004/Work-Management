@@ -70,6 +70,8 @@ const activityLogSchema = new mongoose.Schema(
         // System actions
         'system_backup_created', 'system_update',
         'data_export', 'data_import', 'bulk_operation',
+        'database_backup_initiated', 'database_backup_completed', 'database_backup_failed',
+        'database_backup_processing_failed', 'database_backup_spawn_failed', 'database_backup_error',
         
         // Authentication actions
         'password_reset_requested', 'password_reset_completed', 'email_verified',

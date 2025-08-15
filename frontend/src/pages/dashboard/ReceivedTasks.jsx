@@ -151,7 +151,27 @@ const ReceivedTasks = () => {
     setTabs(tabs.map(tab => {
       if (tab.id !== activeTabId) return tab;
       let newTab = { ...tab, ...patch };
-      
+      // If grouping by 'priority', always reset groupOrder to fixed order
+      if (patch.sortBy === 'priority') {
+        const defaultPriorityNames = [
+          'urgent',
+          'today',
+          'lessThan3Days',
+          'thisWeek',
+          'thisMonth',
+          'regular',
+          'filed',
+          'dailyWorksOffice',
+          'monthlyWorks'
+        ];
+        let groupOrder = [...defaultPriorityNames];
+        priorities
+          .filter(p => !defaultPriorityNames.includes(p.name))
+          .forEach(priority => {
+            groupOrder.push(priority.name);
+          });
+        newTab.groupOrder = groupOrder;
+      }
       if (patch.visibleColumns) {
         // Remove hidden columns from order, add new visible columns at the end
         const currentOrder = newTab.columnOrder || ALL_COLUMNS.map(col => col.id);
@@ -355,27 +375,29 @@ const ReceivedTasks = () => {
   const getFilteredAndSortedTasks = (tasks) => {
     if (!Array.isArray(tasks)) return [];
 
-    // Priority order mapping for sorting (dynamic from API)
+    // Priority order mapping for sorting - default priorities first, then custom
+    const defaultPriorityNames = [
+      'urgent',
+      'today',
+      'lessThan3Days',
+      'thisWeek',
+      'thisMonth',
+      'regular',
+      'filed',
+      'dailyWorksOffice',
+      'monthlyWorks'
+    ];
     const priorityOrder = {};
-    if (priorities.length > 0) {
-      priorities.forEach((priority, index) => {
-        priorityOrder[priority.name] = priority.order || (index + 1);
+    let order = 1;
+    defaultPriorityNames.forEach(name => {
+      priorityOrder[name] = order++;
+    });
+    // Add custom priorities (not in default list) at the end
+    priorities
+      .filter(p => !defaultPriorityNames.includes(p.name))
+      .forEach((priority, idx) => {
+        priorityOrder[priority.name] = 100 + idx;
       });
-    } else {
-      // Fallback to default priority order if API priorities not loaded
-      const defaultOrder = {
-        'urgent': 1,
-        'today': 2,
-        'lessThan3Days': 3,
-        'thisWeek': 4,
-        'thisMonth': 5,
-        'regular': 6,
-        'filed': 7,
-        'dailyWorksOffice': 8,
-        'monthlyWorks': 9
-      };
-      Object.assign(priorityOrder, defaultOrder);
-    }
 
     let filteredTasks = tasks.filter(task => {
       // Exclude tasks with verificationStatus 'pending'
