@@ -915,6 +915,12 @@ router.patch('/:taskId/status', protect, async (req, res) => {
       return res.status(400).json({ message: 'Self verification must be completed before marking this task as completed.' });
     }
 
+    // If changing from completed to any other status, reset selfVerification to false
+    if (task.status === 'completed' && status !== 'completed') {
+      console.log(`Resetting selfVerification to false for task ${task._id} when changing from completed to ${status}`);
+      task.selfVerification = false;
+    }
+
     // Update status
     task.status = status;
     await task.save();
@@ -935,13 +941,24 @@ router.patch('/:taskId/status', protect, async (req, res) => {
     }
 
     // Log task status change activity
+    let logMessage = `Changed status of task "${updatedTask.title}" to ${status}`;
+    let oldData = { status: task.status };
+    let newData = { status };
+    
+    // If selfVerification was reset, include that in the log
+    if (task.status === 'completed' && status !== 'completed') {
+      logMessage += ' and reset self verification';
+      oldData.selfVerification = true;
+      newData.selfVerification = false;
+    }
+    
     await ActivityLogger.logTaskActivity(
       req.user._id,
       'task_status_changed',
       updatedTask._id,
-      `Changed status of task "${updatedTask.title}" to ${status}`,
-      { status: task.status },
-      { status },
+      logMessage,
+      oldData,
+      newData,
       req,
       {
         taskTitle: updatedTask.title,

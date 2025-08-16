@@ -175,6 +175,7 @@ router.get('/date/:date', protect, async (req, res) => {
       });
     }
     
+    
     res.json(timesheet);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -251,7 +252,7 @@ router.post('/add-entry', protect, async (req, res) => {
       startTime,
       endTime
     };
-
+    
     timesheet.entries.push(newEntry);
     
     timesheet.markModified('entries');

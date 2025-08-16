@@ -5,14 +5,15 @@ import { API_BASE_URL } from '../../apiConfig';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
-// Utility to normalize timesheet entries so entry.task is always a string
+// Utility to normalize timesheet entries but preserve populated task data
 function normalizeTimesheetTasks(ts) {
   if (!ts || !ts.entries) return ts;
   return {
     ...ts,
     entries: ts.entries.map(e => ({
       ...e,
-      task: (e.task && typeof e.task === 'object' && e.task._id) ? e.task._id : e.task
+      // Keep the original task object if it's populated, otherwise keep as is
+      task: e.task
     }))
   };
 }
@@ -123,10 +124,24 @@ const Timesheets = () => {
   const handleEntryChange = (entryId, field, value) => {
     if (!timesheet) return;
     // Deep clone entries to avoid reference issues
-    const newEntries = timesheet.entries.map(e => JSON.parse(JSON.stringify(e)));
+    const newEntries = timesheet.entries.map(e => {
+      // Create a deep copy but preserve task objects properly
+      const cloned = JSON.parse(JSON.stringify(e));
+      // If the original task was an object, restore it (JSON.parse converts to plain object)
+      if (e.task && typeof e.task === 'object') {
+        cloned.task = e.task;
+      }
+      return cloned;
+    });
     const idx = newEntries.findIndex(e => e._id === entryId);
     if (idx !== -1) {
       newEntries[idx][field] = value;
+      if (field === 'task' && value !== 'other') {
+        newEntries[idx].manualTaskName = '';
+      }
+      if (field === 'task' && value === 'other') {
+        newEntries[idx].manualTaskName = 'Other';
+      }
     }
     setTimesheet({
       ...timesheet,
@@ -136,14 +151,18 @@ const Timesheets = () => {
       clearTimeout(debounceTimeout.current);
     }
     const entry = newEntries[idx];
-    // Only save if both task and workDescription are filled
-    if ((entry.task && entry.workDescription) || (entry.manualTaskName && entry.workDescription)) {
+    // Check if entry has task (object or string) or manual task name
+    const hasTask = entry.task || entry.manualTaskName;
+    if ((field === 'task' && hasTask) ||
+        (field === 'startTime' && hasTask) ||
+        (field === 'endTime' && hasTask)) {
+      debounceTimeout.current = setTimeout(() => {
+        saveEntry(entry);
+      }, 500);
+    } else if (hasTask && entry.workDescription) {
       debounceTimeout.current = setTimeout(() => {
         saveEntry(entry);
       }, 1000);
-    } else if (field === 'workDescription' || field === 'task') {
-      // Optionally, show a warning if user tries to save incomplete entry
-      // toast('Please select a task and enter a description to save.');
     }
   };
 
@@ -163,7 +182,6 @@ const Timesheets = () => {
     }
     try {
       let res;
-      
       // Prepare payload based on task selection
       let payload = {
         workDescription: entry.workDescription,
@@ -171,16 +189,23 @@ const Timesheets = () => {
         endTime: entry.endTime
       };
       
-      // Handle task vs manual task logic
+      // Extract task ID properly - handle both populated objects and strings
+      let taskId = null;
       if (entry.task === 'other') {
-        payload.taskId = 'other';
-        payload.manualTaskName = '';
+        taskId = 'other';
       } else if (entry.task) {
-        // Regular task ID
-        payload.taskId = entry.task;
-        payload.manualTaskName = '';
+        // Handle populated task object or string ID
+        taskId = (typeof entry.task === 'object' && entry.task._id) ? entry.task._id : entry.task;
+      }
+      
+      // Only send manualTaskName if "Other" is selected
+      if (taskId === 'other') {
+        payload.taskId = 'other';
+        payload.manualTaskName = 'Other';
+      } else if (taskId) {
+        payload.taskId = taskId;
+        // Do not send manualTaskName for real tasks
       } else {
-        // Fallback for existing entries
         payload.taskId = null;
         payload.manualTaskName = entry.manualTaskName || '';
       }
@@ -542,22 +567,30 @@ const Timesheets = () => {
         {/* Timeslot Entries */}
         <div className="space-y-4 overflow-x-auto scrollbar-hide">
           {[...(timesheet?.entries || [])].map((entry) => {
-            // Determine correct task value for dropdown
+            // Robustly determine the correct value for the dropdown
             let taskValue = '';
-            if (entry?.task) {
-              // If entry has a task (ObjectId), use the task ID
-              if (typeof entry.task === 'object' && entry.task !== null && entry.task._id) {
-                taskValue = entry.task._id;
-              } else if (typeof entry.task === 'string') {
-                taskValue = entry.task;
-              }
-            } else if (entry?.manualTaskName) {
-              // If no task but has manualTaskName, determine the special values
-              if (entry.manualTaskName === 'Other') {
-                taskValue = 'other';
-              }
+            let taskDisplayName = '';
+            
+            if (entry?.task && typeof entry.task === 'object' && entry.task._id) {
+              // Task is populated object
+              taskValue = entry.task._id;
+              taskDisplayName = entry.task.title;
+            } else if (entry?.task && typeof entry.task === 'string' && entry.task !== 'other') {
+              // Task is just an ID string
+              taskValue = entry.task;
+              // Try to find the display name from available tasks
+              const foundTask = tasks.find(t => t._id === entry.task);
+              taskDisplayName = foundTask ? foundTask.title : null;
+            } else if (
+              (entry?.task === 'other' || entry?.manualTaskName === 'Other') && !entry?.task?._id
+            ) {
+              taskValue = 'other';
+              taskDisplayName = 'Other';
+            } else {
+              taskValue = '';
+              taskDisplayName = '';
             }
-            // If still no value, default to empty (which shows "Select task")
+
             const key = entry._id;
             const startParts = (entryTimeParts[key] && entryTimeParts[key].start) || split24Hour(entry.startTime);
             const endParts = (entryTimeParts[key] && entryTimeParts[key].end) || split24Hour(entry.endTime);
@@ -566,14 +599,12 @@ const Timesheets = () => {
             const handleTaskChange = async (e) => {
               const value = e.target.value;
               if (entry.isNew) {
-                // Optimistically mark as saving
                 setTimesheet(ts => ({
                   ...ts,
                   entries: ts.entries.map(en =>
                     en._id === entry._id ? { ...en, task: value, isSaving: true } : en
                   )
                 }));
-                // Prepare entry for saving
                 const updatedEntry = { ...entry, task: value };
                 delete updatedEntry.isNew;
                 try {
@@ -583,7 +614,6 @@ const Timesheets = () => {
                     endTime: entry.endTime,
                     workDescription: entry.workDescription
                   }, true, entry._id);
-                  // Replace temp row with real entry from backend
                   setTimesheet(ts => ({
                     ...ts,
                     entries: ts.entries.map(en =>
@@ -591,7 +621,6 @@ const Timesheets = () => {
                     )
                   }));
                 } catch (error) {
-                  // On error, keep row editable and show error
                   setTimesheet(ts => ({
                     ...ts,
                     entries: ts.entries.map(en =>
@@ -696,14 +725,19 @@ const Timesheets = () => {
                         <option value="other">Other</option>
                         {/* Build dropdown options: all allowed tasks, plus the selected one if missing */}
                         {(() => {
-                          const selectedTaskId = typeof entry.task === 'object' && entry.task !== null ? entry.task._id : entry.task;
+                          const selectedTaskId = taskValue;
                           const taskIds = tasks.map(t => t._id);
                           let options = [...tasks];
+                          
+                          // If the selected task is not in current tasks list but we have it populated
                           if (selectedTaskId && !taskIds.includes(selectedTaskId) && selectedTaskId !== 'other') {
                             let selectedTaskObj = null;
-                            if (entry.task && typeof entry.task === 'object') {
+                            
+                            // If we have a populated task object, use it
+                            if (entry.task && typeof entry.task === 'object' && entry.task._id === selectedTaskId) {
                               selectedTaskObj = entry.task;
-                            } else if (timesheet && timesheet.entries) {
+                            } else {
+                              // Fallback: try to find it in other entries
                               for (const e of timesheet.entries) {
                                 if (e.task && typeof e.task === 'object' && e.task._id === selectedTaskId) {
                                   selectedTaskObj = e.task;
@@ -711,20 +745,26 @@ const Timesheets = () => {
                                 }
                               }
                             }
+                            
+                            // Last resort: create a placeholder
                             if (!selectedTaskObj) {
                               selectedTaskObj = { _id: selectedTaskId, title: '(Old/Completed Task)' };
                             }
+                            
                             options = [...options, selectedTaskObj];
                           }
+                          
                           const uniqueOptions = Object.values(options.reduce((acc, t) => {
                             acc[t._id] = t;
                             return acc;
                           }, {}));
+                          
                           uniqueOptions.sort((a, b) => {
                             if (a._id === selectedTaskId) return -1;
                             if (b._id === selectedTaskId) return 1;
                             return 0;
                           });
+                          
                           return uniqueOptions.map(task => (
                             <option key={task._id} value={task._id}>
                               {task.title}

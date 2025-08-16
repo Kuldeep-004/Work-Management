@@ -7,11 +7,10 @@ import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
-// Get all automations for the logged-in user (admin sees only their own)
+// Get all automations (shared among all users)
 router.get('/', protect, async (req, res) => {
   try {
-    const query = { createdBy: req.user._id };
-    const automations = await Automation.find(query).sort({ createdAt: -1 });
+    const automations = await Automation.find({}).sort({ createdAt: -1 });
     res.json(automations);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch automations' });
@@ -558,10 +557,7 @@ router.delete('/:id', protect, async (req, res) => {
       return res.status(404).json({ message: 'Automation not found' });
     }
     
-    // Check if the user is authorized (creator or admin)
-    if (automation.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'Admin') {
-      return res.status(403).json({ message: 'Not authorized to delete this automation' });
-    }
+    // Since automations are now shared, any authenticated user can delete them
     
     // Log automation deletion before deleting
     await ActivityLogger.logSystemActivity(
