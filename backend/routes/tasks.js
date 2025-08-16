@@ -251,64 +251,11 @@ router.get('/', protect, async (req, res) => {
 router.get('/all', protect, async (req, res) => {
   try {
     let tasks;
-    if (req.user.role === 'Admin') {
-      // Admin: all tasks (including completed verification)
+    if (['Admin', 'Senior', 'Team Head'].includes(req.user.role)) {
+      // All privileged roles: show all tasks (including completed verification)
       tasks = await Task.find({ verificationStatus: { $ne: 'pending' } })
         .populate('assignedTo', 'firstName lastName photo group')
         .populate('assignedBy', 'firstName lastName photo group')
-        .populate('verificationAssignedTo', 'firstName lastName photo')
-        .populate('secondVerificationAssignedTo', 'firstName lastName photo')
-        .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
-        .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
-        .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
-        .populate('files.uploadedBy', 'firstName lastName photo')
-        .populate('comments.createdBy', 'firstName lastName photo')
-        .populate('guides', 'firstName lastName photo')
-        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields')
-        .sort({ createdAt: -1 });
-    } else if (req.user.role === 'Senior') {
-      // Senior: see own assigned/received tasks and all tasks assigned to/assigned by Freshers of their team
-      if (!req.user.team) {
-        return res.status(400).json({ message: 'Senior user does not have a team assigned' });
-      }
-      // Get all Freshers in the same team
-      const freshers = await User.find({ team: req.user.team, role: 'Fresher', isEmailVerified: true }).select('_id');
-      const fresherIds = freshers.map(u => u._id.toString());
-      fresherIds.push(req.user._id.toString()); // include self
-      tasks = await Task.find({
-        $or: [
-          { assignedTo: { $in: fresherIds } },
-          { assignedBy: { $in: fresherIds } }
-        ],
-        verificationStatus: { $ne: 'pending' }
-      })
-        .populate('assignedTo', 'firstName lastName photo')
-        .populate('assignedBy', 'firstName lastName photo')
-        .populate('verificationAssignedTo', 'firstName lastName photo')
-        .populate('secondVerificationAssignedTo', 'firstName lastName photo')
-        .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
-        .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
-        .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
-        .populate('files.uploadedBy', 'firstName lastName photo')
-        .populate('comments.createdBy', 'firstName lastName photo')
-        .populate('guides', 'firstName lastName photo')
-        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields')
-        .sort({ createdAt: -1 });
-    } else if (req.user.role === 'Team Head') {
-      // Team Head: see own assigned/received tasks and all tasks assigned by/assigned to any Senior
-      // Get all Seniors
-      const seniors = await User.find({ role: 'Senior', isEmailVerified: true }).select('_id');
-      const seniorIds = seniors.map(u => u._id.toString());
-      seniorIds.push(req.user._id.toString()); // include self
-      tasks = await Task.find({
-        $or: [
-          { assignedTo: { $in: seniorIds } },
-          { assignedBy: { $in: seniorIds } }
-        ],
-        verificationStatus: { $ne: 'pending' }
-      })
-        .populate('assignedTo', 'firstName lastName photo')
-        .populate('assignedBy', 'firstName lastName photo')
         .populate('verificationAssignedTo', 'firstName lastName photo')
         .populate('secondVerificationAssignedTo', 'firstName lastName photo')
         .populate('thirdVerificationAssignedTo', 'firstName lastName photo')

@@ -192,12 +192,12 @@ const ColumnManagement = () => {
                 value={newColumn.name}
                 onChange={(e) => setNewColumn(prev => ({
                   ...prev,
-                  name: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '')
+                  name: e.target.value.replace(/[^a-zA-Z0-9]/g, '')
                 }))}
                 placeholder="e.g., customfield1"
                 className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
               />
-              <p className="text-xs text-gray-500 mt-1">Only lowercase letters and numbers</p>
+              <p className="text-xs text-gray-500 mt-1">Only letters and numbers (A-Z, a-z, 0-9)</p>
             </div>
             
             <div>
