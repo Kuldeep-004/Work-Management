@@ -151,27 +151,6 @@ const ReceivedTasks = () => {
     setTabs(tabs.map(tab => {
       if (tab.id !== activeTabId) return tab;
       let newTab = { ...tab, ...patch };
-      // If grouping by 'priority', always reset groupOrder to fixed order
-      if (patch.sortBy === 'priority') {
-        const defaultPriorityNames = [
-          'urgent',
-          'today',
-          'lessThan3Days',
-          'thisWeek',
-          'thisMonth',
-          'regular',
-          'filed',
-          'dailyWorksOffice',
-          'monthlyWorks'
-        ];
-        let groupOrder = [...defaultPriorityNames];
-        priorities
-          .filter(p => !defaultPriorityNames.includes(p.name))
-          .forEach(priority => {
-            groupOrder.push(priority.name);
-          });
-        newTab.groupOrder = groupOrder;
-      }
       if (patch.visibleColumns) {
         // Remove hidden columns from order, add new visible columns at the end
         const currentOrder = newTab.columnOrder || ALL_COLUMNS.map(col => col.id);

@@ -1521,36 +1521,36 @@ const AdvancedTaskTable = ({
                   <React.Fragment key={group}>
                     <tr 
                       key={group + '-header'} 
-                      className={`group-header ${dragOverGroup === group && draggedGroup ? 'bg-blue-100' : ''} ${groupField === 'priority' ? '' : 'cursor-grab'}`}
-                      draggable={groupField !== 'priority'}
-                      onDragStart={groupField !== 'priority' ? (e) => {
+                      className={`group-header ${dragOverGroup === group && draggedGroup ? 'bg-blue-100' : ''} cursor-grab`}
+                      draggable={true}
+                      onDragStart={(e) => {
                         setDraggedGroup(group);
                         e.dataTransfer.setData('text/plain', group);
                         e.dataTransfer.effectAllowed = 'move';
-                      } : undefined}
-                      onDragOver={groupField !== 'priority' ? (e) => {
+                      }}
+                      onDragOver={(e) => {
                         e.preventDefault();
                         if (draggedGroup && draggedGroup !== group) {
                           setDragOverGroup(group);
                         }
-                      } : undefined}
-                      onDragLeave={groupField !== 'priority' ? () => {
+                      }}
+                      onDragLeave={() => {
                         if (dragOverGroup === group) {
                           setDragOverGroup(null);
                         }
-                      } : undefined}
-                      onDrop={groupField !== 'priority' ? (e) => {
+                      }}
+                      onDrop={(e) => {
                         e.preventDefault();
                         if (draggedGroup && draggedGroup !== group) {
                           handleGroupDrop(draggedGroup, group);
                         }
                         setDraggedGroup(null);
                         setDragOverGroup(null);
-                      } : undefined}
-                      onDragEnd={groupField !== 'priority' ? () => {
+                      }}
+                      onDragEnd={() => {
                         setDraggedGroup(null);
                         setDragOverGroup(null);
-                      } : undefined}
+                      }}
                     >
                       <td colSpan={getOrderedVisibleColumns().length + ((viewType === 'assigned' || viewType === 'admin') ? 2 : 1) + (enableBulkSelection ? 1 : 0)} 
                           className={`bg-gray-100 text-gray-800 font-semibold px-4 py-2 border-t border-b border-gray-300 ${draggedGroup === group ? 'opacity-50' : ''}`}>

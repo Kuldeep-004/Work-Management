@@ -1134,15 +1134,10 @@ const AdminDashboard = () => {
   }, [user?._id]);
 
   // Calculate widget numbers before return
-  const pendingCount = tasks.filter(t => t.status === 'pending').length;
-  const todayCount = tasks.filter(t => {
-    if (!t.dueDate) return false;
-    const today = new Date();
-    const taskDate = new Date(t.dueDate);
-    return taskDate.toDateString() === today.toDateString();
-  }).length;
-  const totalCount = tasks.length;
-  const urgentCount = tasks.filter(t => t.priority === 'urgent').length;
+  const yetToStartCount = tasks.filter(t => t.status === 'yet_to_start').length;
+  const todayCount = tasks.filter(t => t.priority === 'today' && t.status !== 'completed').length;
+  const totalCount = tasks.filter(t => t.status !== 'completed').length;
+  const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length;
 
   // Only render table UI after tabsLoaded and tabs.length > 0
   if (!tabsLoaded || tabs.length === 0) {
@@ -1191,8 +1186,8 @@ const AdminDashboard = () => {
           <div className="flex items-center">
             <ClockIcon className="h-6 w-6 sm:h-8 sm:w-8 text-red-500 mr-2 sm:mr-4" />
             <div>
-              <h3 className="text-sm sm:text-lg font-semibold text-gray-800">Pending</h3>
-              <p className="text-xl sm:text-3xl font-bold text-red-600">{pendingCount}</p>
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-800">Yet To Start</h3>
+              <p className="text-xl sm:text-3xl font-bold text-red-600">{yetToStartCount}</p>
             </div>
           </div>
         </div>
