@@ -580,6 +580,7 @@ const Timesheets = () => {
               taskValue = entry.task;
               // Try to find the display name from available tasks
               const foundTask = tasks.find(t => t._id === entry.task);
+              console.log(foundTask)
               taskDisplayName = foundTask ? foundTask.title : null;
             } else if (
               (entry?.task === 'other' || entry?.manualTaskName === 'Other') && !entry?.task?._id
@@ -590,7 +591,6 @@ const Timesheets = () => {
               taskValue = '';
               taskDisplayName = '';
             }
-
             const key = entry._id;
             const startParts = (entryTimeParts[key] && entryTimeParts[key].start) || split24Hour(entry.startTime);
             const endParts = (entryTimeParts[key] && entryTimeParts[key].end) || split24Hour(entry.endTime);

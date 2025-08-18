@@ -30,17 +30,6 @@ const Cost = () => {
     }
   }, [user, activeTab]);
 
-  // Auto-search effect for task costing
-  useEffect(() => {
-    if (activeTab === 'taskCosting') {
-      const timeoutId = setTimeout(() => {
-        fetchCosts(search);
-      }, 300); // Debounce search by 300ms
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [search, activeTab]);
-
   const fetchUsers = async () => {
     setLoading(true);
     try {
@@ -124,12 +113,12 @@ const Cost = () => {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    // Search is now handled automatically by useEffect
+    fetchCosts(search);
   };
 
   const handleUserSearch = (e) => {
     e.preventDefault();
-    // User search is handled client-side through filtering automatically
+    // User search is handled client-side through filtering
   };
 
   const handleTaskClick = (task) => {
@@ -139,6 +128,7 @@ const Cost = () => {
   };
 
   const filteredUsers = users.filter(u => 
+    u.status === 'approved' && 
     (u.firstName.toLowerCase().includes(userSearch.toLowerCase()) ||
      u.lastName.toLowerCase().includes(userSearch.toLowerCase()) ||
      u.email.toLowerCase().includes(userSearch.toLowerCase()))
@@ -154,7 +144,7 @@ const Cost = () => {
     if (!showTaskModal || !selectedTask) return null;
 
     return (
-      <div className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-2xl font-bold text-gray-900">Task Analysis: {selectedTask.title}</h3>
@@ -204,9 +194,7 @@ const Cost = () => {
                   {taskDetails.description && (
                     <div className="mt-4">
                       <p className="text-sm text-gray-600">Description</p>
-                      <div className="max-w-full overflow-x-auto">
-                        <p className="font-medium whitespace-nowrap">{taskDetails.description}</p>
-                      </div>
+                      <p className="font-medium">{taskDetails.description}</p>
                     </div>
                   )}
                 </div>
@@ -360,18 +348,18 @@ const Cost = () => {
       {activeTab === 'taskCosting' && (
         <div>
           <h2 className="text-2xl font-bold mb-6">Task Costing</h2>
-          <div className="mb-4 flex items-center gap-2">
-            <div className="relative">
-              <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by task or user..."
-                className="border rounded px-3 py-2 pl-10 w-64"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
+          <form onSubmit={handleSearch} className="mb-4 flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Search by task or user..."
+              className="border rounded px-3 py-2 w-64"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-1">
+              <MagnifyingGlassIcon className="w-4 h-4" /> Search
+            </button>
+          </form>
           <div className="bg-white rounded-lg shadow p-4 overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead>
@@ -431,18 +419,18 @@ const Cost = () => {
       {activeTab === 'userRates' && (
         <div>
           <h2 className="text-2xl font-bold mb-6">User Hourly Rates</h2>
-          <div className="mb-4 flex items-center gap-2">
-            <div className="relative">
-              <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by name or email..."
-                className="border rounded px-3 py-2 pl-10 w-64"
-                value={userSearch}
-                onChange={e => setUserSearch(e.target.value)}
-              />
-            </div>
-          </div>
+          <form onSubmit={handleUserSearch} className="mb-4 flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Search by name or email..."
+              className="border rounded px-3 py-2 w-64"
+              value={userSearch}
+              onChange={e => setUserSearch(e.target.value)}
+            />
+            <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-1">
+              <MagnifyingGlassIcon className="w-4 h-4" /> Search
+            </button>
+          </form>
           <div className="bg-white rounded-lg shadow p-4 overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead>
@@ -450,30 +438,18 @@ const Cost = () => {
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Hourly Rate (₹)</th>
                   <th className="px-4 py-2"></th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
                 {loading ? (
-                  <tr><td colSpan={6} className="text-center py-8">Loading...</td></tr>
+                  <tr><td colSpan={5} className="text-center py-8">Loading...</td></tr>
                 ) : filteredUsers.map((u) => (
                   <tr key={u._id}>
                     <td className="px-4 py-2 whitespace-nowrap">{u.firstName} {u.lastName}</td>
                     <td className="px-4 py-2 whitespace-nowrap">{u.email}</td>
                     <td className="px-4 py-2 whitespace-nowrap">{u.role}</td>
-                    <td className="px-4 py-2 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        u.status === 'approved' 
-                          ? 'bg-green-100 text-green-800' 
-                          : u.status === 'pending'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {u.status}
-                      </span>
-                    </td>
                     <td className="px-4 py-2 whitespace-nowrap">
                       {editingUserId === u._id ? (
                         <input

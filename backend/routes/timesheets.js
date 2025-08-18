@@ -645,7 +645,7 @@ router.get('/task-costs', protect, async (req, res) => {
     }
     const { search } = req.query;
     // Get all tasks
-    const tasks = await Task.find().populate('assignedTo verificationAssignedTo secondVerificationAssignedTo', 'firstName lastName hourlyRate');
+    const tasks = await Task.find().populate('assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo', 'firstName lastName hourlyRate');
     // Get all timesheets with entries (both regular tasks and manual tasks)
     const timesheets = await Timesheet.find({}).populate('user', 'firstName lastName hourlyRate').populate('entries.task', 'title');
     // Map: { taskId: { userId: { totalMinutes } } }
@@ -713,19 +713,99 @@ router.get('/task-costs', protect, async (req, res) => {
       const assignedTo = getUserCost(task.assignedTo);
       const firstVerifier = getUserCost(task.verificationAssignedTo);
       const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
-      const totalCost = (assignedTo?.cost || 0) + (firstVerifier?.cost || 0) + (secondVerifier?.cost || 0);
+      const thirdVerifier = getUserCost(task.thirdVerificationAssignedTo);
+      const fourthVerifier = getUserCost(task.fourthVerificationAssignedTo);
+      const fifthVerifier = getUserCost(task.fifthVerificationAssignedTo);
+      const totalCost = (assignedTo?.cost || 0) + (firstVerifier?.cost || 0) + (secondVerifier?.cost || 0) + 
+                       (thirdVerifier?.cost || 0) + (fourthVerifier?.cost || 0) + (fifthVerifier?.cost || 0);
       result.push({
         taskId: task._id,
         title: task.title,
         assignedTo,
         firstVerifier,
         secondVerifier,
+        thirdVerifier,
+        fourthVerifier,
+        fifthVerifier,
         totalCost
       });
     }
     res.json(result);
   } catch (error) {
     console.error('Error aggregating task costs:', error.stack || error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Admin: Get detailed timeslots for a specific task
+router.get('/task/:taskId/timeslots', protect, async (req, res) => {
+  try {
+    const adminUser = await User.findById(req.user.id);
+    if (adminUser.role !== 'Admin') {
+      return res.status(403).json({ message: 'Not authorized as Admin' });
+    }
+
+    const { taskId } = req.params;
+
+    // Get all timesheets with entries for this specific task
+    const timesheets = await Timesheet.find({
+      'entries.task': taskId
+    }).populate('user', 'firstName lastName role hourlyRate').populate('entries.task', 'title');
+
+    const timeslots = [];
+
+    timesheets.forEach(timesheet => {
+      const user = timesheet.user;
+      if (!user) return;
+
+      timesheet.entries.forEach(entry => {
+        if (entry.task && entry.task._id.toString() === taskId) {
+          // Calculate duration in minutes
+          const [startHour, startMin] = entry.startTime.split(':').map(Number);
+          const [endHour, endMin] = entry.endTime.split(':').map(Number);
+          
+          let startMinutes = startHour * 60 + startMin;
+          let endMinutes = endHour * 60 + endMin;
+          
+          // Handle overnight shifts
+          if (endMinutes < startMinutes) {
+            endMinutes += 24 * 60;
+          }
+          
+          const duration = endMinutes - startMinutes;
+          const hours = duration / 60;
+          const cost = hours * (user.hourlyRate || 0);
+
+          timeslots.push({
+            userName: `${user.firstName} ${user.lastName}`,
+            userRole: user.role,
+            date: timesheet.date,
+            startTime: entry.startTime,
+            endTime: entry.endTime,
+            duration: duration,
+            workDescription: entry.workDescription,
+            cost: cost
+          });
+        }
+      });
+    });
+
+    // Sort by date and time
+    timeslots.sort((a, b) => {
+      const dateCompare = new Date(a.date) - new Date(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      
+      const [aHour, aMin] = a.startTime.split(':').map(Number);
+      const [bHour, bMin] = b.startTime.split(':').map(Number);
+      const aTime = aHour * 60 + aMin;
+      const bTime = bHour * 60 + bMin;
+      
+      return aTime - bTime;
+    });
+
+    res.json(timeslots);
+  } catch (error) {
+    console.error('Error fetching task timeslots:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

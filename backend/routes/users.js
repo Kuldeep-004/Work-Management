@@ -417,8 +417,8 @@ router.get('/hourly-rates', protect, async (req, res) => {
     if (adminUser.role !== 'Admin') {
       return res.status(403).json({ message: 'Not authorized as Admin' });
     }
-    // Exclude self and blocked users (status: 'rejected')
-    const users = await User.find({ _id: { $ne: req.user.id }, status: { $ne: 'rejected' } }).select('firstName lastName email role hourlyRate status');
+  // Exclude only blocked users (status: 'rejected')
+  const users = await User.find({ status: { $ne: 'rejected' } }).select('firstName lastName email role hourlyRate status');
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });
