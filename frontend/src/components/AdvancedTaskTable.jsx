@@ -6,6 +6,7 @@ import FileUpload from './FileUpload';
 import FileList from './FileList';
 import TaskComments from './TaskComments';
 import VerificationRemarksModal from './VerificationRemarksModal';
+import SearchableStatusDropdown from './SearchableStatusDropdown';
 import { API_BASE_URL } from '../apiConfig';
 import ReactDOM from 'react-dom';
 import React from 'react';
@@ -1774,67 +1775,22 @@ const AdvancedTaskTable = ({
                                     {currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
                                   </span>
                                   {/* Show dropdown as portal if open */}
-                                  {editingStatusTaskId === task._id && viewType === 'received'
-                                    ? ReactDOM.createPortal(
-                                        <div
-                                          ref={statusDropdownRef}
-                                          style={{
-                                            position: 'absolute',
-                                            top: dropdownPosition.top,
-                                            left: dropdownPosition.left,
-                                            minWidth: 160,
-                                            background: '#fff',
-                                            border: '1px solid #e5e7eb',
-                                            borderRadius: 8,
-                                            boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                            padding: 8,
-                                            zIndex: 9999,
-                                          }}
-                                        >
-                                          {(
-                                            viewType === 'received' && taskType === 'execution'
-                                              ? currentStatusOptions.filter(opt => opt.value !== 'reject')
-                                              : currentStatusOptions
-                                          ).map(opt => (
-                                            <div
-                                              key={opt.value}
-                                              style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 8,
-                                                padding: '5px 12px',
-                                                borderRadius: 6,
-                                                cursor: 'pointer',
-                                                background: task.status === opt.value ? '#f3f4f6' : 'transparent',
-                                                marginBottom: 2,
-                                                transition: 'background 0.15s',
-                                                opacity: statusLoading ? 0.6 : 1,
-                                              }}
-                                              onClick={e => {
-                                                e.stopPropagation();
-                                                if (!statusLoading && task.status !== opt.value) handleStatusChangeLocal(task, opt.value);
-                                                setEditingStatusTaskId(null);
-                                              }}
-                                              onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                              onMouseLeave={e => e.currentTarget.style.background = task.status === opt.value ? '#f3f4f6' : 'transparent'}
-                                            >
-                                              <span 
-                                                className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(opt.value) || ''}`}
-                                                style={getStatusStyles(opt.value) || {}}
-                                              >
-                                                {opt.label}
-                                              </span>
-                                              {task.status === opt.value && (
-                                                <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                </svg>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>,
-                                        document.body
-                                      )
-                                    : null}
+                                  {editingStatusTaskId === task._id && viewType === 'received' && (
+                                    <SearchableStatusDropdown
+                                      task={task}
+                                      currentStatusOptions={
+                                        viewType === 'received' && taskType === 'execution'
+                                          ? currentStatusOptions.filter(opt => opt.value !== 'reject')
+                                          : currentStatusOptions
+                                      }
+                                      statusLoading={statusLoading}
+                                      getStatusColor={getStatusColor}
+                                      getStatusStyles={getStatusStyles}
+                                      onStatusChange={handleStatusChangeLocal}
+                                      onClose={() => setEditingStatusTaskId(null)}
+                                      position={dropdownPosition}
+                                    />
+                                  )}
                                 </div>
                               </td>
                             );
@@ -2909,67 +2865,22 @@ const AdvancedTaskTable = ({
                                 {currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
                               </span>
                               {/* Show dropdown as portal if open */}
-                              {editingStatusTaskId === task._id && viewType === 'received'
-                                ? ReactDOM.createPortal(
-                                    <div
-                                      ref={statusDropdownRef}
-                                      style={{
-                                        position: 'absolute',
-                                        top: dropdownPosition.top,
-                                        left: dropdownPosition.left,
-                                        minWidth: 160,
-                                        background: '#fff',
-                                        border: '1px solid #e5e7eb',
-                                        borderRadius: 8,
-                                        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                        padding: 8,
-                                        zIndex: 9999,
-                                      }}
-                                    >
-                                      {(
-                                        viewType === 'received' && taskType === 'execution'
-                                          ? currentStatusOptions.filter(opt => opt.value !== 'reject')
-                                          : currentStatusOptions
-                                      ).map(opt => (
-                                        <div
-                                          key={opt.value}
-                                          style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                            padding: '5px 12px',
-                                            borderRadius: 6,
-                                            cursor: 'pointer',
-                                            background: task.status === opt.value ? '#f3f4f6' : 'transparent',
-                                            marginBottom: 2,
-                                            transition: 'background 0.15s',
-                                            opacity: statusLoading ? 0.6 : 1,
-                                          }}
-                                          onClick={e => {
-                                            e.stopPropagation();
-                                            if (!statusLoading && task.status !== opt.value) handleStatusChangeLocal(task, opt.value);
-                                            setEditingStatusTaskId(null);
-                                          }}
-                                          onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                          onMouseLeave={e => e.currentTarget.style.background = task.status === opt.value ? '#f3f4f6' : 'transparent'}
-                                        >
-                                          <span 
-                                            className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(opt.value) || ''}`}
-                                            style={getStatusStyles(opt.value) || {}}
-                                          >
-                                            {opt.label}
-                                          </span>
-                                          {task.status === opt.value && (
-                                            <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>,
-                                    document.body
-                                  )
-                                : null}
+                              {editingStatusTaskId === task._id && viewType === 'received' && (
+                                <SearchableStatusDropdown
+                                  task={task}
+                                  currentStatusOptions={
+                                    viewType === 'received' && taskType === 'execution'
+                                      ? currentStatusOptions.filter(opt => opt.value !== 'reject')
+                                      : currentStatusOptions
+                                  }
+                                  statusLoading={statusLoading}
+                                  getStatusColor={getStatusColor}
+                                  getStatusStyles={getStatusStyles}
+                                  onStatusChange={handleStatusChangeLocal}
+                                  onClose={() => setEditingStatusTaskId(null)}
+                                  position={dropdownPosition}
+                                />
+                              )}
                             </div>
                           </td>
                         );

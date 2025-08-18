@@ -28,6 +28,7 @@ import pushSubscriptionRoutes from './routes/pushSubscription.js';
 import noteRoutes from './routes/notes.js';
 import taskStatusRoutes from './routes/taskStatuses.js';
 import backupRoutes from './routes/backup.js';
+import workTypeRoutes from './routes/workTypes.js';
 import { activityLoggerMiddleware } from './middleware/activityLoggerMiddleware.js';
 import Team from './models/Team.js';
 import User from './models/User.js';
@@ -104,6 +105,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/push-subscription', pushSubscriptionRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/task-statuses', taskStatusRoutes);
+app.use('/api/work-types', workTypeRoutes);
 app.use('/api/backup', backupRoutes);
 
 // Socket.IO for real-time chat

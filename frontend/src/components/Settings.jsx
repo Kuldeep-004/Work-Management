@@ -31,6 +31,15 @@ const Settings = () => {
   const [addingStatus, setAddingStatus] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
 
+  // Work Types management state
+  const [workTypes, setWorkTypes] = useState([]);
+  const [loadingWorkTypes, setLoadingWorkTypes] = useState(false);
+  const [newWorkTypeName, setNewWorkTypeName] = useState('');
+  const [addingWorkType, setAddingWorkType] = useState(false);
+  const [editingWorkType, setEditingWorkType] = useState(null);
+  const [editWorkTypeName, setEditWorkTypeName] = useState('');
+  const [updatingWorkType, setUpdatingWorkType] = useState(false);
+
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -207,6 +216,8 @@ const Settings = () => {
       fetchPriorities();
     } else if (activeTab === 'Stages') {
       fetchTaskStatuses();
+    } else if (activeTab === 'Works') {
+      fetchWorkTypes();
     }
   }, [activeTab]);
 
@@ -290,6 +301,139 @@ const Settings = () => {
     }
   };
 
+  // Work Types management functions
+  const fetchWorkTypes = async () => {
+    if (user.role !== 'Admin' && user.role !== 'Team Head') return;
+    
+    setLoadingWorkTypes(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/work-types`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch work types');
+      const data = await response.json();
+      setWorkTypes(data);
+    } catch (error) {
+      toast.error('Failed to fetch work types');
+    } finally {
+      setLoadingWorkTypes(false);
+    }
+  };
+
+  const addWorkType = async () => {
+    if (!newWorkTypeName.trim()) {
+      toast.error('Work type name is required');
+      return;
+    }
+
+    setAddingWorkType(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/work-types`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ name: newWorkTypeName.trim() }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to add work type');
+      }
+
+      toast.success('Work type added successfully');
+      setNewWorkTypeName('');
+      fetchWorkTypes();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setAddingWorkType(false);
+    }
+  };
+
+  const updateWorkType = async (workTypeId, newName) => {
+    if (!newName.trim()) {
+      toast.error('Work type name is required');
+      return;
+    }
+
+    setUpdatingWorkType(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/work-types/${workTypeId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update work type');
+      }
+
+      toast.success('Work type updated successfully');
+      setEditingWorkType(null);
+      setEditWorkTypeName('');
+      fetchWorkTypes();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setUpdatingWorkType(false);
+    }
+  };
+
+  const deleteWorkType = async (workTypeId, workTypeName) => {
+    // First check if it can be deleted
+    try {
+      const checkResponse = await fetch(`${API_BASE_URL}/api/work-types/${workTypeId}/can-delete`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      
+      if (!checkResponse.ok) {
+        throw new Error('Failed to check work type deletion');
+      }
+      
+      const checkData = await checkResponse.json();
+      
+      if (!checkData.canDelete) {
+        toast.error(`Cannot delete "${workTypeName}". It is being used in ${checkData.tasksCount} task(s).`);
+        return;
+      }
+
+      if (!confirm(`Are you sure you want to delete the "${workTypeName}" work type?`)) {
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/work-types/${workTypeId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to delete work type');
+      }
+
+      toast.success('Work type deleted successfully');
+      fetchWorkTypes();
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleEditWorkType = (workType) => {
+    setEditingWorkType(workType._id);
+    setEditWorkTypeName(workType.name);
+  };
+
+  const cancelEditWorkType = () => {
+    setEditingWorkType(null);
+    setEditWorkTypeName('');
+  };
+
   // Database backup function (Admin only)
   const handleBackup = async () => {
     if (!confirm('This will create a backup of the entire database. This may take a few minutes. Continue?')) {
@@ -347,7 +491,7 @@ const Settings = () => {
 
   const tabs = [
     'Account settings',
-    ...(user.role === 'Admin' || user.role === 'Team Head' ? ['Priority Management', 'Stages'] : []),
+    ...(user.role === 'Admin' || user.role === 'Team Head' ? ['Priority Management', 'Stages', 'Works'] : []),
     ...(user.role === 'Admin' ? ['Attributes'] : [])
   ];
 
@@ -669,6 +813,104 @@ const Settings = () => {
                   
                   {taskStatuses.length === 0 && (
                     <p className="text-gray-600 text-center py-4">No task statuses found.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {activeTab === 'Works' && (user.role === 'Admin' || user.role === 'Team Head') && (
+          <>
+            <h2 className="text-lg font-semibold px-0 md:px-6 py-4">Work Types Management</h2>
+            
+            {/* Add New Work Type */}
+            <div className="px-0 md:px-6 py-4 border-b border-gray-200">
+              <h3 className="text-md font-medium text-gray-800 mb-3">Add New Work Type</h3>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={newWorkTypeName}
+                  onChange={(e) => setNewWorkTypeName(e.target.value)}
+                  placeholder="Work type name (e.g., 'Data Entry', 'Analysis')"
+                  className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <button
+                  onClick={addWorkType}
+                  disabled={addingWorkType || !newWorkTypeName.trim()}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {addingWorkType ? 'Adding...' : 'Add Work Type'}
+                </button>
+              </div>
+            </div>
+
+            {/* Work Types List */}
+            <div className="px-0 md:px-6 py-4">
+              <h3 className="text-md font-medium text-gray-800 mb-3">Current Work Types</h3>
+              
+              {loadingWorkTypes ? (
+                <p className="text-gray-600 text-center py-4">Loading work types...</p>
+              ) : (
+                <div className="space-y-3">
+                  {workTypes.map((workType) => (
+                    <div key={workType._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div className="flex-1">
+                        {editingWorkType === workType._id ? (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={editWorkTypeName}
+                              onChange={(e) => setEditWorkTypeName(e.target.value)}
+                              className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => updateWorkType(workType._id, editWorkTypeName)}
+                              disabled={updatingWorkType || !editWorkTypeName.trim()}
+                              className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400"
+                            >
+                              {updatingWorkType ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              onClick={cancelEditWorkType}
+                              disabled={updatingWorkType}
+                              className="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 transition-colors disabled:bg-gray-400"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="font-medium text-gray-900">{workType.name}</span>
+                        )}
+                      </div>
+                      {editingWorkType !== workType._id && (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleEditWorkType(workType)}
+                            className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors"
+                            title="Edit work type"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => deleteWorkType(workType._id, workType.name)}
+                            className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-full transition-colors"
+                            title="Delete work type"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  
+                  {workTypes.length === 0 && (
+                    <p className="text-gray-600 text-center py-4">No work types found.</p>
                   )}
                 </div>
               )}

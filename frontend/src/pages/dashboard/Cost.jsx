@@ -10,7 +10,7 @@ const Cost = () => {
   const [editingUserId, setEditingUserId] = useState(null);
   const [hourlyRateInput, setHourlyRateInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [costs, setCosts] = useState([]);
+  const [costs, setCosts] = useState(null); // null = not loaded, [] = loaded but empty
   const [search, setSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [costLoading, setCostLoading] = useState(false);
@@ -24,9 +24,7 @@ const Cost = () => {
   useEffect(() => {
     if (user?.role === 'Admin') {
       fetchUsers();
-      if (activeTab === 'taskCosting') {
-        fetchCosts();
-      }
+      // Removed fetchCosts() here to avoid double loading
     }
   }, [user, activeTab]);
 
@@ -56,6 +54,7 @@ const Cost = () => {
   };
 
   const fetchCosts = async (q = '') => {
+    setCosts(null); // Clear previous data immediately
     setCostLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/timesheets/task-costs${q ? `?search=${encodeURIComponent(q)}` : ''}`, {
@@ -65,6 +64,7 @@ const Cost = () => {
       setCosts(data);
     } catch (e) {
       toast.error('Failed to load costs');
+      setCosts([]); // Set to empty array on error
     }
     setCostLoading(false);
   };
@@ -334,7 +334,10 @@ const Cost = () => {
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex space-x-8">
           <button
-            onClick={() => setActiveTab('taskCosting')}
+            onClick={() => {
+              setActiveTab('taskCosting');
+              setCosts(null); // Clear costs when switching to this tab
+            }}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'taskCosting'
                 ? 'border-blue-500 text-blue-600'
@@ -388,9 +391,9 @@ const Cost = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
-                {costLoading ? (
+                {costLoading || costs === null ? (
                   <tr><td colSpan={9} className="text-center py-8">Loading...</td></tr>
-                ) : !Array.isArray(costs) || costs.length === 0 ? (
+                ) : Array.isArray(costs) && costs.length === 0 ? (
                   <tr><td colSpan={9} className="text-center py-8">No tasks found.</td></tr>
                 ) : costs.map((t) => (
                   <tr key={t.taskId} className="hover:bg-gray-50">

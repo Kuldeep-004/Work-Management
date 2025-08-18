@@ -78,6 +78,20 @@ const FilterPopup = ({
       return <div className="flex-1"></div>;
     }
 
+    // For contains and does_not_contain, always show text input regardless of column type
+    if (filter.operator === 'contains' || filter.operator === 'does_not_contain') {
+      return (
+        <input
+          type="text"
+          value={filter.value}
+          onChange={(e) => handleFilterChange(index, 'value', e.target.value)}
+          className="flex-1 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          placeholder="Enter text to search..."
+        />
+      );
+    }
+
+    // For other operators, show dropdown if column has options, otherwise text input
     if (selectedColumn.options) {
       return (
         <select
@@ -107,17 +121,17 @@ const FilterPopup = ({
   };
 
   return (
-    <div className="absolute top-full mt-2 bg-white rounded-md shadow-lg border border-gray-200 z-50 w-[calc(100vw-2rem)] sm:w-[710px] p-4 left-0">
+    <div className="absolute top-full mt-2 bg-white rounded-md shadow-lg border border-gray-200 z-50 p-4 left-0 right-0 mx-2 sm:mx-0 sm:w-[710px] sm:right-auto max-w-[calc(100vw-1rem)] overflow-visible">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-md font-semibold text-gray-800">Filters</h3>
-        <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-200">
+        <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-200 flex-shrink-0">
           <XMarkIcon className="h-5 w-5 text-gray-500" />
         </button>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-3 max-h-[70vh] overflow-y-auto scrollbar-hide">
         {editingFilters.map((filter, index) => (
           <div key={index} className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <span className="text-sm text-gray-600 w-12">{index === 0 ? 'Where' : ''}</span>
+            <span className="text-sm text-gray-600 w-12 flex-shrink-0">{index === 0 ? 'Where' : ''}</span>
             {index > 0 && (
               <select
                 value={filter.logic || 'AND'}
