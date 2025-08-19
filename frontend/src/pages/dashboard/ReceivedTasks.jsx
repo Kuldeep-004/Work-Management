@@ -21,7 +21,7 @@ import { API_BASE_URL, fetchTabState, saveTabState } from '../../apiConfig';
 // All columns including verification - this will be used for dropdown and column management
 const ALL_COLUMNS = [
   { id: 'title', label: 'Title' },
-  { id: 'description', label: 'Description' },
+  { id: 'description', label: 'Status' },
   { id: 'clientName', label: 'Client Name' },
   { id: 'clientGroup', label: 'Client Group' },
   { id: 'workType', label: 'Work Type' },

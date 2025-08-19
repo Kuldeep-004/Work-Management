@@ -147,6 +147,13 @@ const AdvancedTaskTable = ({
   const [customColumns, setCustomColumns] = useState([]);
   const [customColumnsLoaded, setCustomColumnsLoaded] = useState(false);
   
+  // State for No column dropdown functionality
+  const [showDeleteDropdown, setShowDeleteDropdown] = useState(null);
+  const [deleteDropdownPosition, setDeleteDropdownPosition] = useState({ x: 0, y: 0 });
+  const deleteDropdownRef = useRef(null);
+  // State for custom delete confirmation modal
+  const [deleteConfirmTask, setDeleteConfirmTask] = useState(null);
+  
   // Get columns based on task type, or use provided allColumns, plus custom columns
   const getExtendedColumns = () => {
     const baseColumns = allColumns || getColumnsForTaskType(taskType);
@@ -359,12 +366,32 @@ const AdvancedTaskTable = ({
         setEditingCustomTagsTaskId(null);
         setEditingCustomTagsColumnName('');
       }
+      // Delete dropdown for No column
+      if (showDeleteDropdown && deleteDropdownRef.current && !deleteDropdownRef.current.contains(event.target)) {
+        setShowDeleteDropdown(null);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [editingPriorityTaskId, editingVerificationTaskId, editingStatusTaskId, editingVerifierTaskId, openGuideDropdownTaskId, editingCustomTagsTaskId]);
+  }, [editingPriorityTaskId, editingVerificationTaskId, editingStatusTaskId, editingVerifierTaskId, openGuideDropdownTaskId, editingCustomTagsTaskId, showDeleteDropdown]);
+
+  // Add scroll event listener to close delete dropdown
+  useEffect(() => {
+    function handleScroll() {
+      if (showDeleteDropdown) {
+        setShowDeleteDropdown(null);
+      }
+    }
+    
+    if (showDeleteDropdown) {
+      window.addEventListener('scroll', handleScroll, true);
+      return () => {
+        window.removeEventListener('scroll', handleScroll, true);
+      };
+    }
+  }, [showDeleteDropdown]);
 
   // Row drag-and-drop state
   const [draggedTaskId, setDraggedTaskId] = useState(null);
@@ -936,9 +963,6 @@ const AdvancedTaskTable = ({
 
   const handleDeleteTask = async (task) => {
     if (shouldDisableActions && shouldDisableActions(task)) return;
-    if (!window.confirm('Are you sure you want to delete this task?')) {
-      return;
-    }
     try {
       const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}`, {
         method: 'DELETE',
@@ -968,6 +992,60 @@ const AdvancedTaskTable = ({
         toast.error(error.message || 'Failed to delete task');
       }
     }
+  };
+
+  // Handle left click on No column (edit task)
+  const handleNoColumnLeftClick = (task) => {
+    if (shouldDisableActions && shouldDisableActions(task)) return;
+    
+    // Check role permissions for edit
+    if (['Team Head', 'Admin', 'Senior'].includes(user?.role)) {
+      if (onEditTask) {
+        onEditTask(task);
+      }
+    }
+  };
+
+  // Handle right click on No column (show delete dropdown)
+  const handleNoColumnRightClick = (e, task) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (shouldDisableActions && shouldDisableActions(task)) return;
+    
+    // Check role permissions for delete dropdown - only Admin and Team Head
+    if (!['Team Head', 'Admin'].includes(user?.role)) {
+      return;
+    }
+
+    const rect = e.target.getBoundingClientRect();
+    setDeleteDropdownPosition({
+      x: rect.right,
+      y: rect.top
+    });
+    setShowDeleteDropdown(task._id);
+  };
+
+  // Show custom delete confirmation modal
+  const handleDeleteFromDropdown = (task) => {
+    setShowDeleteDropdown(null);
+    setDeleteConfirmTask(task);
+  };
+
+  // Handle confirm/cancel in custom modal
+  const handleConfirmDelete = async () => {
+    if (deleteConfirmTask) {
+      await handleDeleteTask(deleteConfirmTask);
+    }
+    setDeleteConfirmTask(null);
+  };
+  const handleCancelDelete = () => {
+    setDeleteConfirmTask(null);
+  };
+
+  // Close delete dropdown
+  const closeDeleteDropdown = () => {
+    setShowDeleteDropdown(null);
   };
 
   // Helper to group tasks by a field
@@ -1644,11 +1722,17 @@ const AdvancedTaskTable = ({
                           </td>
                         )}
                         <td
-                          className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-move"
+                          className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-pointer hover:bg-gray-100"
                           style={{width: '48px', minWidth: '48px', textAlign: 'right'}}
-                          title="Drag to reorder"
-                          draggable
-                          onDragStart={e => handleRowDragStart(e, task._id)}
+                          title="Left click to edit, right click for delete option"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleNoColumnLeftClick(task);
+                          }}
+                          onContextMenu={(e) => {
+                            e.stopPropagation();
+                            handleNoColumnRightClick(e, task);
+                          }}
                         >
                           {idx + 1}
                         </td>
@@ -2734,11 +2818,17 @@ const AdvancedTaskTable = ({
                       </td>
                     )}
                     <td
-                      className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-move"
+                      className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-pointer hover:bg-gray-100"
                       style={{width: '48px', minWidth: '48px', textAlign: 'right'}}
-                      title="Drag to reorder"
-                      draggable
-                      onDragStart={e => handleRowDragStart(e, task._id)}
+                      title="Left click to edit, right click for delete option"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleNoColumnLeftClick(task);
+                      }}
+                      onContextMenu={(e) => {
+                        e.stopPropagation();
+                        handleNoColumnRightClick(e, task);
+                      }}
                     >
                       {idx + 1}
                     </td>
@@ -3841,6 +3931,54 @@ const AdvancedTaskTable = ({
           verificationType={remarksModalType}
           loading={remarksModalLoading}
         />
+        
+        {/* Delete Dropdown for No Column */}
+        {showDeleteDropdown && (
+          <div
+            ref={deleteDropdownRef}
+            className="fixed bg-white border border-gray-200 rounded-md shadow-lg z-50"
+            style={{
+              top: deleteDropdownPosition.y,
+              left: deleteDropdownPosition.x,
+              minWidth: '120px'
+            }}
+          >
+            <button
+              onClick={() => {
+                // Find task in orderedTasks first, then in original tasks array
+                const task = orderedTasks.find(t => t._id === showDeleteDropdown) || 
+                           tasks.find(t => t._id === showDeleteDropdown);
+                if (task) handleDeleteFromDropdown(task);
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 hover:text-red-800 transition-colors"
+            >
+              Delete Task
+            </button>
+          </div>
+        )}
+
+        {/* Custom Delete Confirmation Modal */}
+        {deleteConfirmTask && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-xs mx-2">
+              <div className="text-lg font-semibold text-gray-800 mb-4 text-center">Are you sure you want to delete this task?</div>
+              <div className="flex justify-center gap-4 mt-4">
+                <button
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors font-semibold"
+                >
+                  Confirm
+                </button>
+                <button
+                  onClick={handleCancelDelete}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

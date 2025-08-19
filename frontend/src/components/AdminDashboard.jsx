@@ -135,6 +135,7 @@ const AdminDashboard = () => {
   const [selectedAutomation, setSelectedAutomation] = useState(null);
   const [automationTasks, setAutomationTasks] = useState([]);
   const [showAddAutomationTask, setShowAddAutomationTask] = useState(false);
+  const [templateSearchTerm, setTemplateSearchTerm] = useState('');
   // Bulk selection state
   const [selectedTasks, setSelectedTasks] = useState([]);
   const [isAllSelected, setIsAllSelected] = useState(false);
@@ -1621,8 +1622,16 @@ const AdminDashboard = () => {
       {showAutomationsModal && (
         <AutomationsModal
           isOpen={showAutomationsModal}
-          onClose={() => { setShowAutomationsModal(false); setSelectedAutomation(null); }}
-          onSelectAutomation={auto => { setSelectedAutomation(auto); setShowAutomationsModal(false); }}
+          onClose={() => { 
+            setShowAutomationsModal(false); 
+            setSelectedAutomation(null); 
+            setTemplateSearchTerm('');
+          }}
+          onSelectAutomation={auto => { 
+            setSelectedAutomation(auto); 
+            setShowAutomationsModal(false); 
+            setTemplateSearchTerm('');
+          }}
           user={user}
           API_BASE_URL={API_BASE_URL}
         />
@@ -1647,7 +1656,10 @@ const AdminDashboard = () => {
                   )}
                 </div>
               </div>
-              <button onClick={() => setSelectedAutomation(null)} className="text-gray-400 hover:text-gray-700 text-xl">×</button>
+              <button onClick={() => {
+                setSelectedAutomation(null);
+                setTemplateSearchTerm('');
+              }} className="text-gray-400 hover:text-gray-700 text-xl">×</button>
             </div>
             <div className="flex-1 mb-4">
               <div className="flex justify-between items-center mb-3">
@@ -1657,9 +1669,29 @@ const AdminDashboard = () => {
                 </span>
               </div>
               
+              {/* Search bar for templates */}
+              {Array.isArray(selectedAutomation.taskTemplate) && selectedAutomation.taskTemplate.length > 0 && (
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    placeholder="Search templates..."
+                    value={templateSearchTerm}
+                    onChange={(e) => setTemplateSearchTerm(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              )}
+              
               {Array.isArray(selectedAutomation.taskTemplate) && selectedAutomation.taskTemplate.length > 0 ? (
-                <ul className="space-y-2 mt-2 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar" style={{ maxHeight: "420px" }}>
-                  {selectedAutomation.taskTemplate.map((template, idx) => (
+                (() => {
+                  const filteredTemplates = selectedAutomation.taskTemplate.filter(template => 
+                    !templateSearchTerm || 
+                    (template.title && template.title.toLowerCase().includes(templateSearchTerm.toLowerCase()))
+                  );
+                  
+                  return filteredTemplates.length > 0 ? (
+                    <ul className="space-y-2 mt-2 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar" style={{ maxHeight: "420px" }}>
+                      {filteredTemplates.map((template, idx) => (
                     <li key={idx} className="py-3 px-4 flex items-center justify-between bg-yellow-50 border-l-4 border-yellow-400 rounded-md hover:bg-yellow-100 transition-colors shadow-sm">
                       <div className="flex-1">
                         <span className="font-medium text-gray-800">{template.title || 'Scheduled Task'}</span>
@@ -1709,6 +1741,16 @@ const AdminDashboard = () => {
                     </li>
                   ))}
                 </ul>
+                  ) : (
+                    <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-100 shadow-sm">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19l-7-7 7-7m5 14l7-7-7-7" />
+                      </svg>
+                      <p className="text-sm text-gray-500 font-medium">No templates found matching "{templateSearchTerm}"</p>
+                      <p className="text-xs text-gray-400 mt-2">Try adjusting your search term.</p>
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-100 shadow-sm">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

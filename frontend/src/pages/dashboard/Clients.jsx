@@ -1,3 +1,24 @@
+// Helper to highlight search matches in a string
+function highlightMatch(text, search) {
+  if (!search) return text;
+  const searchLower = search.toLowerCase();
+  const textLower = text.toLowerCase();
+  const parts = [];
+  let i = 0;
+  while (i < text.length) {
+    const idx = textLower.indexOf(searchLower, i);
+    if (idx === -1) {
+      parts.push(text.slice(i));
+      break;
+    }
+    if (idx > i) parts.push(text.slice(i, idx));
+    parts.push(
+      <span key={idx} style={{ background: '#2563eb', color: 'white', borderRadius: '2px' }}>{text.slice(idx, idx + search.length)}</span>
+    );
+    i = idx + search.length;
+  }
+  return parts;
+}
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
@@ -297,8 +318,9 @@ const Clients = () => {
     );
   }
 
-  // Group search state
-  const [groupSearchTerm, setGroupSearchTerm] = useState("");
+
+  // Unified search state for both client name and group name
+  const [clientGroupSearchTerm, setClientGroupSearchTerm] = useState("");
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
@@ -323,13 +345,14 @@ const Clients = () => {
         </div>
       </div>
 
-      {/* Group Search Bar */}
+
+      {/* Unified Client/Group Search Bar */}
       <div className="mb-4 max-w-xs">
         <input
           type="text"
-          value={groupSearchTerm}
-          onChange={e => setGroupSearchTerm(e.target.value)}
-          placeholder="Search groups..."
+          value={clientGroupSearchTerm}
+          onChange={e => setClientGroupSearchTerm(e.target.value)}
+          placeholder="Search client or group..."
           className="w-full border rounded-md px-3 py-2 text-sm"
         />
       </div>
@@ -339,12 +362,13 @@ const Clients = () => {
         <div className="overflow-x-auto scrollbar-hide">
           {(() => {
             // Lowercase search term for case-insensitive match
-            const searchTerm = groupSearchTerm.trim().toLowerCase();
+            const searchTerm = clientGroupSearchTerm.trim().toLowerCase();
             // Filter groups: show if group name matches OR any client in group matches
             const filteredGroups = searchTerm
               ? clientGroups.filter(group => {
                   const groupNameMatch = group.name.toLowerCase().includes(searchTerm);
                   const groupClients = clients.filter(client => client.group._id === group._id);
+                  // Match if any client name includes the search term (substring, case-insensitive)
                   const clientNameMatch = groupClients.some(client => client.name.toLowerCase().includes(searchTerm));
                   return groupNameMatch || clientNameMatch;
                 })
@@ -356,7 +380,9 @@ const Clients = () => {
               return (
                 <div key={group._id} className="mb-4 border border-gray-200 rounded-lg shadow-sm bg-white">
                   <div className="bg-gray-100 px-4 py-2 rounded-t-lg border-b border-gray-200 flex items-center justify-between">
-                    <h3 className="text-base font-semibold text-gray-800 tracking-wide">{group.name}</h3>
+                    <h3 className="text-base font-semibold text-gray-800 tracking-wide">
+                      {highlightMatch(group.name, clientGroupSearchTerm)}
+                    </h3>
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => handleEditGroup(group)}
@@ -396,7 +422,9 @@ const Clients = () => {
                           sortedGroupClients.map((client) => (
                             <tr key={client._id}>
                               <td className="w-1/4 px-4 py-2">
-                              <div className="w-80 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm">{client.name}</div>
+                              <div className="w-80 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm">
+                                {highlightMatch(client.name, clientGroupSearchTerm)}
+                              </div>
                               </td>
                               <td className="w-1/6 px-4 py-2">
                                 <div className="w-10 overflow-x-auto whitespace-nowrap scrollbar-hide text-sm font-semibold">{client.priority}</div>

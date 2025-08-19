@@ -23,6 +23,10 @@ const Settings = () => {
   const [loadingPriorities, setLoadingPriorities] = useState(false);
   const [newPriorityName, setNewPriorityName] = useState('');
   const [addingPriority, setAddingPriority] = useState(false);
+  const [editingPriority, setEditingPriority] = useState(null);
+  const [editPriorityName, setEditPriorityName] = useState('');
+  const [updatingPriority, setUpdatingPriority] = useState(false);
+  const [prioritySearchTerm, setPrioritySearchTerm] = useState('');
 
   // Task Status/Stages management state
   const [taskStatuses, setTaskStatuses] = useState([]);
@@ -30,6 +34,10 @@ const Settings = () => {
   const [newStatusData, setNewStatusData] = useState({ name: '', color: '#6B7280' });
   const [addingStatus, setAddingStatus] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [editingStatus, setEditingStatus] = useState(null);
+  const [editStatusData, setEditStatusData] = useState({ name: '', color: '' });
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [statusSearchTerm, setStatusSearchTerm] = useState('');
 
   // Work Types management state
   const [workTypes, setWorkTypes] = useState([]);
@@ -39,6 +47,7 @@ const Settings = () => {
   const [editingWorkType, setEditingWorkType] = useState(null);
   const [editWorkTypeName, setEditWorkTypeName] = useState('');
   const [updatingWorkType, setUpdatingWorkType] = useState(false);
+  const [workTypeSearchTerm, setWorkTypeSearchTerm] = useState('');
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -210,14 +219,63 @@ const Settings = () => {
     }
   };
 
+  const updatePriority = async (priorityId, newName) => {
+    if (!newName.trim()) {
+      toast.error('Priority name is required');
+      return;
+    }
+
+    setUpdatingPriority(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/priorities/${priorityId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update priority');
+      }
+
+      toast.success('Priority updated successfully');
+      setEditingPriority(null);
+      setEditPriorityName('');
+      fetchPriorities();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setUpdatingPriority(false);
+    }
+  };
+
+  const handleEditPriority = (priority) => {
+    setEditingPriority(priority._id);
+    setEditPriorityName(priority.name);
+  };
+
+  const cancelEditPriority = () => {
+    setEditingPriority(null);
+    setEditPriorityName('');
+  };
+
   // Fetch priorities when tab changes to Priority Management
   useEffect(() => {
     if (activeTab === 'Priority Management') {
       fetchPriorities();
+      setPrioritySearchTerm('');
+      setNewPriorityName('');
     } else if (activeTab === 'Stages') {
       fetchTaskStatuses();
+      setStatusSearchTerm('');
+      setNewStatusData({ name: '', color: '#6B7280' });
     } else if (activeTab === 'Works') {
       fetchWorkTypes();
+      setWorkTypeSearchTerm('');
+      setNewWorkTypeName('');
     }
   }, [activeTab]);
 
@@ -299,6 +357,52 @@ const Settings = () => {
     } catch (error) {
       toast.error(error.message);
     }
+  };
+
+  const updateTaskStatus = async (statusId, newData) => {
+    if (!newData.name.trim()) {
+      toast.error('Status name is required');
+      return;
+    }
+
+    setUpdatingStatus(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/task-statuses/${statusId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify(newData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update task status');
+      }
+
+      toast.success('Task status updated successfully');
+      setEditingStatus(null);
+      setEditStatusData({ name: '', color: '' });
+      fetchTaskStatuses();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const handleEditTaskStatus = (status) => {
+    setEditingStatus(status._id);
+    setEditStatusData({ 
+      name: status.name, 
+      color: status.hexColor || status.color || '#6B7280' 
+    });
+  };
+
+  const cancelEditTaskStatus = () => {
+    setEditingStatus(null);
+    setEditStatusData({ name: '', color: '' });
   };
 
   // Work Types management functions
@@ -678,8 +782,11 @@ const Settings = () => {
                 <input
                   type="text"
                   value={newPriorityName}
-                  onChange={(e) => setNewPriorityName(e.target.value)}
-                  placeholder="Enter priority name"
+                  onChange={(e) => {
+                    setNewPriorityName(e.target.value);
+                    setPrioritySearchTerm(e.target.value);
+                  }}
+                  placeholder="Search priorities or add new priority name"
                   className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 <button
@@ -703,36 +810,85 @@ const Settings = () => {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {priorities.map((priority) => (
+                  {priorities
+                    .filter(priority => 
+                      prioritySearchTerm === '' || 
+                      priority.name.toLowerCase().includes(prioritySearchTerm.toLowerCase())
+                    )
+                    .map((priority) => (
                     <div
                       key={priority._id || priority.name}
                       className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
                     >
-                      <div className="flex items-center">
-                        <span className="font-medium text-gray-800">{priority.name}</span>
-                        {priority.isDefault && (
-                          <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
-                            Default
-                          </span>
+                      <div className="flex-1">
+                        {editingPriority === priority._id ? (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={editPriorityName}
+                              onChange={(e) => setEditPriorityName(e.target.value)}
+                              className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => updatePriority(priority._id, editPriorityName)}
+                              disabled={updatingPriority || !editPriorityName.trim()}
+                              className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400"
+                            >
+                              {updatingPriority ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              onClick={cancelEditPriority}
+                              disabled={updatingPriority}
+                              className="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 transition-colors disabled:bg-gray-400"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center">
+                            <span className="font-medium text-gray-800">{priority.name}</span>
+                            {priority.isDefault && (
+                              <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
+                                Default
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                       
-                      {!priority.isDefault && (
-                        <button
-                          onClick={() => deletePriority(priority._id)}
-                          className="text-red-600 hover:text-red-800 transition-colors p-1"
-                          title="Delete priority"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                      {!priority.isDefault && editingPriority !== priority._id && (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleEditPriority(priority)}
+                            className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors"
+                            title="Edit priority"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => deletePriority(priority._id)}
+                            className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-full transition-colors"
+                            title="Delete priority"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))}
                   
-                  {priorities.length === 0 && (
-                    <p className="text-gray-600 text-center py-4">No priorities found.</p>
+                  {priorities.filter(priority => 
+                    prioritySearchTerm === '' || 
+                    priority.name.toLowerCase().includes(prioritySearchTerm.toLowerCase())
+                  ).length === 0 && (
+                    <p className="text-gray-600 text-center py-4">
+                      {prioritySearchTerm ? 'No priorities found matching your search.' : 'No priorities found.'}
+                    </p>
                   )}
                 </div>
               )}
@@ -751,8 +907,11 @@ const Settings = () => {
                 <input
                   type="text"
                   value={newStatusData.name}
-                  onChange={(e) => setNewStatusData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Status name (e.g., 'Under Review')"
+                  onChange={(e) => {
+                    setNewStatusData(prev => ({ ...prev, name: e.target.value }));
+                    setStatusSearchTerm(e.target.value);
+                  }}
+                  placeholder="Search statuses or add new status name"
                   className="bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 <div className="flex gap-3">
@@ -782,37 +941,93 @@ const Settings = () => {
                 <p className="text-gray-600 text-center py-4">Loading task statuses...</p>
               ) : (
                 <div className="space-y-3">
-                  {taskStatuses.map((status) => (
+                  {taskStatuses
+                    .filter(status => 
+                      statusSearchTerm === '' || 
+                      status.name.toLowerCase().includes(statusSearchTerm.toLowerCase())
+                    )
+                    .map((status) => (
                     <div key={status._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-4 flex-1">
                         <div 
                           className="w-4 h-4 rounded-full border border-gray-300"
                           style={{ backgroundColor: status.hexColor || status.color }}
                           title={`Status color: ${status.hexColor || status.color}`}
                         ></div>
-                        <div>
-                          <span className="font-medium text-gray-900">{status.name}</span>
-                          {status.isDefault && (
-                            <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Default</span>
+                        <div className="flex-1">
+                          {editingStatus === status._id ? (
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={editStatusData.name}
+                                onChange={(e) => setEditStatusData(prev => ({ ...prev, name: e.target.value }))}
+                                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                                autoFocus
+                              />
+                              <input
+                                type="color"
+                                value={editStatusData.color}
+                                onChange={(e) => setEditStatusData(prev => ({ ...prev, color: e.target.value }))}
+                                className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                                title="Status color"
+                              />
+                              <button
+                                onClick={() => updateTaskStatus(status._id, editStatusData)}
+                                disabled={updatingStatus || !editStatusData.name.trim()}
+                                className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400"
+                              >
+                                {updatingStatus ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                onClick={cancelEditTaskStatus}
+                                disabled={updatingStatus}
+                                className="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 transition-colors disabled:bg-gray-400"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="font-medium text-gray-900">{status.name}</span>
+                              {status.isDefault && (
+                                <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Default</span>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
-                      {!status.isDefault && (
-                        <button
-                          onClick={() => deleteTaskStatus(status._id, status.name)}
-                          className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-full transition-colors"
-                          title="Delete status"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                      {!status.isDefault && editingStatus !== status._id && (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleEditTaskStatus(status)}
+                            className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors"
+                            title="Edit status"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => deleteTaskStatus(status._id, status.name)}
+                            className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-full transition-colors"
+                            title="Delete status"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))}
                   
-                  {taskStatuses.length === 0 && (
-                    <p className="text-gray-600 text-center py-4">No task statuses found.</p>
+                  {taskStatuses.filter(status => 
+                    statusSearchTerm === '' || 
+                    status.name.toLowerCase().includes(statusSearchTerm.toLowerCase())
+                  ).length === 0 && (
+                    <p className="text-gray-600 text-center py-4">
+                      {statusSearchTerm ? 'No statuses found matching your search.' : 'No task statuses found.'}
+                    </p>
                   )}
                 </div>
               )}
@@ -831,8 +1046,11 @@ const Settings = () => {
                 <input
                   type="text"
                   value={newWorkTypeName}
-                  onChange={(e) => setNewWorkTypeName(e.target.value)}
-                  placeholder="Work type name (e.g., 'Data Entry', 'Analysis')"
+                  onChange={(e) => {
+                    setNewWorkTypeName(e.target.value);
+                    setWorkTypeSearchTerm(e.target.value);
+                  }}
+                  placeholder="Search work types or add new work type name"
                   className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 <button
@@ -853,7 +1071,12 @@ const Settings = () => {
                 <p className="text-gray-600 text-center py-4">Loading work types...</p>
               ) : (
                 <div className="space-y-3">
-                  {workTypes.map((workType) => (
+                  {workTypes
+                    .filter(workType => 
+                      workTypeSearchTerm === '' || 
+                      workType.name.toLowerCase().includes(workTypeSearchTerm.toLowerCase())
+                    )
+                    .map((workType) => (
                     <div key={workType._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                       <div className="flex-1">
                         {editingWorkType === workType._id ? (
@@ -909,8 +1132,13 @@ const Settings = () => {
                     </div>
                   ))}
                   
-                  {workTypes.length === 0 && (
-                    <p className="text-gray-600 text-center py-4">No work types found.</p>
+                  {workTypes.filter(workType => 
+                    workTypeSearchTerm === '' || 
+                    workType.name.toLowerCase().includes(workTypeSearchTerm.toLowerCase())
+                  ).length === 0 && (
+                    <p className="text-gray-600 text-center py-4">
+                      {workTypeSearchTerm ? 'No work types found matching your search.' : 'No work types found.'}
+                    </p>
                   )}
                 </div>
               )}

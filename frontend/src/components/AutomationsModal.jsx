@@ -33,6 +33,7 @@ const convert24hTo12h = (time24h) => {
 
 const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_URL }) => {
   const [automations, setAutomations] = useState([]);
+  const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showTriggerSelect, setShowTriggerSelect] = useState(true); // New state for trigger type selection
   const [triggerType, setTriggerType] = useState(''); // dayOfMonth or dateAndTime
@@ -840,8 +841,23 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
               </div>
             ) : (
               <div className="overflow-y-auto flex-grow" style={{ maxHeight: "calc(100vh - 10rem)" }}>
+                {/* Search bar */}
+                <div className="px-5 pb-2">
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Search Automations..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-5">
-                  {automations.map(auto => (
+                  {automations
+                    .filter(auto =>
+                      auto.name?.toLowerCase().includes(search.toLowerCase()) ||
+                      auto.description?.toLowerCase().includes(search.toLowerCase())
+                    )
+                    .map(auto => (
                     <div
                       key={auto._id}
                       onClick={(e) => {

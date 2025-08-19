@@ -1,4 +1,11 @@
-//mongorestore --gzip --archive=database-backup.gz --nsFrom='Work.*' --nsTo='test11.*' "mongodb+srv://kuldeep:12312@cluster0.vnqof.mongodb.net"
+// mongorestore --gzip --archive=database-backup.gz --nsFrom='Work.*' --nsTo='test11.*' "mongodb+srv://kuldeep:12312@cluster0.vnqof.mongodb.net"
+
+// Options -MultiViews
+// RewriteEngine On
+// RewriteCond %{REQUEST_FILENAME} !-f
+// RewriteCond %{REQUEST_FILENAME} !-d
+// RewriteRule ^ index.html [QSA,L]
+
 
 import express from 'express';
 import mongoose from 'mongoose';
