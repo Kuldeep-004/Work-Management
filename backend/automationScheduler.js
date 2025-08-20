@@ -5,6 +5,7 @@ import { sendTimesheetReminder } from './utils/pushNotificationService.js';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 dotenv.config();
+import { DateTime } from 'luxon';
 
 // Connect to MongoDB if not already connected
 if (mongoose.connection.readyState === 0) {
@@ -32,20 +33,21 @@ cron.schedule('0 9-20 * * 1-5', async () => {
 
 // Function to check and process automations
 export const runAutomationCheck = async (isManual = true) => {
-  const now = new Date();
-  const dayOfMonth = now.getDate();
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
+  // Use IST timezone for all date/time operations
+  const now = DateTime.now().setZone('Asia/Kolkata');
+  const dayOfMonth = now.day;
+  const currentHour = now.hour;
+  const currentMinute = now.minute;
   const currentTimeString = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
-  
+
   if (isManual) {
-    console.log(`[AutomationScheduler] Manual check triggered at ${now.toISOString()}`);
+    console.log(`[AutomationScheduler] Manual check triggered at ${now.toISO()}`);
   }
   
   try {
     // Get automations that trigger on day of month and haven't run this month
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+  const currentMonth = now.month - 1; // JS Date months are 0-indexed, luxon months are 1-indexed
+  const currentYear = now.year;
     
     // NEW APPROACH: Get all automations for the trigger types and check templates individually
     const monthlyAutomations = await Automation.find({ 
@@ -79,8 +81,8 @@ export const runAutomationCheck = async (isManual = true) => {
     });
     
     // Get automations that trigger on specific date and time
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  const todayStart = now.startOf('day').toJSDate();
+  const todayEnd = now.endOf('day').toJSDate();
     
     // Find dateTime automations that should run now
     const dateTimeAutomations = await Automation.find({
@@ -193,11 +195,18 @@ export const runAutomationCheck = async (isManual = true) => {
 
         let combinedInwardEntryDate = null;
         if (inwardEntryDate && inwardEntryTime) {
-          const [year, month, day] = inwardEntryDate.split('-');
-          const [hours, minutes] = inwardEntryTime.split(':');
-          combinedInwardEntryDate = new Date(year, month - 1, day, hours, minutes);
+          // Always parse as IST
+          combinedInwardEntryDate = DateTime.fromFormat(
+            `${inwardEntryDate} ${inwardEntryTime}`,
+            'yyyy-MM-dd HH:mm',
+            { zone: 'Asia/Kolkata' }
+          ).toJSDate();
         } else if (inwardEntryDate) {
-          combinedInwardEntryDate = new Date(inwardEntryDate);
+          combinedInwardEntryDate = DateTime.fromFormat(
+            inwardEntryDate,
+            'yyyy-MM-dd',
+            { zone: 'Asia/Kolkata' }
+          ).toJSDate();
         }
         
         // Ensure assignedTo is always an array
@@ -287,10 +296,10 @@ export const runAutomationCheck = async (isManual = true) => {
             assignedBy: assignedById,
             priority,
             status: status || 'yet_to_start', // Use template status or default
-            inwardEntryDate: combinedInwardEntryDate || new Date(),
+            inwardEntryDate: combinedInwardEntryDate || now.toJSDate(),
             // Only include dueDate and targetDate if they were specified in the template
-            ...(dueDate ? { dueDate: new Date(dueDate) } : {}),
-            ...(targetDate ? { targetDate: new Date(targetDate) } : {}),
+            ...(dueDate ? { dueDate: DateTime.fromFormat(dueDate, 'yyyy-MM-dd', { zone: 'Asia/Kolkata' }).toJSDate() } : {}),
+            ...(targetDate ? { targetDate: DateTime.fromFormat(targetDate, 'yyyy-MM-dd', { zone: 'Asia/Kolkata' }).toJSDate() } : {}),
             verificationAssignedTo: verificationAssignedToId,
             billed: billed !== undefined ? billed : true,
             selfVerification: false,
@@ -345,9 +354,9 @@ export const runAutomationCheck = async (isManual = true) => {
         
         if (totalTasksCreated > 0) {
           // Update the lastRunDate, lastRunMonth, and lastRunYear to track when it was executed
-          automation.lastRunDate = now;
-          automation.lastRunMonth = now.getMonth();
-          automation.lastRunYear = now.getFullYear();
+          automation.lastRunDate = now.toJSDate();
+          automation.lastRunMonth = now.month - 1;
+          automation.lastRunYear = now.year;
           
           // Ensure nested template changes are saved (Mongoose needs this for nested arrays)
           automation.markModified('taskTemplate');
@@ -364,9 +373,9 @@ export const runAutomationCheck = async (isManual = true) => {
           console.log(`[AutomationScheduler] ${automation.triggerType} automation ${automation._id}: No approved templates found. Will try again next run.`);
         } else {
           // Had approved templates but no tasks were created (maybe due to errors) - still mark as run to avoid infinite retries
-          automation.lastRunDate = now;
-          automation.lastRunMonth = now.getMonth();
-          automation.lastRunYear = now.getFullYear();
+          automation.lastRunDate = now.toJSDate();
+          automation.lastRunMonth = now.month - 1;
+          automation.lastRunYear = now.year;
           
           // Ensure nested template changes are saved even if no tasks created
           automation.markModified('taskTemplate');
@@ -395,7 +404,7 @@ export const runAutomationCheck = async (isManual = true) => {
     }
     
     if (!isManual) {
-      console.log(`[AutomationScheduler] Finished automation cycle at ${new Date().toISOString()}`);
+      console.log(`[AutomationScheduler] Finished automation cycle at ${DateTime.now().setZone('Asia/Kolkata').toISO()}`);
     } else {
       return { success: true, processedCount };
     }
