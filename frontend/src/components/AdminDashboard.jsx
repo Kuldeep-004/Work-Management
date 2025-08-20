@@ -136,6 +136,10 @@ const AdminDashboard = () => {
   const [automationTasks, setAutomationTasks] = useState([]);
   const [showAddAutomationTask, setShowAddAutomationTask] = useState(false);
   const [templateSearchTerm, setTemplateSearchTerm] = useState('');
+  // Template editing state
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [editTemplateModalOpen, setEditTemplateModalOpen] = useState(false);
+  const [editingTemplateIndex, setEditingTemplateIndex] = useState(null);
   // Bulk selection state
   const [selectedTasks, setSelectedTasks] = useState([]);
   const [isAllSelected, setIsAllSelected] = useState(false);
@@ -702,6 +706,53 @@ const AdminDashboard = () => {
     setEditTask(null);
     fetchTasks(); // Light reload after create or edit
   };
+
+  // Handler for editing task templates
+  const handleEditTemplate = (template, index) => {
+    setEditingTemplate(template);
+    setEditingTemplateIndex(index);
+    setEditTemplateModalOpen(true);
+  };
+
+  // Handler for template submit (when editing)
+  const handleTemplateSubmit = async (updatedTemplate) => {
+    try {
+      if (editingTemplateIndex === null || !selectedAutomation) return;
+
+      // Create a new array with the updated template
+      const updatedTemplates = [...selectedAutomation.taskTemplate];
+      updatedTemplates[editingTemplateIndex] = { 
+        ...updatedTemplate, 
+        _id: editingTemplate._id // Preserve the original _id
+      };
+
+      // Update the automation with the new templates array
+      const response = await fetch(`${API_BASE_URL}/api/automations/${selectedAutomation._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ taskTemplate: updatedTemplates }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update template');
+      }
+
+      // Update local state
+      const updatedAutomation = await response.json();
+      setSelectedAutomation(updatedAutomation);
+      setEditTemplateModalOpen(false);
+      setEditingTemplate(null);
+      setEditingTemplateIndex(null);
+      toast.success('Task template updated successfully');
+    } catch (error) {
+      toast.error(error.message || 'Failed to update template');
+      console.error('Error updating template:', error);
+    }
+  };
+
   const handleDeleteTask = async (taskId) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
@@ -1699,14 +1750,33 @@ const AdminDashboard = () => {
                           Created on {new Date().toLocaleDateString()}
                         </div>
                       </div>
-                      <button 
-                        className="text-red-500 hover:text-red-700 text-xs bg-white hover:bg-red-50 border border-red-200 px-3 py-1 rounded-md transition-colors flex items-center"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`Are you sure you want to delete this template: ${template.title}?`)) {
-                            try {
-                              // Create a new array without this template
-                              const updatedTemplates = selectedAutomation.taskTemplate.filter((_, i) => i !== idx);
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          className="text-blue-500 hover:text-blue-700 text-xs bg-white hover:bg-blue-50 border border-blue-200 px-3 py-1 rounded-md transition-colors flex items-center"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Find the original index in the full template array
+                            const originalIndex = selectedAutomation.taskTemplate.findIndex(t => 
+                              t.title === template.title && 
+                              t.clientName === template.clientName &&
+                              t.clientGroup === template.clientGroup
+                            );
+                            handleEditTemplate(template, originalIndex);
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </button>
+                        <button 
+                          className="text-red-500 hover:text-red-700 text-xs bg-white hover:bg-red-50 border border-red-200 px-3 py-1 rounded-md transition-colors flex items-center"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Are you sure you want to delete this template: ${template.title}?`)) {
+                              try {
+                                // Create a new array without this template
+                                const updatedTemplates = selectedAutomation.taskTemplate.filter((_, i) => i !== idx);
                               
                               // Update the automation with the new templates array
                               const response = await fetch(`${API_BASE_URL}/api/automations/${selectedAutomation._id}`, {
@@ -1732,12 +1802,13 @@ const AdminDashboard = () => {
                             }
                           }
                         }}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        Delete
-                      </button>
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -1861,6 +1932,24 @@ const AdminDashboard = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit Template Modal */}
+      {editTemplateModalOpen && (
+        <AutomationTask
+          users={users}
+          mode="edit"
+          initialData={editingTemplate}
+          isOpen={editTemplateModalOpen}
+          onClose={() => {
+            setEditTemplateModalOpen(false);
+            setEditingTemplate(null);
+            setEditingTemplateIndex(null);
+          }}
+          onSubmit={handleTemplateSubmit}
+          automationId={selectedAutomation?._id}
+          isEditingTemplate={true}
+        />
       )}
 
       {/* Bulk Delete Confirmation Modal */}

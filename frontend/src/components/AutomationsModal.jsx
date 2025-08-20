@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PlusIcon } from '@heroicons/react/24/outline';
+import AutomationMonitor from './AutomationMonitor';
 
 // Function to convert between 12-hour and 24-hour time formats
 const convert12hTo24h = (hours, minutes, period) => {
@@ -55,6 +56,7 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
   const [loading, setLoading] = useState(false);
   const [checkLoading, setCheckLoading] = useState(false); // For checking automations
   const [checkResult, setCheckResult] = useState(null); // To show results of check
+  const [showMonitor, setShowMonitor] = useState(false); // For automation monitoring
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, id: null, name: '' });
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -988,25 +990,28 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
               
               {/* Admin option to trigger automation check */}
               {user?.role === 'Admin' && (
-                <button
-                  onClick={handleTriggerAutomationCheck}
-                  className="flex items-center justify-center gap-1.5 bg-white border border-gray-200 text-gray-700 rounded-md py-2 text-xs font-medium hover:bg-gray-50 transition-colors w-full mt-2"
-                  disabled={checkLoading}
-                >
-                  {checkLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-gray-300 border-t-gray-600 mr-1"></div>
-                      Checking Automations...
-                    </>
-                  ) : (
-                    <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      Check Pending Automations
-                    </>
-                  )}
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={handleTriggerAutomationCheck}
+                    className="flex items-center justify-center gap-1.5 bg-white border border-gray-200 text-gray-700 rounded-md py-2 text-xs font-medium hover:bg-gray-50 transition-colors w-full"
+                    disabled={checkLoading}
+                  >
+                    {checkLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-gray-300 border-t-gray-600 mr-1"></div>
+                        Checking Automations...
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Check Pending Automations
+                      </>
+                    )}
+                  </button>
+                
+                </div>
               )}
             </div>
           </div>

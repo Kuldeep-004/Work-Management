@@ -16,6 +16,7 @@ const AutomationTask = ({
   onClose = () => {},
   onSubmit = null,
   automationId = null,
+  isEditingTemplate = false, // New prop to indicate template editing
 }) => {
   const { user: loggedInUser, isAuthenticated } = useAuth();
   const [isWorkTypeModalOpen, setIsWorkTypeModalOpen] = useState(false);
@@ -465,23 +466,39 @@ const AutomationTask = ({
       };
 
       let response, updatedTask;
-      if (mode === 'edit' && initialData && initialData._id) {
-        response = await fetch(`${API_BASE_URL}/api/tasks/${initialData._id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${loggedInUser.token}`,
-          },
-          body: JSON.stringify(taskData),
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to update task');
+      if (mode === 'edit' && initialData) {
+        if (isEditingTemplate) {
+          // When editing a template, just return the updated data to the parent
+          // The parent (AdminDashboard) will handle the API call to update the automation
+          const updatedTemplate = {
+            ...taskData,
+            _id: initialData._id // Preserve the original template ID if it exists
+          };
+          toast.success('Template updated successfully');
+          if (onSubmit) onSubmit(updatedTemplate);
+          onClose();
+          return;
+        } else if (initialData._id) {
+          // Regular task editing
+          response = await fetch(`${API_BASE_URL}/api/tasks/${initialData._id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${loggedInUser.token}`,
+            },
+            body: JSON.stringify(taskData),
+          });
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to update task');
+          }
+          updatedTask = await response.json();
+          toast.success('Task updated successfully');
+          if (onSubmit) onSubmit(updatedTask);
+          onClose();
+        } else {
+          throw new Error('Task ID not found for editing');
         }
-        updatedTask = await response.json();
-        toast.success('Task updated successfully');
-        if (onSubmit) onSubmit(updatedTask);
-        onClose();
       } else {
         // Only post to automation endpoint for new tasks
         if (!automationId) {

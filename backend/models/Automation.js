@@ -32,6 +32,11 @@ const automationSchema = new mongoose.Schema({
       enum: ['pending', 'completed'],
       default: 'pending'
     },
+    // Individual template tracking fields
+    lastProcessedDate: { type: Date }, // When this template was last processed
+    lastProcessedMonth: { type: Number }, // Which month this template was last processed
+    lastProcessedYear: { type: Number }, // Which year this template was last processed
+    createdTaskIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Task' }], // Tasks created from this template
     files: [{
       filename: String,
       originalName: String,

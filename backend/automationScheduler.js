@@ -47,47 +47,27 @@ export const runAutomationCheck = async (isManual = true) => {
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
     
+    // NEW APPROACH: Get all automations for the trigger types and check templates individually
     const monthlyAutomations = await Automation.find({ 
       triggerType: 'dayOfMonth',
       dayOfMonth: dayOfMonth,
-      // Remove the verification filter from database query - we'll check this in code
-      // Add conditions to check if it hasn't been run this month yet
-      $or: [
-        // Either lastRunMonth doesn't exist
-        { lastRunMonth: { $exists: false } },
-        // Or lastRunMonth is not the current month
-        { lastRunMonth: { $ne: currentMonth } },
-        // Or lastRunYear is not the current year
-        { lastRunYear: { $ne: currentYear } },
-      ]
+      'taskTemplate.verificationStatus': 'completed' // Only get automations with approved templates
     });
     
     // Get quarterly automations for the current day and month (if applicable)
-    // Check if current month matches any of the selected quarterly months
     const quarterlyAutomations = await Automation.find({
       triggerType: 'quarterly',
       dayOfMonth: dayOfMonth,
       quarterlyMonths: currentMonth + 1, // Convert to 1-indexed for comparison
-      // Check if it hasn't been run in the current month
-      $or: [
-        { lastRunMonth: { $exists: false } },
-        { lastRunMonth: { $ne: currentMonth } },
-        { lastRunYear: { $ne: currentYear } }
-      ]
+      'taskTemplate.verificationStatus': 'completed'
     });
     
     // Get half-yearly automations for the current day and month (if applicable)
-    // Check if current month matches any of the selected half-yearly months
     const halfYearlyAutomations = await Automation.find({
       triggerType: 'halfYearly',
       dayOfMonth: dayOfMonth,
       halfYearlyMonths: currentMonth + 1, // Convert to 1-indexed for comparison
-      // Check if it hasn't been run in the current month
-      $or: [
-        { lastRunMonth: { $exists: false } },
-        { lastRunMonth: { $ne: currentMonth } },
-        { lastRunYear: { $ne: currentYear } }
-      ]
+      'taskTemplate.verificationStatus': 'completed'
     });
     
     // Get yearly automations for the current day and month (if applicable)
@@ -95,11 +75,7 @@ export const runAutomationCheck = async (isManual = true) => {
       triggerType: 'yearly',
       dayOfMonth: dayOfMonth,
       monthOfYear: currentMonth + 1, // Convert to 1-indexed for storage
-      // Check if it hasn't been run this year yet
-      $or: [
-        { lastRunYear: { $exists: false } },
-        { lastRunYear: { $ne: currentYear } }
-      ]
+      'taskTemplate.verificationStatus': 'completed'
     });
     
     // Get automations that trigger on specific date and time
@@ -166,13 +142,33 @@ export const runAutomationCheck = async (isManual = true) => {
       
       let totalTasksCreated = 0;
       
-      // Process each task template individually - approved templates create tasks, pending ones are skipped
+      // Process each task template individually - check each template's execution status
       for (const template of automation.taskTemplate) {
-        // Skip templates that haven't been approved yet - treat each template individually
+        // Skip templates that haven't been approved yet
         if (!template.verificationStatus || template.verificationStatus !== 'completed') {
           console.warn(`[AutomationScheduler] Skipping template "${template.title}" in automation ${automation._id}: template not approved yet (status: ${template.verificationStatus || 'undefined'}).`);
           continue;
         }
+        
+        // NEW: Check if this specific template has already been processed this period
+        const shouldSkipTemplate = (() => {
+          if (['dayOfMonth', 'quarterly', 'halfYearly'].includes(automation.triggerType)) {
+            // For monthly/quarterly/half-yearly: check if processed this month
+            return template.lastProcessedMonth === currentMonth && template.lastProcessedYear === currentYear;
+          } else if (automation.triggerType === 'yearly') {
+            // For yearly: check if processed this year
+            return template.lastProcessedYear === currentYear;
+          }
+          return false; // For dateAndTime, always process
+        })();
+        
+        if (shouldSkipTemplate) {
+          console.log(`[AutomationScheduler] Skipping template "${template.title}" in automation ${automation._id}: already processed this period.`);
+          continue;
+        }
+        
+        console.log(`[AutomationScheduler] Processing template "${template.title}" in automation ${automation._id}: eligible for processing.`);
+        
         const {
           title,
           description,
@@ -315,6 +311,25 @@ export const runAutomationCheck = async (isManual = true) => {
         
         totalTasksCreated += templateCreatedCount;
         console.log(`[AutomationScheduler] Automation ${automation._id}, template "${title}": Created ${templateCreatedCount} tasks.`);
+        
+        // NEW: Update this template's execution tracking if tasks were created
+        if (templateCreatedCount > 0) {
+          // Update the template's execution tracking fields
+          if (['dayOfMonth', 'quarterly', 'halfYearly'].includes(automation.triggerType)) {
+            template.lastProcessedMonth = currentMonth;
+            template.lastProcessedYear = currentYear;
+            template.lastProcessedDate = now;
+          } else if (automation.triggerType === 'yearly') {
+            template.lastProcessedYear = currentYear;
+            template.lastProcessedDate = now;
+          }
+          
+          // Track created task IDs for this template
+          if (!template.createdTaskIds) {
+            template.createdTaskIds = [];
+          }
+          template.createdTaskIds.push(...automation.tasks.slice(-templateCreatedCount));
+        }
       }
       
       // For recurring automations (dayOfMonth, quarterly, halfYearly, yearly), 
@@ -333,6 +348,9 @@ export const runAutomationCheck = async (isManual = true) => {
           automation.lastRunDate = now;
           automation.lastRunMonth = now.getMonth();
           automation.lastRunYear = now.getFullYear();
+          
+          // Ensure nested template changes are saved (Mongoose needs this for nested arrays)
+          automation.markModified('taskTemplate');
           await automation.save();
           
           let nextRunInfo = 'next month';
@@ -349,6 +367,9 @@ export const runAutomationCheck = async (isManual = true) => {
           automation.lastRunDate = now;
           automation.lastRunMonth = now.getMonth();
           automation.lastRunYear = now.getFullYear();
+          
+          // Ensure nested template changes are saved even if no tasks created
+          automation.markModified('taskTemplate');
           await automation.save();
           
           console.log(`[AutomationScheduler] ${automation.triggerType} automation ${automation._id}: Had ${approvedTemplateCount} approved templates but no tasks were created. Marked as run to avoid infinite retries.`);
@@ -358,11 +379,17 @@ export const runAutomationCheck = async (isManual = true) => {
       else if (automation.triggerType === 'dateAndTime') {
         if (totalTasksCreated > 0) {
           console.log(`[AutomationScheduler] One-time automation ${automation._id}: Created ${totalTasksCreated} tasks total. Deleting automation.`);
+          // Save template changes before deleting
+          automation.markModified('taskTemplate');
+          await automation.save();
           await Automation.deleteOne({ _id: automation._id });
           processedCount++;
         } else {
           console.log(`[AutomationScheduler] One-time automation ${automation._id}: No tasks were created! Will try again next minute.`);
           // Don't delete the automation if no tasks were created, so we can retry
+          // But still save any template execution tracking changes
+          automation.markModified('taskTemplate');
+          await automation.save();
         }
       }
     }
