@@ -398,7 +398,9 @@ const Cost = () => {
                 ) : costs.map((t) => (
                   <tr key={t.taskId} className="hover:bg-gray-50">
                     <td className="px-4 py-2 whitespace-nowrap font-semibold sticky left-0 bg-white border-r">
-                      {t.title}
+                      <div className="max-w-[320px] overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300">
+                        <span className="inline-block min-w-full align-middle">{t.title}</span>
+                      </div>
                     </td>
                     {[t.assignedTo, t.firstVerifier, t.secondVerifier, t.thirdVerifier, t.fourthVerifier, t.fifthVerifier].map((u, idx) => (
                       <td key={idx} className="px-4 py-2 whitespace-nowrap">
