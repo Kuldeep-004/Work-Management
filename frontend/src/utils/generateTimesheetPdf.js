@@ -132,7 +132,22 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
       }
     });
 
-    cursorY = doc.lastAutoTable.finalY + 6;
+    cursorY = doc.lastAutoTable.finalY + 12; // Add more space for signatures
+
+    // Signature lines
+    const signLineY = cursorY;
+    const signLineLength = 38; // mm
+    // Hari Sir's Sign (left)
+    doc.setDrawColor(80);
+    doc.line(margin, signLineY, margin + signLineLength, signLineY);
+    doc.setFontSize(10);
+    doc.setTextColor(60);
+    doc.text("Hari Sir's Sign", margin, signLineY + 6);
+    // Team Head Sign (right)
+    doc.line(pageWidth - margin - signLineLength, signLineY, pageWidth - margin, signLineY);
+    doc.text('Team Head Sign', pageWidth - margin - signLineLength, signLineY + 6);
+
+    cursorY += 18; // Add space after signatures for next section
 
     // Section divider
     doc.setDrawColor(230);

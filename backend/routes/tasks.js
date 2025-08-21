@@ -231,7 +231,8 @@ router.get('/', protect, async (req, res) => {
             { assignedBy: req.user._id }
           ]
         },
-        { verificationStatus: { $ne: 'pending' } }
+        { verificationStatus: { $ne: 'pending' } },
+        { status: { $ne: 'completed' } }
       ]
     })
       .populate('assignedTo', 'firstName lastName photo')
@@ -253,8 +254,10 @@ router.get('/all', protect, async (req, res) => {
   try {
     let tasks;
     if (['Admin', 'Senior', 'Team Head'].includes(req.user.role)) {
-      // All privileged roles: show all tasks (including completed verification)
-      tasks = await Task.find({ verificationStatus: { $ne: 'pending' } })
+      // All privileged roles: show tasks that are not pending verification
+      // and exclude tasks that are fully completed to avoid sending completed
+      // tasks to the frontend (reduces payload / improves dashboard load).
+      tasks = await Task.find({ verificationStatus: { $ne: 'pending' }, status: { $ne: 'completed' } })
         .populate('assignedTo', 'firstName lastName photo group')
         .populate('assignedBy', 'firstName lastName photo group')
         .populate('verificationAssignedTo', 'firstName lastName photo')
@@ -1999,9 +2002,10 @@ router.get('/analytics/data', protect, async (req, res) => {
     // Get all tasks
     const allTasks = await Task.find().populate('assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo');
 
-    // Total tasks assigned to current user
+    // Total tasks assigned to current user (exclude completed tasks)
     const totalTasks = allTasks.filter(task => 
-      task.assignedTo._id.toString() === userId.toString()
+      task.assignedTo._id.toString() === userId.toString() &&
+      task.status !== 'completed'
     ).length;
 
     // Execution tasks: Rule 1 (old): tasks assigned to current user with no verifiers and status not completed
@@ -2059,9 +2063,10 @@ router.get('/analytics/data', protect, async (req, res) => {
        task.fifthVerificationAssignedTo)
     ).length;
 
-    // Priority distribution for tasks assigned to current user
+    // Priority distribution for tasks assigned to current user (exclude completed tasks)
     const userTasks = allTasks.filter(task => 
-      task.assignedTo._id.toString() === userId.toString()
+      task.assignedTo._id.toString() === userId.toString() &&
+      task.status !== 'completed'
     );
 
     const priorityDistribution = {
