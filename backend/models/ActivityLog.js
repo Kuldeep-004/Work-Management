@@ -64,8 +64,11 @@ const activityLogSchema = new mongoose.Schema(
         
         // Notification actions
         'notification_created', 'notification_sent', 'notification_read',
-        'notification_deleted', 'notifications_mark_all_read',
+        'notification_deleted', 'notifications_mark_all_read', 'notifications_cleared',
         'push_notification_unsubscribed',
+        
+        // New action
+        'push_notification_subscribed',
         
         // System actions
         'system_backup_created', 'system_update',

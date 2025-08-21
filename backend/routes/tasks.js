@@ -18,6 +18,7 @@ import Notification from '../models/Notification.js';
 import { uploadFile, deleteFile } from '../utils/cloudinary.js';
 import { promisify } from 'util';
 import ActivityLogger from '../utils/activityLogger.js';
+import { truncateTaskName, getVerifierType } from '../utils/notificationUtils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -715,7 +716,8 @@ router.post('/', protect, canAssignTask, async (req, res) => {
       createdTasks.push(savedTask);
 
       // Create notification for the assigned user with new format
-      const notificationMessage = `${assigner.firstName} ${assigner.lastName} assigned you ${title} of ${clientName}.`;
+      const truncatedTaskName = truncateTaskName(title);
+      const notificationMessage = `${assigner.firstName} ${assigner.lastName} assigned you "${truncatedTaskName}" of ${clientName}.`;
       const notification = new Notification({
         recipient: userId,
         task: savedTask._id,
@@ -1090,9 +1092,10 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
 
       // Create notification for the assigned user
       if (task.assignedTo) {
+        const truncatedTaskName = truncateTaskName(task.title);
         const rejectionMessage = remarks ? 
-          `${req.user.firstName} ${req.user.lastName} has rejected ${task.title} with remarks "${remarks.trim()}"` :
-          `${req.user.firstName} ${req.user.lastName} has rejected ${task.title}`;
+          `${req.user.firstName} ${req.user.lastName} has rejected "${truncatedTaskName}" with remarks "${remarks.trim()}"` :
+          `${req.user.firstName} ${req.user.lastName} has rejected "${truncatedTaskName}"`;
         
         const notification = new Notification({
           recipient: task.assignedTo._id,
@@ -1114,9 +1117,10 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
 
       // Create notification for the assigned user
       if (task.assignedTo) {
+        const truncatedTaskName = truncateTaskName(task.title);
         const acceptanceMessage = remarks ? 
-          `${req.user.firstName} ${req.user.lastName} has accepted ${task.title} with remarks "${remarks.trim()}"` :
-          `${req.user.firstName} ${req.user.lastName} has accepted ${task.title}`;
+          `${req.user.firstName} ${req.user.lastName} has accepted "${truncatedTaskName}" with remarks "${remarks.trim()}"` :
+          `${req.user.firstName} ${req.user.lastName} has accepted "${truncatedTaskName}"`;
         
         const notification = new Notification({
           recipient: task.assignedTo._id,
@@ -1476,7 +1480,8 @@ router.post('/:taskId/comments', protect, async (req, res) => {
 
     // Fetch commenter details for notification message
     const commenter = await User.findById(req.user._id).select('firstName lastName');
-    const message = `${commenter.firstName} ${commenter.lastName} has commented on ${task.title} of ${task.clientName} as ${content}`;
+    const truncatedTaskName = truncateTaskName(task.title);
+    const message = `${commenter.firstName} ${commenter.lastName} has commented on "${truncatedTaskName}" of ${task.clientName} as ${content}`;
     const recipients = new Set();
 
     if (assignedToId !== commenterId) {
@@ -1570,7 +1575,8 @@ router.post('/:taskId/comments/audio', protect, uploadAudio.single('audio'), asy
 
     // Fetch commenter details for notification message
     const commenter = await User.findById(req.user._id).select('firstName lastName');
-    const message = `${commenter.firstName} ${commenter.lastName} has commented on ${task.title} of ${task.clientName} as Audio comment`;
+    const truncatedTaskName = truncateTaskName(task.title);
+    const message = `${commenter.firstName} ${commenter.lastName} has commented on "${truncatedTaskName}" of ${task.clientName} as Audio comment`;
     const recipients = new Set();
 
     if (assignedToId !== commenterId) {
@@ -1778,7 +1784,10 @@ router.patch('/:taskId/verifier', protect, async (req, res) => {
     if (!verificationAssignedTo && !secondVerificationAssignedTo && !thirdVerificationAssignedTo && !fourthVerificationAssignedTo && !fifthVerificationAssignedTo) {
       return res.status(400).json({ message: 'At least one verifier is required' });
     }
-    const task = await Task.findById(req.params.taskId);
+    const task = await Task.findById(req.params.taskId)
+      .populate('assignedTo', 'firstName lastName')
+      .populate('assignedBy', 'firstName lastName');
+      
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
     }
@@ -1795,23 +1804,124 @@ router.patch('/:taskId/verifier', protect, async (req, res) => {
       console.log('Changed verification from "accepted" to "pending" after assigning new verifier in execution tab');
     }
     
+    // Get the assigner information
+    const assigner = await User.findById(req.user._id).select('firstName lastName');
+    
+    // Track newly assigned verifiers for notifications
+    const newlyAssignedVerifiers = [];
+    
     // Allow any authenticated user to update any verifier
-    if (verificationAssignedTo) {
+    if (verificationAssignedTo && verificationAssignedTo !== task.verificationAssignedTo?.toString()) {
       task.verificationAssignedTo = verificationAssignedTo;
+      newlyAssignedVerifiers.push({
+        userId: verificationAssignedTo,
+        verifierType: 'first',
+        field: 'verificationAssignedTo'
+      });
     }
-    if (secondVerificationAssignedTo) {
+    if (secondVerificationAssignedTo && secondVerificationAssignedTo !== task.secondVerificationAssignedTo?.toString()) {
       task.secondVerificationAssignedTo = secondVerificationAssignedTo;
+      newlyAssignedVerifiers.push({
+        userId: secondVerificationAssignedTo,
+        verifierType: 'second',
+        field: 'secondVerificationAssignedTo'
+      });
     }
-    if (thirdVerificationAssignedTo) {
+    if (thirdVerificationAssignedTo && thirdVerificationAssignedTo !== task.thirdVerificationAssignedTo?.toString()) {
       task.thirdVerificationAssignedTo = thirdVerificationAssignedTo;
+      newlyAssignedVerifiers.push({
+        userId: thirdVerificationAssignedTo,
+        verifierType: 'third',
+        field: 'thirdVerificationAssignedTo'
+      });
     }
-    if (fourthVerificationAssignedTo) {
+    if (fourthVerificationAssignedTo && fourthVerificationAssignedTo !== task.fourthVerificationAssignedTo?.toString()) {
       task.fourthVerificationAssignedTo = fourthVerificationAssignedTo;
+      newlyAssignedVerifiers.push({
+        userId: fourthVerificationAssignedTo,
+        verifierType: 'fourth',
+        field: 'fourthVerificationAssignedTo'
+      });
     }
-    if (fifthVerificationAssignedTo) {
+    if (fifthVerificationAssignedTo && fifthVerificationAssignedTo !== task.fifthVerificationAssignedTo?.toString()) {
       task.fifthVerificationAssignedTo = fifthVerificationAssignedTo;
+      newlyAssignedVerifiers.push({
+        userId: fifthVerificationAssignedTo,
+        verifierType: 'fifth',
+        field: 'fifthVerificationAssignedTo'
+      });
     }
+    
     await task.save();
+    
+    // Send notifications to newly assigned verifiers
+    for (const verifierInfo of newlyAssignedVerifiers) {
+      const { userId, verifierType, field } = verifierInfo;
+      
+      // Determine who is assigning this verifier
+      let assignerName = '';
+      let assignerType = '';
+      
+      // Check if the assigner is the task's assignedTo user
+      if (task.assignedTo && task.assignedTo._id.toString() === req.user._id.toString()) {
+        assignerName = `${task.assignedTo.firstName} ${task.assignedTo.lastName}`;
+        assignerType = 'assignedTo';
+      } 
+      // Check if the assigner is the task's assignedBy user  
+      else if (task.assignedBy && task.assignedBy._id.toString() === req.user._id.toString()) {
+        assignerName = `${task.assignedBy.firstName} ${task.assignedBy.lastName}`;
+        assignerType = 'assignedBy';
+      }
+      // Check if the assigner is a previous verifier
+      else {
+        const verifierFields = ['verificationAssignedTo', 'secondVerificationAssignedTo', 'thirdVerificationAssignedTo', 'fourthVerificationAssignedTo', 'fifthVerificationAssignedTo'];
+        for (const vField of verifierFields) {
+          if (task[vField] && task[vField].toString() === req.user._id.toString()) {
+            assignerName = `${assigner.firstName} ${assigner.lastName}`;
+            assignerType = 'verifier';
+            break;
+          }
+        }
+        
+        // If not found in verifiers, use the current user info
+        if (!assignerName) {
+          assignerName = `${assigner.firstName} ${assigner.lastName}`;
+          assignerType = 'user';
+        }
+      }
+      
+      // Create the notification message with truncated task name
+      const truncatedTaskName = truncateTaskName(task.title);
+      let notificationMessage = '';
+      
+      if (verifierType === 'first') {
+        if (assignerType === 'assignedTo') {
+          notificationMessage = `${assignerName} assigned you "${truncatedTaskName}" for verification.`;
+        } else {
+          notificationMessage = `${assignerName} assigned you "${truncatedTaskName}" for verification.`;
+        }
+      } else {
+        if (assignerType === 'assignedTo') {
+          notificationMessage = `${assignerName} assigned you "${truncatedTaskName}" for ${verifierType} verification.`;
+        } else if (assignerType === 'verifier') {
+          notificationMessage = `${assignerName} assigned you "${truncatedTaskName}" for ${verifierType} verification.`;
+        } else {
+          notificationMessage = `${assignerName} assigned you "${truncatedTaskName}" for ${verifierType} verification.`;
+        }
+      }
+      
+      // Create notification
+      const notification = new Notification({
+        recipient: userId,
+        task: task._id,
+        assigner: req.user._id,
+        message: notificationMessage,
+        type: 'verifier_assignment'
+      });
+      
+      await notification.save();
+    }
+    
     const updatedTask = await Task.findById(task._id)
       .populate('assignedTo', 'firstName lastName photo')
       .populate('assignedBy', 'firstName lastName photo')

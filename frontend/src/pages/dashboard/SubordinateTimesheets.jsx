@@ -8,6 +8,7 @@ import {
   EyeIcon
 } from '@heroicons/react/24/outline';
 import { API_BASE_URL } from '../../apiConfig';
+import generateTimesheetPdf from '../../utils/generateTimesheetPdf';
 
 const SubordinateTimesheets = () => {
   const { user, isAuthenticated } = useAuth();
@@ -21,6 +22,26 @@ const SubordinateTimesheets = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [selectedTimesheet, setSelectedTimesheet] = useState(null);
   const [showTimesheetDetail, setShowTimesheetDetail] = useState(false);
+
+  const onDownloadPdf = () => {
+    try {
+      if (!timesheets || timesheets.length === 0) {
+        toast.error('Nothing to download');
+        return;
+      }
+      const label = (() => {
+        if (selectedUser && timesheets[0]?.user) {
+          const u = timesheets[0].user;
+          return `${u.firstName || ''}_${u.lastName || ''}`.trim() || 'timesheet';
+        }
+        return 'timesheets';
+      })();
+      generateTimesheetPdf({ dateStr: selectedDate, timesheets, fileLabel: label });
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to generate PDF');
+    }
+  };
 
   useEffect(() => {
     if (isAuthenticated() && user) {
@@ -248,7 +269,7 @@ const SubordinateTimesheets = () => {
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-4 sm:p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <UserIcon className="w-4 h-4 inline mr-1" />
@@ -282,6 +303,18 @@ const SubordinateTimesheets = () => {
               onChange={(e) => setSelectedDate(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
+          </div>
+
+          <div className="flex md:justify-end">
+            <button
+              type="button"
+              onClick={onDownloadPdf}
+              disabled={loading || timesheets.length === 0}
+              className="mt-6 md:mt-0 inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 16a1 1 0 0 1-.707-.293l-4-4 1.414-1.414L11 12.586V3h2v9.586l2.293-2.293 1.414 1.414-4 4A1 1 0 0 1 12 16z"/><path d="M5 19h14v2H5z"/></svg>
+              Download PDF
+            </button>
           </div>
         </div>
       </div>

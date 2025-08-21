@@ -22,7 +22,7 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['task_assignment', 'timesheet_reminder', 'system', 'verification_accepted', 'verification_rejected'],
+    enum: ['task_assignment', 'timesheet_reminder', 'system', 'verification_accepted', 'verification_rejected', 'verifier_assignment'],
     default: 'task_assignment'
   },
   isRead: {
