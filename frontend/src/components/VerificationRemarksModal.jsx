@@ -37,13 +37,7 @@ const VerificationRemarksModal = ({
   const handleSubmit = (e) => {
     e.preventDefault();
     const trimmedRemarks = remarks.trim();
-    if (!trimmedRemarks) {
-      // Focus back on textarea if remarks are empty
-      if (textAreaRef.current) {
-        textAreaRef.current.focus();
-      }
-      return;
-    }
+    // Remarks are now optional for both acceptance and rejection
     onSubmit(trimmedRemarks);
   };
 
@@ -90,7 +84,7 @@ const VerificationRemarksModal = ({
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label htmlFor="remarks" className="block text-sm font-medium text-gray-700 mb-2">
-              Remarks <span className="text-red-500">*</span>
+              Remarks
             </label>
             <textarea
               ref={textAreaRef}
@@ -98,19 +92,11 @@ const VerificationRemarksModal = ({
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Enter your remarks here... (required)"
+              placeholder="Enter your remarks here... (optional)"
               rows={4}
               disabled={loading}
-              required
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed ${
-                !remarks.trim() ? 'border-red-300' : 'border-gray-300'
-              }`}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            {!remarks.trim() && (
-              <p className="text-xs text-red-500 mt-1">
-                Remarks are required
-              </p>
-            )}
             <p className="text-xs text-gray-500 mt-1">
               Press Ctrl+Enter to submit quickly
             </p>
@@ -127,7 +113,7 @@ const VerificationRemarksModal = ({
             </button>
             <button
               type="submit"
-              disabled={loading || !remarks.trim()}
+              disabled={loading}
               className={`px-4 py-2 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
                 verificationType === 'accepted' 
                   ? 'bg-green-600 hover:bg-green-700' 

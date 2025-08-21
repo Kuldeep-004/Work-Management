@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import FilterPopup from '../../components/FilterPopup';
 import TabBar from '../../components/TabBar';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ChartBarIcon,
   UserGroupIcon,
@@ -70,16 +71,36 @@ const DEFAULT_TAB = (taskType = 'execution', customColumns = []) => {
 
 const ReceivedTasks = () => {
   const { user, isAuthenticated } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Get highlight task ID and other params from URL
+  const searchParams = new URLSearchParams(location.search);
+  const highlightTaskId = searchParams.get('highlightTask');
+  const urlTabId = searchParams.get('tabId');
+  const urlFixedTab = searchParams.get('fixedTab');
+  const urlTs = searchParams.get('ts');
+
+  // Always reset highlight processed ref on every notification click (URL param change)
+  useEffect(() => {
+    highlightProcessedRef.current = false;
+  }, [highlightTaskId, urlTabId, urlFixedTab, urlTs]);
+  
+  // Track if highlight has been processed to avoid multiple calls
+  const highlightProcessedRef = useRef(false);
+  
   // Tab state
   const [tabs, setTabs] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
   const [tabsLoaded, setTabsLoaded] = useState(false);
+  const [pendingTabActivation, setPendingTabActivation] = useState(true);
 
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [tasksLoaded, setTasksLoaded] = useState(false); // NEW
   const [usersLoaded, setUsersLoaded] = useState(false); // NEW
   const [error, setError] = useState(null);
+  const [highlightedTaskId, setHighlightedTaskId] = useState(null);
   const [taskCounts, setTaskCounts] = useState({
     execution: 0,
     receivedVerification: 0,
@@ -223,6 +244,158 @@ const ReceivedTasks = () => {
   };
 
   // ALL USEEFFECTS - moved before any early returns to avoid hook order issues
+
+  // On mount, if tabId and fixedTab are present, activate them before highlight
+  useEffect(() => {
+    if (tabsLoaded && pendingTabActivation) {
+      let didSet = false;
+      if (urlTabId) {
+        const tabIdNum = isNaN(Number(urlTabId)) ? urlTabId : Number(urlTabId);
+        if (tabs.some(tab => String(tab.id) === String(tabIdNum))) {
+          setActiveTabId(tabIdNum);
+          didSet = true;
+        }
+      }
+      if (urlFixedTab) {
+        // Wait for activeTabId to be set, then update activeTab in that tab
+        setTimeout(() => {
+          if (urlTabId) {
+            setTabs(prevTabs => prevTabs.map(tab =>
+              String(tab.id) === String(urlTabId)
+                ? { ...tab, activeTab: urlFixedTab }
+                : tab
+            ));
+          } else {
+            setTabs(prevTabs => prevTabs.map((tab, idx) =>
+              idx === 0 ? { ...tab, activeTab: urlFixedTab } : tab
+            ));
+          }
+        }, 0);
+        didSet = true;
+      }
+      if (didSet) setPendingTabActivation(false);
+    }
+  }, [tabsLoaded, pendingTabActivation, urlTabId, urlFixedTab, tabs]);
+
+  // Handle highlighting task from notification
+  useEffect(() => {
+    if (highlightTaskId && tasks.length > 0 && tabsLoaded && !highlightProcessedRef.current && !pendingTabActivation) {
+      console.log('Highlighting task:', highlightTaskId, typeof highlightTaskId);
+      highlightProcessedRef.current = true;
+      searchAndHighlightTask(highlightTaskId);
+    }
+    // eslint-disable-next-line
+  }, [highlightTaskId, urlTabId, urlFixedTab, urlTs, tasks.length > 0, tabsLoaded, pendingTabActivation]);
+
+  // Enhanced: Search all browser-like tabs and fixed tabs, always respecting filters
+  // Use a pending highlight state to ensure highlight happens after tab switch and data load
+  const [pendingHighlight, setPendingHighlight] = useState(null);
+  const searchAndHighlightTask = async (taskId) => {
+    console.log('searchAndHighlightTask called with:', taskId, typeof taskId);
+    const taskIdString = String(taskId);
+    navigate(location.pathname, { replace: true });
+    try {
+      // First, verify the task exists and get its details
+      const taskResponse = await fetch(`${API_BASE_URL}/api/tasks/${taskIdString}`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      if (!taskResponse.ok) {
+        toast.error('Task not found or you do not have access to it');
+        return;
+      }
+      const taskDetails = await taskResponse.json();
+      console.log('Found task:', taskDetails);
+
+      // Search all browser-like tabs (pages)
+      let found = false;
+      let foundTabId = null;
+      let foundTabType = null;
+      for (let tabIdx = 0; tabIdx < tabs.length; tabIdx++) {
+        const tab = tabs[tabIdx];
+        // For each browser-like tab, check all 5 fixed tabs (task types)
+        const receivedTabTypes = ['execution', 'receivedVerification', 'issuedVerification', 'completed', 'guidance'];
+        for (const tabType of receivedTabTypes) {
+          const simulatedTab = { ...tab, activeTab: tabType };
+          let url;
+          if (tabType === 'guidance') {
+            url = `${API_BASE_URL}/api/tasks/received/guidance`;
+          } else {
+            url = `${API_BASE_URL}/api/tasks/received?tab=${tabType}`;
+          }
+          let filteredTasks = [];
+          try {
+            const response = await fetch(url, {
+              headers: { Authorization: `Bearer ${user.token}` },
+            });
+            if (response.ok) {
+              let tabTasks = await response.json();
+              if (simulatedTab.filters && simulatedTab.filters.length > 0) {
+                tabTasks = tabTasks.filter(task => {
+                  return simulatedTab.filters.every(f => {
+                    if (f.operator === 'contains') {
+                      return (task[f.column] || '').toLowerCase().includes((f.value || '').toLowerCase());
+                    }
+                    return true;
+                  });
+                });
+              }
+              if (simulatedTab.searchTerm) {
+                tabTasks = tabTasks.filter(task =>
+                  (task.title || '').toLowerCase().includes(simulatedTab.searchTerm.toLowerCase())
+                );
+              }
+              if (simulatedTab.statusFilter && simulatedTab.statusFilter !== 'all') {
+                tabTasks = tabTasks.filter(task => task.status === simulatedTab.statusFilter);
+              }
+              const foundTask = tabTasks.find(t => t._id === taskIdString);
+              if (foundTask) {
+                // Switch to this tab/page and fixed tab type
+                setActiveTabId(tab.id);
+                updateActiveTab({ activeTab: tabType });
+                // Set pending highlight so effect can trigger highlight after data loads
+                setPendingHighlight({ taskId: taskIdString, tabId: tab.id, tabType, tabTitle: tab.title });
+                found = true;
+                foundTabId = tab.id;
+                foundTabType = tabType;
+                break;
+              }
+            }
+          } catch (error) {
+            console.error(`Error searching in tab ${tab.title} (${tabType}):`, error);
+          }
+        }
+        if (found) break;
+      }
+      if (!found) {
+        // If not found, but we have at least one tab, switch to the first tab and fixedTab (if not already there)
+        if (tabs.length > 0) {
+          setActiveTabId(tabs[0].id);
+          updateActiveTab({ activeTab: 'execution' });
+        }
+        toast.info(`Task "${taskDetails.title}" is not visible in any of your tabs/pages with the current filters. Try adjusting your filters or tabs.`);
+      }
+    } catch (error) {
+      console.error('Error searching for task:', error);
+      toast.error('Error searching for task');
+    }
+  };
+
+  // Effect: When pendingHighlight is set, wait for correct tab and tasks to load, then highlight
+  useEffect(() => {
+    if (
+      pendingHighlight &&
+      activeTabId === pendingHighlight.tabId &&
+      tabsLoaded &&
+      tasksLoaded &&
+      tasks.some(t => t._id === pendingHighlight.taskId)
+    ) {
+      setHighlightedTaskId(pendingHighlight.taskId);
+      setTimeout(() => setHighlightedTaskId(null), 5000);
+      toast.success(`Task found and highlighted in "${pendingHighlight.tabTitle}" (${pendingHighlight.tabType}) tab`);
+      setPendingHighlight(null);
+    }
+  }, [pendingHighlight, activeTabId, tabsLoaded, tasksLoaded, tasks]);
+
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -868,6 +1041,7 @@ const ReceivedTasks = () => {
           taskType={activeTabObj.activeTab}
           users={users}
           currentUser={user}
+          highlightedTaskId={highlightedTaskId}
           onTaskUpdate={async (taskId, updater) => {
             // Update local state immediately for UI responsiveness
             setTasks(prevTasks => prevTasks.map(task =>

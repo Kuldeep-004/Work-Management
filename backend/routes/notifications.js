@@ -105,6 +105,40 @@ router.patch('/mark-all-read', protect, async (req, res) => {
   }
 });
 
+// Delete all notifications for the current user (must come before /:id route)
+router.delete('/clear-all', protect, async (req, res) => {
+  try {
+    const notifications = await Notification.find({
+      recipient: req.user._id
+    });
+
+    if (notifications.length === 0) { 
+      return res.json({ message: 'No notifications to clear' });
+    }
+
+    // Log the bulk deletion activity
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'notifications_cleared',
+      null,
+      `Cleared all ${notifications.length} notification(s)`,
+      { notificationCount: notifications.length },
+      null,
+      req
+    );
+
+    // Delete all notifications for the user
+    await Notification.deleteMany({
+      recipient: req.user._id
+    });
+
+    res.json({ message: `All ${notifications.length} notifications cleared successfully` });
+  } catch (error) {
+    console.error('Error clearing all notifications:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Delete notification (permanent delete)
 router.delete('/:id', protect, async (req, res) => {
   try {

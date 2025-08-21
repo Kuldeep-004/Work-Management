@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import FilterPopup from '../../components/FilterPopup';
 import TabBar from '../../components/TabBar';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ChartBarIcon,
   UserGroupIcon,
@@ -45,10 +46,20 @@ const ALL_COLUMNS = [
 
 const AssignedTasks = () => {
   const { user, isAuthenticated } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Get highlight task ID from URL parameters
+  const searchParams = new URLSearchParams(location.search);
+  const highlightTaskId = searchParams.get('highlightTask');
+  
+  // Track if highlight has been processed to avoid multiple calls
+  const highlightProcessedRef = useRef(false);
   
   // Custom columns state
   const [customColumns, setCustomColumns] = useState([]);
   const [allColumns, setAllColumns] = useState(ALL_COLUMNS);
+  const [highlightedTaskId, setHighlightedTaskId] = useState(null);
 
   // Fetch custom columns
   useEffect(() => {
@@ -221,6 +232,111 @@ const AssignedTasks = () => {
       fetchAssignedTasks();
     }
   }, [user, activeTabObj.activeTab]);
+
+  // Handle highlighting task from notification
+  useEffect(() => {
+    if (highlightTaskId && tasks.length > 0 && !highlightProcessedRef.current) {
+      console.log('Highlighting task in assigned tasks:', highlightTaskId, typeof highlightTaskId);
+      highlightProcessedRef.current = true;
+      searchAndHighlightTask(highlightTaskId);
+    }
+  }, [highlightTaskId, tasks.length > 0]);
+
+  const searchAndHighlightTask = async (taskId) => {
+    console.log('searchAndHighlightTask called in assigned tasks with:', taskId, typeof taskId);
+    
+    // Ensure taskId is a string
+    const taskIdString = String(taskId);
+    console.log('taskIdString in assigned tasks:', taskIdString);
+    
+    // Clear URL parameter
+    navigate(location.pathname, { replace: true });
+    
+    try {
+      // First, verify the task exists and get its details
+      const taskResponse = await fetch(`${API_BASE_URL}/api/tasks/${taskIdString}`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      
+      console.log('Task fetch response in assigned tasks:', taskResponse.status);
+      
+      if (!taskResponse.ok) {
+        toast.error('Task not found or you do not have access to it');
+        return;
+      }
+      
+      const taskDetails = await taskResponse.json();
+      console.log('Found task in assigned tasks:', taskDetails);
+      
+      // Search for the task in current tasks first
+      const foundTask = tasks.find(t => t._id === taskIdString);
+      
+      if (foundTask) {
+        console.log('Task found in current assigned tasks');
+        // Highlight the task
+        setHighlightedTaskId(taskIdString);
+        
+        // Clear highlight after 5 seconds
+        setTimeout(() => {
+          setHighlightedTaskId(null);
+        }, 5000);
+        
+        toast.success(`Task found in assigned tasks - ${activeTabObj.activeTab} tab`);
+        return;
+      }
+      
+      // Search across all assigned task tabs
+      const tabTypes = ['execution', 'verification', 'completed'];
+      let foundTab = null;
+      
+      for (const tabType of tabTypes) {
+        try {
+          console.log(`Searching in assigned ${tabType}`);
+          const response = await fetch(`${API_BASE_URL}/api/tasks/assigned?tab=${tabType}`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          });
+          
+          if (response.ok) {
+            const tabTasks = await response.json();
+            console.log(`Assigned tasks in ${tabType}:`, tabTasks.length);
+            const task = tabTasks.find(t => t._id === taskIdString);
+            
+            if (task) {
+              foundTab = tabType;
+              break;
+            }
+          }
+        } catch (error) {
+          console.error(`Error searching in assigned ${tabType} tab:`, error);
+        }
+      }
+      
+      if (foundTab) {
+        console.log(`Task found in assigned ${foundTab}`);
+        // Switch to the tab where task was found
+        updateActiveTab({ activeTab: foundTab });
+        
+        // Highlight the task
+        setHighlightedTaskId(taskIdString);
+        
+        // Clear highlight after 5 seconds
+        setTimeout(() => {
+          setHighlightedTaskId(null);
+        }, 5000);
+        
+        toast.success(`Task found in assigned tasks - ${foundTab} tab`);
+      } else {
+        console.log('Task not found in assigned tasks, trying received tasks');
+        // Task exists but not in assigned tasks, might be in received tasks
+        navigate(`/dashboard/received-tasks?highlightTask=${taskIdString}`);
+        toast.success(`Task found in received tasks - redirecting...`);
+      }
+      
+    } catch (error) {
+      console.error('Error searching for task:', error);
+      toast.error('Error searching for task');
+    }
+  };
 
   // Fetch task counts for each tab
   useEffect(() => {
@@ -647,6 +763,7 @@ const AssignedTasks = () => {
           tasks={getFilteredAndSortedTasks(tasks)}
           viewType="assigned"
           taskType={activeTabObj.activeTab}
+          highlightedTaskId={highlightedTaskId}
           onTaskUpdate={(taskId, updater) => {
             setTasks(prevTasks => prevTasks.map(task =>
               task._id === taskId ? updater(task) : task

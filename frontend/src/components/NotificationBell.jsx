@@ -3,6 +3,7 @@ import { BellIcon, XMarkIcon, InboxIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../apiConfig';
+import { useNavigate } from 'react-router-dom';
 
 const NotificationBell = () => {
   const [notifications, setNotifications] = useState([]);
@@ -10,6 +11,7 @@ const NotificationBell = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+  const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -84,6 +86,117 @@ const NotificationBell = () => {
     }
   };
 
+  const handleNotificationClick = async (notification) => {
+    console.log('Notification clicked:', notification);
+    console.log('Notification task:', notification.task, typeof notification.task);
+    
+    // Mark as read first
+    if (!notification.isRead) {
+      await handleMarkAsRead(notification._id);
+    }
+    
+    // Close notification dropdown
+    setIsOpen(false);
+    
+    // If notification has a task, find the correct tab and fixed tab before reloading
+    if (notification.task) {
+      let taskId;
+      if (typeof notification.task === 'object' && notification.task._id) {
+        taskId = notification.task._id;
+      } else if (typeof notification.task === 'string') {
+        taskId = notification.task;
+      } else {
+        console.error('Invalid task format in notification:', notification.task);
+        toast.error('Invalid task reference in notification');
+        return;
+      }
+
+      // Fetch tabs from backend (or localStorage if you use it)
+      let tabs = [];
+      try {
+        const tabStateRes = await fetch(`${API_BASE_URL}/api/users/user-tab-state/receivedTasks`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (tabStateRes.ok) {
+          const tabState = await tabStateRes.json();
+          tabs = tabState.tabs || [];
+        }
+      } catch (e) {
+        // fallback: try localStorage
+        try {
+          const local = localStorage.getItem('receivedTasksTabState');
+          if (local) {
+            const parsed = JSON.parse(local);
+            tabs = parsed.tabs || [];
+          }
+        } catch {}
+      }
+
+      // If no tabs, fallback to default
+      if (!tabs.length) {
+        tabs = [{ id: 1, activeTab: 'execution', filters: [], searchTerm: '', statusFilter: 'all' }];
+      }
+
+      // Try to find the tab and fixedTab where the task is visible
+      const receivedTabTypes = ['execution', 'receivedVerification', 'issuedVerification', 'completed', 'guidance'];
+      let found = false;
+      let foundTabId = null;
+      let foundFixedTab = null;
+      for (let tab of tabs) {
+        for (let fixedTab of receivedTabTypes) {
+          let url;
+          if (fixedTab === 'guidance') {
+            url = `${API_BASE_URL}/api/tasks/received/guidance`;
+          } else {
+            url = `${API_BASE_URL}/api/tasks/received?tab=${fixedTab}`;
+          }
+          try {
+            const response = await fetch(url, {
+              headers: { Authorization: `Bearer ${user.token}` },
+            });
+            if (response.ok) {
+              let tabTasks = await response.json();
+              // Apply filters
+              if (tab.filters && tab.filters.length > 0) {
+                tabTasks = tabTasks.filter(task => {
+                  return tab.filters.every(f => {
+                    if (f.operator === 'contains') {
+                      return (task[f.column] || '').toLowerCase().includes((f.value || '').toLowerCase());
+                    }
+                    return true;
+                  });
+                });
+              }
+              if (tab.searchTerm) {
+                tabTasks = tabTasks.filter(task =>
+                  (task.title || '').toLowerCase().includes(tab.searchTerm.toLowerCase())
+                );
+              }
+              if (tab.statusFilter && tab.statusFilter !== 'all') {
+                tabTasks = tabTasks.filter(task => task.status === tab.statusFilter);
+              }
+              if (tabTasks.find(t => t._id === taskId)) {
+                found = true;
+                foundTabId = tab.id;
+                foundFixedTab = fixedTab;
+                break;
+              }
+            }
+          } catch (e) {}
+        }
+        if (found) break;
+      }
+
+      if (found && foundTabId && foundFixedTab) {
+        // Navigate to the correct tab and fixedTab using React Router (no full reload)
+        navigate(`/dashboard/received-tasks?highlightTask=${taskId}&tabId=${foundTabId}&fixedTab=${foundFixedTab}`, { replace: true });
+      } else {
+        // fallback: just navigate with highlightTask
+        navigate(`/dashboard/received-tasks?highlightTask=${taskId}`, { replace: true });
+      }
+    }
+  };
+
   const handleMarkAsRead = async (notificationId) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/notifications/${notificationId}/read`, {
@@ -98,6 +211,28 @@ const NotificationBell = () => {
       }
     } catch (error) {
       console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const handleClearAll = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/notifications/clear-all`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        setNotifications([]);
+        setUnreadCount(0);
+        toast.success(result.message);
+      } else {
+        const error = await response.json();
+        toast.error(error.message || 'Failed to clear notifications');
+      }
+    } catch (error) {
+      console.error('Error clearing all notifications:', error);
+      toast.error('Failed to clear notifications');
     }
   };
 
@@ -133,11 +268,22 @@ const NotificationBell = () => {
         <div className="absolute right-0 mt-3 w-96 max-w-[95vw] rounded-2xl shadow-2xl z-50 border border-gray-200 backdrop-blur-xl bg-white/90 ring-1 ring-black/5 transition-all duration-200" style={{ minWidth: '320px' }}>
           <div className="p-4 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-lg font-bold text-gray-900 tracking-tight">Notifications</h3>
-            {unreadCount > 0 && (
-              <span className="text-xs text-indigo-500 font-semibold bg-indigo-50 px-2 py-1 rounded-full">
-                {unreadCount} unread
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <span className="text-xs text-indigo-500 font-semibold bg-indigo-50 px-2 py-1 rounded-full">
+                  {unreadCount} unread
+                </span>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  onClick={handleClearAll}
+                  className="text-xs text-red-500 font-semibold bg-red-50 hover:bg-red-100 px-2 py-1 rounded-full transition-colors"
+                  title="Clear all notifications"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
           </div>
           <div className="max-h-96 overflow-y-auto custom-scrollbar bg-transparent">
             {loading ? (
@@ -153,7 +299,7 @@ const NotificationBell = () => {
                   <div
                     key={notification._id}
                     className={`group flex items-start gap-3 px-4 py-4 transition-all duration-150 cursor-pointer ${!notification.isRead ? 'bg-indigo-50/80' : 'bg-white'} hover:bg-indigo-100/80 rounded-xl shadow-sm mb-2`}
-                    onClick={() => !notification.isRead && handleMarkAsRead(notification._id)}
+                    onClick={() => handleNotificationClick(notification)}
                     style={{ boxShadow: !notification.isRead ? '0 2px 8px 0 rgba(99,102,241,0.08)' : '0 1px 4px 0 rgba(0,0,0,0.03)' }}
                   >
                     <div className="flex-1 min-w-0">

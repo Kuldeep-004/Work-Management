@@ -124,6 +124,7 @@ const AdvancedTaskTable = ({
   tabKey = 'defaultTabKey',
   tabId,
   allColumns, // Accept allColumns prop
+  highlightedTaskId, // Add highlighted task ID prop
   // Bulk selection props
   enableBulkSelection = false,
   selectedTasks = [],
@@ -1701,7 +1702,7 @@ const AdvancedTaskTable = ({
                     {groupTasks.map((task, idx) => (
                       <tr
                         key={task._id}
-                        className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''}`}
+                        className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''}`}
                         draggable
                         onDragStart={e => handleRowDragStart(e, task._id)}
                         onDragOver={e => handleRowDragOver(e, task._id)}
@@ -2797,7 +2798,7 @@ const AdvancedTaskTable = ({
                 orderedTasks.map((task, idx) => (
                   <tr
                     key={task._id}
-                    className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''}`}
+                    className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''}`}
                     draggable
                     onDragStart={e => handleRowDragStart(e, task._id)}
                     onDragOver={e => handleRowDragOver(e, task._id)}

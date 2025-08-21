@@ -1075,13 +1075,6 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
     
     // Handle different verification statuses
     if (verification === 'rejected') {
-      // Require remarks for rejection
-      if (!remarks || !remarks.trim()) {
-        return res.status(400).json({ 
-          message: 'Remarks are required when rejecting verification' 
-        });
-      }
-      
       // Clear all verifiers and set verification to pending (not rejected)
       task.verificationAssignedTo = undefined;
       task.secondVerificationAssignedTo = undefined;
@@ -1089,15 +1082,17 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
       task.fourthVerificationAssignedTo = undefined;
       task.fifthVerificationAssignedTo = undefined;
       task.verification = 'pending'; // Set to pending instead of rejected
-      task.status = 'yet_to_start';
+      // Don't change task status when rejecting verification
       // Set selfVerification to false when rejecting
       task.selfVerification = false;
-      // Save remarks
-      task.verificationRemarks = remarks.trim();
+      // Save remarks (optional)
+      task.verificationRemarks = remarks ? remarks.trim() : '';
 
       // Create notification for the assigned user
       if (task.assignedTo) {
-        const rejectionMessage = `${req.user.firstName} ${req.user.lastName} has rejected ${task.title} with remarks "${remarks.trim()}"`;
+        const rejectionMessage = remarks ? 
+          `${req.user.firstName} ${req.user.lastName} has rejected ${task.title} with remarks "${remarks.trim()}"` :
+          `${req.user.firstName} ${req.user.lastName} has rejected ${task.title}`;
         
         const notification = new Notification({
           recipient: task.assignedTo._id,
@@ -1110,23 +1105,18 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
       }
 
     } else if (verification === 'accepted') {
-      // Require remarks for acceptance
-      if (!remarks || !remarks.trim()) {
-        return res.status(400).json({ 
-          message: 'Remarks are required when accepting verification' 
-        });
-      }
-      
       // When accepting, keep verifiers intact and just update verification status
       task.verification = 'accepted';
       // Keep status as is - task goes back to executor for execution
       // Don't clear verifiers - they stay intact
-      // Save remarks
-      task.verificationRemarks = remarks.trim();
+      // Save remarks (optional)
+      task.verificationRemarks = remarks ? remarks.trim() : '';
 
       // Create notification for the assigned user
       if (task.assignedTo) {
-        const acceptanceMessage = `${req.user.firstName} ${req.user.lastName} has accepted ${task.title} with remarks "${remarks.trim()}"`;
+        const acceptanceMessage = remarks ? 
+          `${req.user.firstName} ${req.user.lastName} has accepted ${task.title} with remarks "${remarks.trim()}"` :
+          `${req.user.firstName} ${req.user.lastName} has accepted ${task.title}`;
         
         const notification = new Notification({
           recipient: task.assignedTo._id,

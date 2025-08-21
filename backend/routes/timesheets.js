@@ -165,17 +165,22 @@ router.get('/date/:date', protect, async (req, res) => {
         $gte: targetDate,
         $lt: nextDate
       }
-    }).populate('entries.task', 'title description clientName clientGroup workType');
-    
+    })
+      .populate('user', 'firstName lastName email role team')
+      .populate('entries.task', 'title description clientName clientGroup workType');
+
     if (!timesheet) {
-      timesheet = new Timesheet({
-        user: req.user._id,
+      // Populate user manually for new/empty timesheet
+      const userDoc = await User.findById(req.user._id).select('firstName lastName email role team');
+      timesheet = {
+        _id: undefined,
+        user: userDoc,
         date: targetDate,
-        entries: []
-      });
+        entries: [],
+        totalTimeSpent: 0,
+        isCompleted: false
+      };
     }
-    
-    
     res.json(timesheet);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -373,15 +378,27 @@ router.get('/subordinates', protect, async (req, res) => {
       if (!req.user.team) {
         return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
       }
-      // All users in the same team, except self
+      // All users in the same team (including self for Team Head)
       subordinates = await User.find({
         ...query,
         team: req.user.team,
-        _id: { $ne: req.user._id },
         isEmailVerified: true
       }).select('_id firstName lastName email role team');
-    } else {
-      // Admins and TimeSheet Verifiers: all users except rejected
+    } else if (isTimeSheetVerifier) {
+      // TimeSheet Verifiers: show only their team members (excluding team head) + themselves
+      if (req.user.team) {
+        subordinates = await User.find({
+          ...query,
+          team: req.user.team,
+          role: { $ne: 'Team Head' }, // Exclude team heads
+          isEmailVerified: true
+        }).select('_id firstName lastName email role team');
+      } else {
+        // If no team, show only themselves
+        subordinates = [req.user];
+      }
+    } else if (req.user.role === 'Admin') {
+      // Admins: all users except rejected
       subordinates = await User.find(query).select('_id firstName lastName email role team');
     }
     const subordinateIds = subordinates.map(sub => sub._id);
@@ -492,15 +509,27 @@ router.get('/subordinates-list', protect, async (req, res) => {
       if (!req.user.team) {
         return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
       }
-      // All users in the same team, except self
+      // All users in the same team (including self for Team Head)
       subordinates = await User.find({
         ...query,
         team: req.user.team,
-        _id: { $ne: req.user._id },
         isEmailVerified: true
       }).select('_id firstName lastName email role team');
-    } else if (isTimeSheetVerifier || req.user.role === 'Admin') {
-      // Admins and TimeSheet Verifiers: all users except rejected
+    } else if (isTimeSheetVerifier) {
+      // TimeSheet Verifiers: show only their team members (excluding team head) + themselves
+      if (req.user.team) {
+        subordinates = await User.find({
+          ...query,
+          team: req.user.team,
+          role: { $ne: 'Team Head' }, // Exclude team heads
+          isEmailVerified: true
+        }).select('_id firstName lastName email role team');
+      } else {
+        // If no team, show only themselves
+        subordinates = [req.user];
+      }
+    } else if (req.user.role === 'Admin') {
+      // Admins: all users except rejected
       subordinates = await User.find(query).select('_id firstName lastName email role team');
     } else {
       subordinates = [];

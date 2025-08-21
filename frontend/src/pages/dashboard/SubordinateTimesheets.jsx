@@ -51,27 +51,39 @@ const SubordinateTimesheets = () => {
     setLoading(true);
     try {
       let url = `${API_BASE_URL}/api/timesheets/subordinates?page=${page}&limit=20`;
-      
       if (selectedUser) url += `&userId=${selectedUser}`;
       if (selectedDate) url += `&startDate=${selectedDate}&endDate=${selectedDate}`;
 
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
-      
       if (!res.ok) throw new Error('Failed to fetch timesheets');
-      
       const data = await res.json();
-      setTimesheets(data.timesheets);
+      let timesheetsArr = data.timesheets;
 
-      const grouped = data.timesheets.reduce((acc, ts) => {
+      // If Team Head, All Users selected, fetch own timesheet using /date/:date endpoint
+      if (user.role === 'Team Head' && !selectedUser) {
+        let ownUrl = `${API_BASE_URL}/api/timesheets/date/${selectedDate}`;
+        const ownRes = await fetch(ownUrl, {
+          headers: { Authorization: `Bearer ${user.token}` }
+        });
+        if (ownRes.ok) {
+          const ownData = await ownRes.json();
+          if (ownData && ownData.user) {
+            // Remove any duplicate of own timesheet (by user._id)
+            timesheetsArr = [ownData, ...timesheetsArr.filter(ts => ts.user && ts.user._id !== user._id)];
+          }
+        }
+      }
+
+      setTimesheets(timesheetsArr);
+      const grouped = timesheetsArr.reduce((acc, ts) => {
         const date = new Date(ts.date).toDateString();
         if (!acc[date]) acc[date] = [];
         acc[date].push(ts);
         return acc;
       }, {});
       setGroupedTimesheets(grouped);
-      
       setCurrentPage(data.currentPage);
       setTotalPages(data.totalPages);
     } catch (error) {
@@ -248,11 +260,14 @@ const SubordinateTimesheets = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
               <option value="">All Users</option>
-              {subordinates.map((sub) => (
-                <option key={sub._id} value={sub._id}>
-                  {sub.firstName} {sub.lastName} ({sub.role})
-                </option>
-              ))}
+              {(() => {
+                // TimeSheet Verifiers, Team Heads, and Admins: show subordinates as returned by backend
+                return subordinates.map((sub) => (
+                  <option key={sub._id} value={sub._id}>
+                    {sub.firstName} {sub.lastName} ({sub.role})
+                  </option>
+                ));
+              })()}
             </select>
           </div>
 
@@ -314,7 +329,9 @@ const SubordinateTimesheets = () => {
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className="text-sm text-gray-600">Total Time</p>
-                        <p className="text-xl font-bold text-blue-600">{formatTime(timesheet.totalTimeSpent)}</p>
+                        <p className="text-xl font-bold text-blue-600">{
+                          formatTime(timesheet.entries.reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0))
+                        }</p>
                       </div>
                     </div>
 
