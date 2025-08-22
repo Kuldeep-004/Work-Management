@@ -15,6 +15,7 @@ const CreateTask = ({
   isOpen = false,
   onClose = () => {},
   onSubmit = null,
+  showAcceptButton = false, // New prop to show Accept button for TaskVerification page
 }) => {
   const { user: loggedInUser, isAuthenticated } = useAuth();
   const [isWorkTypeModalOpen, setIsWorkTypeModalOpen] = useState(false);
@@ -553,6 +554,106 @@ const CreateTask = ({
       console.error('Error creating task:', error);
       toast.error(error.message);
       setCreatedTaskId(null);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleAccept = async (e) => {
+    e.preventDefault();
+    if (!isAuthenticated()) {
+      toast.error('Please login to update tasks');
+      return;
+    }
+
+    if (!initialData || !initialData._id) {
+      toast.error('Task ID not found');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      // First, update the task with current form data
+      let combinedInwardEntryDate;
+      if (formData.inwardEntryDate && formData.inwardEntryTime) {
+        const [h, m] = formData.inwardEntryTime.replace(/(AM|PM)/, '').split(':').map(s => s.trim());
+        const isPM = formData.inwardEntryTime.toUpperCase().includes('PM');
+        let hour24 = parseInt(h, 10);
+        if (isPM && hour24 !== 12) hour24 += 12;
+        else if (!isPM && hour24 === 12) hour24 = 0;
+
+        const dateValid = formData.inwardEntryDate && !isNaN(new Date(formData.inwardEntryDate));
+        const hourValid = !isNaN(hour24) && hour24 >= 0 && hour24 <= 23;
+        const minValid = !isNaN(Number(m)) && Number(m) >= 0 && Number(m) <= 59;
+        if (dateValid && hourValid && minValid) {
+          const dt = new Date(formData.inwardEntryDate);
+          dt.setHours(hour24, Number(m), 0, 0);
+          if (!isNaN(dt.getTime())) {
+            combinedInwardEntryDate = dt.toISOString();
+          } else {
+            toast.error('Invalid date/time selected.');
+            setUploading(false);
+            return;
+          }
+        } else {
+          toast.error('Please provide a valid Inward Entry Date and Time.');
+          setUploading(false);
+          return;
+        }
+      } else if (initialData && initialData.inwardEntryDate) {
+        combinedInwardEntryDate = initialData.inwardEntryDate;
+      } else {
+        toast.error('Both Inward Entry Date and Time are required.');
+        setUploading(false);
+        return;
+      }
+
+      const taskData = {
+        ...formData,
+        inwardEntryDate: combinedInwardEntryDate,
+        assignedTo: Array.isArray(formData.assignedTo) ? formData.assignedTo.filter(Boolean) : [formData.assignedTo].filter(Boolean),
+        inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
+        billed: formData.billed
+      };
+
+      // Update the task
+      const updateResponse = await fetch(`${API_BASE_URL}/api/tasks/${initialData._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${loggedInUser.token}`,
+        },
+        body: JSON.stringify(taskData),
+      });
+
+      if (!updateResponse.ok) {
+        const errorData = await updateResponse.json();
+        throw new Error(errorData.message || 'Failed to update task');
+      }
+
+      const updatedTask = await updateResponse.json();
+
+      // Then approve the task
+      const approveResponse = await fetch(`${API_BASE_URL}/api/tasks/${initialData._id}/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${loggedInUser.token}`,
+        },
+        body: JSON.stringify({ action: 'approve' }),
+      });
+
+      if (!approveResponse.ok) {
+        const errorData = await approveResponse.json();
+        throw new Error(errorData.message || 'Failed to approve task');
+      }
+
+      toast.success('Task updated and approved successfully');
+      if (onSubmit) onSubmit(updatedTask);
+      onClose();
+    } catch (error) {
+      console.error('Error updating and approving task:', error);
+      toast.error(error.message);
     } finally {
       setUploading(false);
     }
@@ -1402,6 +1503,17 @@ const CreateTask = ({
                 >
                   Cancel
                 </button>
+                {mode === 'edit' && showAcceptButton && (
+                  <button
+                    type="button"
+                    onClick={handleAccept}
+                    disabled={uploading}
+                    className={`px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700
+                      ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {uploading ? 'Accepting...' : 'Accept'}
+                  </button>
+                )}
                 <button
                   type="submit"
                   disabled={uploading}

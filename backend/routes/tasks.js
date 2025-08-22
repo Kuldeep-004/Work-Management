@@ -1133,9 +1133,9 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
       if (task.assignedTo) {
         const truncatedTaskName = truncateTaskName(task.title);
         const rejectionMessage = remarks ? 
-          `${req.user.firstName} ${req.user.lastName} has rejected "${truncatedTaskName}" with remarks "${remarks.trim()}"` :
-          `${req.user.firstName} ${req.user.lastName} has rejected "${truncatedTaskName}"`;
-        
+          `${req.user.firstName} ${req.user.lastName} Has Returned "${truncatedTaskName}" with remarks "${remarks.trim()}"` :
+          `${req.user.firstName} ${req.user.lastName} Has Returned "${truncatedTaskName}"`;
+
         const notification = new Notification({
           recipient: task.assignedTo._id,
           task: task._id,
@@ -1185,7 +1185,7 @@ router.patch('/:taskId/verification', protect, async (req, res) => {
         req.user._id,
         'task_verification_rejected',
         task._id,
-        `Rejected verification for task "${task.title}"${remarks ? ` with remarks: "${remarks}"` : ''}`,
+        `Returned verification for task "${task.title}"${remarks ? ` with remarks: "${remarks}"` : ''}`,
         { verification: task.verification, verificationRemarks: task.verificationRemarks },
         { verification: 'rejected', verificationRemarks: remarks },
         req
@@ -1468,7 +1468,7 @@ router.post('/:taskId/verify', protect, async (req, res) => {
         req.user._id,
         'task_rejected',
         task._id,
-        `Rejected and deleted task "${task.title}"`,
+        `Returned and deleted task "${task.title}"`,
         { verificationStatus: 'pending' },
         { verificationStatus: 'rejected', verificationComments: comments },
         req,

@@ -76,7 +76,7 @@ const VerificationRemarksModal = ({
           </p>
           <p className="text-sm text-gray-600">
             You are about to <span className={`font-medium ${verificationType === 'accepted' ? 'text-green-600' : 'text-red-600'}`}>
-              {verificationType}
+              {verificationType === 'rejected' ? 'Return' : verificationType.charAt(0).toUpperCase() + verificationType.slice(1)}
             </span> this task verification.
           </p>
         </div>

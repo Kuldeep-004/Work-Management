@@ -83,7 +83,7 @@ const PRIORITY_OPTIONS = [
 
 const VERIFICATION_OPTIONS = [
   { value: 'pending', label: 'Pending' },
-  { value: 'rejected', label: 'Rejected' },
+  { value: 'rejected', label: 'Return' },
   { value: 'accepted', label: 'Accepted' },
   { value: 'next verification', label: 'Next Verification' },
 ];
@@ -916,7 +916,7 @@ const AdvancedTaskTable = ({
         refetchTasks();
       }
       
-      toast.success(`Task ${remarksModalType} successfully`);
+  toast.success(`Task ${remarksModalType === 'rejected' ? 'returned' : remarksModalType} successfully`);
       setShowRemarksModal(false);
     } catch (error) {
       console.error('Error updating verification:', error);

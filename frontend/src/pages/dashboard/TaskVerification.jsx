@@ -119,16 +119,25 @@ const TaskVerification = () => {
     setEditModalOpen(true);
   };
 
-  const handleTaskSubmit = (updatedTask) => {
+  const handleTaskSubmit = async (updatedTask) => {
     setEditModalOpen(false);
     setEditTask(null);
-    // Update the task in the current list
-    setTasks(prevTasks => 
-      prevTasks.map(task => 
-        task._id === updatedTask._id ? updatedTask : task
-      )
-    );
-    toast.success('Task updated successfully');
+    // If task was accepted (approved), remove it from the list
+    // Otherwise, update the task in the current list
+    if (updatedTask && updatedTask.verificationStatus === 'completed') {
+      // Task was accepted, remove from pending list
+      setTasks(prevTasks => prevTasks.filter(task => task._id !== updatedTask._id));
+      toast.success('Task updated and accepted successfully');
+    } else {
+      // Task was just updated, update in list
+      setTasks(prevTasks => 
+        prevTasks.map(task => 
+          task._id === updatedTask._id ? updatedTask : task
+        )
+      );
+      // Also refresh the tasks list to ensure we have the latest data
+      await refetchTasks();
+    }
   };
 
   const refetchTasks = async () => {
@@ -433,6 +442,7 @@ const TaskVerification = () => {
           mode="edit"
           initialData={editTask}
           isOpen={editModalOpen}
+          showAcceptButton={true} // Enable Accept button for TaskVerification page
           onClose={() => {
             setEditModalOpen(false);
             setEditTask(null);
