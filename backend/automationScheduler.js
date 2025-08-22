@@ -20,8 +20,8 @@ cron.schedule('*/5 * * * *', async () => {
   await runAutomationCheck(false);
 });
 
-// Run timesheet reminders every hour between 9 AM to 8 PM (Monday to Friday)
-cron.schedule('0 9-20 * * 1-5', async () => {
+// Run timesheet reminders every hour between 10 AM to 7 PM (Monday to Friday)
+cron.schedule('0 10-19 * * 1-5', async () => {
   console.log('[TimesheetScheduler] Running timesheet reminder job');
   try {
     const result = await sendTimesheetReminder();

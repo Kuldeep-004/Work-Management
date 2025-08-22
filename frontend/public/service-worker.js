@@ -16,12 +16,13 @@ self.addEventListener('push', function(event) {
     }
   }
 
+  const isTimesheetReminder = data.data && data.data.type === 'timesheet_reminder';
   const options = {
     body: data.body || 'You have a new notification',
     icon: data.icon || '/vite.svg',
     badge: data.badge || '/vite.svg',
     data: data.data || {},
-    requireInteraction: true,
+    requireInteraction: !isTimesheetReminder, // Only require interaction for non-timesheet notifications
     actions: [
       {
         action: 'open',
@@ -35,7 +36,16 @@ self.addEventListener('push', function(event) {
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Work Management', options)
+    (async () => {
+      const notification = await self.registration.showNotification(data.title || 'Work Management', options);
+      if (isTimesheetReminder) {
+        // Close the notification after 2 seconds
+        setTimeout(async () => {
+          const notifications = await self.registration.getNotifications({ tag: options.tag });
+          notifications.forEach(n => n.close());
+        }, 2000);
+      }
+    })()
   );
 });
 

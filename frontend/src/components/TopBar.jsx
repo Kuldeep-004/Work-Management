@@ -65,8 +65,10 @@ const TopBar = (props) => {
       </div>
       
       {/* Chat, Notification Bell and User Profile */}
-      <div className="flex items-center space-x-4">
-        <ChatIcon />
+      <div className="flex items-center space-x-2">
+        <div className="-mr-[1px]">
+          <ChatIcon />
+        </div>
         <NotificationBell />
         
         {/* User Profile with Dropdown */}

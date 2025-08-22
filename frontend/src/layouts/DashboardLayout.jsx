@@ -12,6 +12,8 @@ import {
   BuildingOfficeIcon,
   ClockIcon,
   ShieldCheckIcon,
+  DocumentCurrencyDollarIcon,
+  DocumentTextIcon,
   ClipboardDocumentCheckIcon, // Activity logs icon
 } from '@heroicons/react/24/outline';
 import TopBar from '../components/TopBar';
@@ -33,8 +35,8 @@ const DashboardLayout = ({ children }) => {
           { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon, path: '/dashboard' },
           { id: 'received-tasks', label: 'Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
           // { id: 'assigned-tasks', label: 'Task Assigned By Me', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' }, // HIDDEN TEMPORARILY
-          { id: 'billed-tasks', label: 'Billed Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/billed-tasks' },
-          { id: 'unbilled-tasks', label: 'UnBilled Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/unbilled-tasks' },
+          { id: 'billed-tasks', label: 'Billed Tasks', icon: DocumentCurrencyDollarIcon, path: '/dashboard/billed-tasks' },
+          { id: 'unbilled-tasks', label: 'UnBilled Tasks', icon: DocumentTextIcon, path: '/dashboard/unbilled-tasks' },
           { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'subordinate-timesheets', label: 'Subordinate Timesheets', icon: ClipboardDocumentListIcon, path: '/dashboard/subordinate-timesheets' },
