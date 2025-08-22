@@ -977,8 +977,10 @@ router.patch('/entry/:entryId/reject', protect, async (req, res) => {
       return res.status(404).json({ message: 'Entry not found' });
     }
     entry.approvalStatus = 'rejected';
+    // Unsubmit the timesheet so user can edit and resubmit
+    timesheet.isCompleted = false;
     await timesheet.save();
-    res.json({ message: 'Entry rejected', entry });
+    res.json({ message: 'Entry rejected and timesheet unsubmitted', entry });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

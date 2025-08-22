@@ -630,6 +630,8 @@ router.get('/:id', protect, async (req, res) => {
 
 // Create a new task
 router.post('/', protect, canAssignTask, async (req, res) => {
+  // Log incoming request for debugging
+  console.log('Incoming task create request body:', req.body);
   try {
     const {
       title,
@@ -684,13 +686,25 @@ router.post('/', protect, canAssignTask, async (req, res) => {
 
     // Combine date and time for inwardEntryDate
     let combinedInwardEntryDate = null;
-    if (inwardEntryDate && inwardEntryTime) {
+    // Accept ISO string directly if valid
+    if (inwardEntryDate && typeof inwardEntryDate === 'string' && inwardEntryDate.includes('T')) {
+      const dt = new Date(inwardEntryDate);
+      if (!isNaN(dt.getTime())) {
+        combinedInwardEntryDate = dt;
+      }
+    }
+    // If not ISO, try to combine date and time as before
+    if (!combinedInwardEntryDate && inwardEntryDate && inwardEntryTime) {
       const [year, month, day] = inwardEntryDate.split('-');
       const [hours, minutes] = inwardEntryTime.split(':');
       combinedInwardEntryDate = new Date(year, month - 1, day, hours, minutes);
-    } else if (inwardEntryDate) {
-      // If only date is provided, set time to current time
+    } else if (!combinedInwardEntryDate && inwardEntryDate) {
       combinedInwardEntryDate = new Date(inwardEntryDate);
+    }
+    // Extra validation: reject if date is invalid
+    if (!combinedInwardEntryDate || isNaN(combinedInwardEntryDate.getTime()) || combinedInwardEntryDate.toString() === 'Invalid Date') {
+      console.error('Invalid inwardEntryDate received:', inwardEntryDate, 'combined:', combinedInwardEntryDate);
+      return res.status(400).json({ message: 'Invalid inwardEntryDate. Please provide a valid date and time.' });
     }
 
     for (const userId of assignedTo) {
@@ -762,6 +776,28 @@ router.post('/', protect, canAssignTask, async (req, res) => {
 
 // Update task
 router.put('/:id', protect, async (req, res) => {
+    // Handle inwardEntryDate update logic (accept ISO string or date+time)
+    let { inwardEntryDate, inwardEntryTime } = req.body;
+    if (inwardEntryDate) {
+      let combinedInwardEntryDate = null;
+      if (typeof inwardEntryDate === 'string' && inwardEntryDate.includes('T')) {
+        const dt = new Date(inwardEntryDate);
+        if (!isNaN(dt.getTime())) {
+          combinedInwardEntryDate = dt;
+        }
+      }
+      if (!combinedInwardEntryDate && inwardEntryDate && inwardEntryTime) {
+        const [year, month, day] = inwardEntryDate.split('-');
+        const [hours, minutes] = inwardEntryTime.split(':');
+        combinedInwardEntryDate = new Date(year, month - 1, day, hours, minutes);
+      } else if (!combinedInwardEntryDate && inwardEntryDate) {
+        combinedInwardEntryDate = new Date(inwardEntryDate);
+      }
+      if (!combinedInwardEntryDate || isNaN(combinedInwardEntryDate.getTime()) || combinedInwardEntryDate.toString() === 'Invalid Date') {
+        return res.status(400).json({ message: 'Invalid inwardEntryDate. Please provide a valid date and time.' });
+      }
+      req.body.inwardEntryDate = combinedInwardEntryDate;
+    }
   try {
     const task = await Task.findById(req.params.id);
     if (!task) {

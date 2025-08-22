@@ -440,9 +440,45 @@ const CreateTask = ({
     try {
       setUploading(true);
 
-      // Convert 12-hour time to 24-hour format for backend
+      // Combine date and time into a Date object and send as UTC ISO string
+      let combinedInwardEntryDate = formData.inwardEntryDate;
+      if (formData.inwardEntryDate && formData.inwardEntryTime) {
+        const time24 = convertTo24Hour(formData.inwardEntryTime);
+        const [h, m] = time24.split(':');
+        // Validate date string
+        const dateValid = !isNaN(Date.parse(formData.inwardEntryDate));
+        const hourValid = !isNaN(Number(h)) && Number(h) >= 0 && Number(h) <= 23;
+        const minValid = !isNaN(Number(m)) && Number(m) >= 0 && Number(m) <= 59;
+        if (dateValid && hourValid && minValid) {
+          const dt = new Date(formData.inwardEntryDate);
+          dt.setHours(Number(h), Number(m), 0, 0);
+          if (!isNaN(dt.getTime())) {
+            combinedInwardEntryDate = dt.toISOString();
+          } else {
+            toast.error('Invalid date/time selected.');
+            setUploading(false);
+            return;
+          }
+        } else {
+          toast.error('Please provide a valid Inward Entry Date and Time.');
+          setUploading(false);
+          return;
+        }
+      } else if (mode === 'edit' && initialData && initialData.inwardEntryDate) {
+        // If editing and user did not change date/time, use the original ISO string
+        combinedInwardEntryDate = initialData.inwardEntryDate;
+      } else {
+        // If either date or time is missing, do not send an invalid date
+        toast.error('Both Inward Entry Date and Time are required.');
+        setUploading(false);
+        return;
+      }
+      // Log for debugging
+      console.log('Submitting task with inwardEntryDate:', combinedInwardEntryDate);
+
       const taskData = {
         ...formData,
+        inwardEntryDate: combinedInwardEntryDate,
         assignedTo: Array.isArray(formData.assignedTo) ? formData.assignedTo.filter(Boolean) : [formData.assignedTo].filter(Boolean),
         inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
         billed: formData.billed
@@ -867,37 +903,39 @@ const CreateTask = ({
                     />
                     <div className="flex items-center space-x-2">
                       <select
-                        value={formData.inwardEntryTime.split(' ')[0]?.split(':')[0] || '12'}
+                        value={formData.inwardEntryTime.split(' ')[0]?.split(':')[0]?.padStart(2, '0') || '12'}
                         onChange={(e) => {
                           const timeParts = formData.inwardEntryTime.split(' ');
-                          const [_, minutes] = (timeParts[0] || '12:00').split(':');
+                          let [hour, minutes] = (timeParts[0] || '12:00').split(':');
                           const ampm = timeParts[1] || 'AM';
-                          const newTime = `${e.target.value}:${minutes} ${ampm}`;
+                          const newHour = e.target.value.padStart(2, '0');
+                          const newTime = `${newHour}:${(minutes || '00').padStart(2, '0')} ${ampm}`;
                           setFormData({ ...formData, inwardEntryTime: newTime });
                         }}
                         className="w-1/3 border rounded-md px-2 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => (
-                          <option key={hour} value={hour.toString().padStart(2, '0')}>
+                        {Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0')).map(hour => (
+                          <option key={hour} value={hour}>
                             {hour}
                           </option>
                         ))}
                       </select>
                       <span className="text-gray-500">:</span>
                       <select
-                        value={formData.inwardEntryTime.split(' ')[0]?.split(':')[1] || '00'}
+                        value={formData.inwardEntryTime.split(' ')[0]?.split(':')[1]?.padStart(2, '0') || '00'}
                         onChange={(e) => {
                           const timeParts = formData.inwardEntryTime.split(' ');
-                          const [hours] = (timeParts[0] || '12:00').split(':');
+                          let [hours, minute] = (timeParts[0] || '12:00').split(':');
                           const ampm = timeParts[1] || 'AM';
-                          const newTime = `${hours}:${e.target.value} ${ampm}`;
+                          const newMinute = e.target.value.padStart(2, '0');
+                          const newTime = `${(hours || '12').padStart(2, '0')}:${newMinute} ${ampm}`;
                           setFormData({ ...formData, inwardEntryTime: newTime });
                         }}
                         className="w-1/3 border rounded-md px-2 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
-                        {Array.from({ length: 60 }, (_, i) => i).map(minute => (
-                          <option key={minute} value={minute.toString().padStart(2, '0')}>
-                            {minute.toString().padStart(2, '0')}
+                        {Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0')).map(minute => (
+                          <option key={minute} value={minute}>
+                            {minute}
                           </option>
                         ))}
                       </select>
