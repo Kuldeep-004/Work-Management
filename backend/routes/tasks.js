@@ -2129,4 +2129,33 @@ router.get('/analytics/data', protect, async (req, res) => {
   }
 });
 
+// Get all tasks for Excel export (Admin only)
+router.get('/export/excel', protect, async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Access denied. Admin role required.' });
+    }
+
+    // Fetch all tasks with all related data
+    const tasks = await Task.find({})
+      .populate('assignedTo', 'firstName lastName email')
+      .populate('assignedBy', 'firstName lastName email')
+      .populate('verificationAssignedTo', 'firstName lastName email')
+      .populate('secondVerificationAssignedTo', 'firstName lastName email')
+      .populate('thirdVerificationAssignedTo', 'firstName lastName email')
+      .populate('fourthVerificationAssignedTo', 'firstName lastName email')
+      .populate('fifthVerificationAssignedTo', 'firstName lastName email')
+      .populate('files.uploadedBy', 'firstName lastName email')
+      .populate('comments.createdBy', 'firstName lastName email')
+      .populate('guides', 'firstName lastName email')
+      .sort({ createdAt: -1 });
+
+    res.json(tasks);
+  } catch (error) {
+    console.error('Error fetching tasks for Excel export:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 export default router; 
