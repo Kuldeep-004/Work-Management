@@ -1,3 +1,4 @@
+
 import express from 'express';
 import Timesheet from '../models/Timesheet.js';
 import Task from '../models/Task.js';
@@ -6,6 +7,35 @@ import User from '../models/User.js';
 import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
+
+// Get all timesheet dates with entries and isCompleted false (for red highlight)
+router.get('/incomplete-dates', protect, async (req, res) => {
+  try {
+    const timesheets = await Timesheet.find({
+      user: req.user._id,
+      isCompleted: false,
+      'entries.0': { $exists: true }
+    }).select('date -_id');
+    const dates = timesheets.map(ts => ts.date.toISOString().split('T')[0]);
+    res.json({ dates });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get all submitted timesheet dates for the logged-in user
+router.get('/submitted-dates', protect, async (req, res) => {
+  try {
+    const timesheets = await Timesheet.find({
+      user: req.user._id,
+      isCompleted: true
+    }).select('date -_id');
+    const dates = timesheets.map(ts => ts.date.toISOString().split('T')[0]);
+    res.json({ dates });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
 // Helper function to check if a timesheet is editable based on submission status
 const isTimesheetEditable = async (userId, date) => {

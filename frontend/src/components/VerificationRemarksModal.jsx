@@ -57,7 +57,7 @@ const VerificationRemarksModal = ({
       >
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-gray-900">
-            {verificationType === 'accepted' ? 'Accept Verification' : 'Reject Verification'}
+            {verificationType === 'accepted' ? 'Accept Verification' : 'Return Verification'}
           </h3>
           <button
             onClick={onClose}
@@ -129,7 +129,7 @@ const VerificationRemarksModal = ({
                   Processing...
                 </>
               ) : (
-                verificationType === 'accepted' ? 'Accept' : 'Reject'
+                verificationType === 'accepted' ? 'Accept' : 'Return'
               )}
             </button>
           </div>

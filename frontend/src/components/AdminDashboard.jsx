@@ -1735,11 +1735,13 @@ const AdminDashboard = () => {
               
               {Array.isArray(selectedAutomation.taskTemplate) && selectedAutomation.taskTemplate.length > 0 ? (
                 (() => {
-                  const filteredTemplates = selectedAutomation.taskTemplate.filter(template => 
-                    !templateSearchTerm || 
-                    (template.title && template.title.toLowerCase().includes(templateSearchTerm.toLowerCase()))
-                  );
-                  
+                  // Filter out templates with verificationStatus 'pending' first
+                  const filteredTemplates = selectedAutomation.taskTemplate
+                    .filter(template => template.verificationStatus !== 'pending')
+                    .filter(template =>
+                      !templateSearchTerm ||
+                      (template.title && template.title.toLowerCase().includes(templateSearchTerm.toLowerCase()))
+                    );
                   return filteredTemplates.length > 0 ? (
                     <ul className="space-y-2 mt-2 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar" style={{ maxHeight: "420px" }}>
                       {filteredTemplates.map((template, idx) => (

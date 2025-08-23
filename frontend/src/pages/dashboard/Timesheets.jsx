@@ -4,6 +4,7 @@ import { toast } from 'react-hot-toast';
 import { API_BASE_URL } from '../../apiConfig';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import '../../styles/timesheet-calendar.css';
 
 // Utility to normalize timesheet entries but preserve populated task data
 function normalizeTimesheetTasks(ts) {
@@ -26,8 +27,50 @@ const Timesheets = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [entryTimeParts, setEntryTimeParts] = useState({});
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submittedDates, setSubmittedDates] = useState([]); // Array of yyyy-mm-dd
+  const [incompleteDates, setIncompleteDates] = useState([]); // Array of yyyy-mm-dd (red)
 
   const debounceTimeout = useRef(null);
+  // Fetch all submitted and incomplete timesheet dates for calendar highlight
+  useEffect(() => {
+    const fetchHighlightDates = async () => {
+      if (!isAuthenticated() || !user) return;
+      try {
+        const [submittedRes, incompleteRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/timesheets/submitted-dates`, {
+            headers: { Authorization: `Bearer ${user.token}` }
+          }),
+          fetch(`${API_BASE_URL}/api/timesheets/incomplete-dates`, {
+            headers: { Authorization: `Bearer ${user.token}` }
+          })
+        ]);
+        if (!submittedRes.ok) throw new Error('Failed to fetch submitted dates');
+        if (!incompleteRes.ok) throw new Error('Failed to fetch incomplete dates');
+        const submittedData = await submittedRes.json();
+        const incompleteData = await incompleteRes.json();
+        setSubmittedDates(submittedData.dates || []);
+        setIncompleteDates(incompleteData.dates || []);
+      } catch (err) {
+        // Optionally toast error
+      }
+    };
+    fetchHighlightDates();
+  }, [user, isAuthenticated]);
+  // For react-datepicker: highlight submitted (green) and incomplete (red) dates
+  const getDayClassName = date => {
+    const ymd = date.getFullYear() + '-' +
+      String(date.getMonth() + 1).padStart(2, '0') + '-' +
+      String(date.getDate()).padStart(2, '0');
+    if (submittedDates.includes(ymd)) {
+      return 'submitted-day';
+    }
+    if (incompleteDates.includes(ymd)) {
+      return 'incomplete-day';
+    }
+    return undefined;
+  };
 
   // Remove the old fetchData declaration entirely (the one before useCallback)
   // Use backend /my-tasks endpoint directly
@@ -460,6 +503,7 @@ const Timesheets = () => {
                 inline
                 maxDate={new Date()}
                 dateFormat="yyyy-MM-dd"
+                dayClassName={getDayClassName}
               />
             </div>
           )}
@@ -529,28 +573,57 @@ const Timesheets = () => {
           <div>
             <button
               className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-              onClick={async () => {
-                try {
-                  const dateStr = selectedDate.toISOString().split('T')[0];
-                  const res = await fetch(`${API_BASE_URL}/api/timesheets/submit`, {
-                    method: 'POST',
-                    headers: { 
-                      'Content-Type': 'application/json',
-                      Authorization: `Bearer ${user.token}` 
-                    },
-                    body: JSON.stringify({ date: dateStr })
-                  });
-                  const data = await res.json();
-                  if (!res.ok) throw new Error(data.message || 'Failed to submit timesheet');
-                  setTimesheet(data.timesheet);
-                  toast.success('Timesheet submitted!');
-                } catch (error) {
-                  toast.error(error.message);
-                }
-              }}
+              onClick={() => setShowSubmitConfirm(true)}
             >
               Submit Timesheet
             </button>
+            {/* Confirmation Popup */}
+            {showSubmitConfirm && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 bg-opacity-40">
+                <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+                  <h2 className="text-lg font-semibold mb-2 text-gray-800">Submit Timesheet?</h2>
+                  <p className="mb-4 text-gray-700">If you submit the timesheet, you <span className='font-semibold text-red-600'>can't edit it</span> anymore. Are you sure you want to submit?</p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      className="px-4 py-2 rounded bg-gray-200 text-gray-800 hover:bg-gray-300"
+                      onClick={() => setShowSubmitConfirm(false)}
+                      disabled={submitting}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                      onClick={async () => {
+                        setSubmitting(true);
+                        try {
+                          const dateStr = selectedDate.toISOString().split('T')[0];
+                          const res = await fetch(`${API_BASE_URL}/api/timesheets/submit`, {
+                            method: 'POST',
+                            headers: { 
+                              'Content-Type': 'application/json',
+                              Authorization: `Bearer ${user.token}` 
+                            },
+                            body: JSON.stringify({ date: dateStr })
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.message || 'Failed to submit timesheet');
+                          setTimesheet(data.timesheet);
+                          toast.success('Timesheet submitted!');
+                          setShowSubmitConfirm(false);
+                        } catch (error) {
+                          toast.error(error.message);
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      }}
+                      disabled={submitting}
+                    >
+                      {submitting ? 'Submitting...' : 'Confirm'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
         {/* Add Timeslot Button */}
