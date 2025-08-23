@@ -71,11 +71,11 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
 
   // Prepare column widths to fill full width
   const tableWidth = pageWidth - margin * 2;
-  const colTimeslot = 32; // mm
-  const colTimeSpent = 25; // mm
-  const remaining = tableWidth - colTimeslot - colTimeSpent; // for Task + Description
-  const colTask = Math.max(40, Math.round(remaining * 0.42));
-  const colDesc = Math.max(40, remaining - colTask);
+  const colTimeslot = 28; // mm
+  const colTask = 32; // mm
+  const colTimeSpent = 16; // mm (rightmost except status)
+  const colStatus = 12; // mm (very right, smallest)
+  const colDesc = tableWidth - colTimeslot - colTask - colTimeSpent - colStatus; // fill remaining width
 
   const addUserSection = (ts) => {
     const name = `${ts?.user?.firstName || ''} ${ts?.user?.lastName || ''}`.trim();
@@ -104,24 +104,31 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
       const timeslot = (e.startTime && e.endTime) ? `${e.startTime} - ${e.endTime}` : 'N/A';
       const taskName = e?.task?.title || e?.manualTaskName || 'N/A';
       const description = e?.workDescription || 'N/A';
+      let statusIcon = '';
+      if (typeof e.approvalStatus === 'string') {
+        if (e.approvalStatus.toLowerCase() === 'accepted') statusIcon = 'A';
+        else if (e.approvalStatus.toLowerCase() === 'rejected') statusIcon = 'R';
+      }
       const mins = getMinutesBetween(e.startTime, e.endTime);
       const timeSpent = `${mins} min`;
-      return [timeslot, taskName, description, timeSpent];
+      // New order: Timeslot, Task Name, Description, Time Spent, Status (Status at very right)
+      return [timeslot, taskName, description, timeSpent, statusIcon];
     });
 
     // Render table
     doc.autoTable({
       startY: cursorY,
       margin: { left: margin, right: margin },
-      head: [['Timeslot', 'Task Name', 'Description', 'Time Spent']],
-      body: rows.length ? rows : [['-', '-', 'No Entries', '-']],
+  head: [['Timeslot', 'Task Name', 'Description', { content: 'Time', styles: { halign: 'right' } }, 'State']],
+      body: rows.length ? rows : [['-', '-', 'No Entries', '-', '-']],
       styles: { fontSize: 9, cellPadding: 2.2, overflow: 'linebreak' },
       headStyles: { fillColor: [245, 245, 245], textColor: 60, lineColor: [230, 230, 230] },
       columnStyles: {
         0: { cellWidth: colTimeslot },
         1: { cellWidth: colTask },
         2: { cellWidth: colDesc },
-        3: { cellWidth: colTimeSpent, halign: 'right' }
+        3: { cellWidth: colTimeSpent, halign: 'right' },
+        4: { cellWidth: colStatus, halign: 'center' }
       },
       didDrawPage: (data) => {
         // Add footer page numbers

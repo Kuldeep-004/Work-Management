@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../apiConfig';
 import ColumnManagement from './ColumnManagement';
+import * as XLSX from 'xlsx';
 
 const Settings = () => {
   const { user, updateUser } = useAuth();
@@ -34,6 +35,7 @@ const Settings = () => {
   const [newStatusData, setNewStatusData] = useState({ name: '', color: '#6B7280' });
   const [addingStatus, setAddingStatus] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [editingStatus, setEditingStatus] = useState(null);
   const [editStatusData, setEditStatusData] = useState({ name: '', color: '' });
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -593,6 +595,105 @@ const Settings = () => {
     }
   };
 
+  // Excel export function (Admin only)
+  const handleExcelExport = async () => {
+    if (!confirm('This will export all tasks to an Excel file. Continue?')) {
+      return;
+    }
+
+    setIsExportingExcel(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/export/excel`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to export tasks');
+      }
+
+      const tasks = await response.json();
+
+      // Check if there are any tasks to export
+      if (!tasks || tasks.length === 0) {
+        toast.error('No tasks found to export');
+        return;
+      }
+
+      // Prepare data for Excel export
+      const excelData = tasks.map(task => ({
+        'Task ID': task._id,
+        'Title': task.title,
+        'Description': task.description,
+        'Status': task.status,
+        'Priority': task.priority,
+        'Client Name': task.clientName || '',
+        'Client Group': task.clientGroup || '',
+        'Work Type': task.workType || '',
+        'Assigned To': task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : '',
+        'Assigned To Email': task.assignedTo?.email || '',
+        'Assigned By': task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : '',
+        'Assigned By Email': task.assignedBy?.email || '',
+        'Verification Status': task.verificationStatus || '',
+        'Verification': task.verification || '',
+        'Primary Verifier': task.verificationAssignedTo ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : '',
+        'Second Verifier': task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : '',
+        'Third Verifier': task.thirdVerificationAssignedTo ? `${task.thirdVerificationAssignedTo.firstName} ${task.thirdVerificationAssignedTo.lastName}` : '',
+        'Fourth Verifier': task.fourthVerificationAssignedTo ? `${task.fourthVerificationAssignedTo.firstName} ${task.fourthVerificationAssignedTo.lastName}` : '',
+        'Fifth Verifier': task.fifthVerificationAssignedTo ? `${task.fifthVerificationAssignedTo.firstName} ${task.fifthVerificationAssignedTo.lastName}` : '',
+        'Guides': task.guides?.map(guide => `${guide.firstName} ${guide.lastName}`).join(', ') || '',
+        'Inward Entry Date': task.inwardEntryDate ? new Date(task.inwardEntryDate).toLocaleDateString() : '',
+        'Due Date': task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '',
+        'Target Date': task.targetDate ? new Date(task.targetDate).toLocaleDateString() : '',
+        'Created At': new Date(task.createdAt).toLocaleDateString(),
+        'Updated At': new Date(task.updatedAt).toLocaleDateString(),
+        'Billed': task.billed ? 'Yes' : 'No',
+        'Self Verification': task.selfVerification ? 'Yes' : 'No',
+        'Files Count': task.files?.length || 0,
+        'Comments Count': task.comments?.length || 0,
+        'Custom Fields': task.customFields ? JSON.stringify(task.customFields) : '',
+        'Verification Comments': task.verificationComments || ''
+      }));
+
+      // Create workbook and worksheet
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+      // Auto-size columns
+      const colWidths = [];
+      const headers = Object.keys(excelData[0] || {});
+      if (headers.length > 0) {
+        headers.forEach((header, index) => {
+          const maxLength = Math.max(
+            header.length,
+            ...excelData.map(row => (row[header] || '').toString().length)
+          );
+          colWidths[index] = { wch: Math.min(maxLength + 2, 50) }; // Max width of 50
+        });
+        worksheet['!cols'] = colWidths;
+      }
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'All Tasks');
+
+      // Generate filename with current date
+      const currentDate = new Date().toISOString().split('T')[0];
+      const filename = `tasks_export_${currentDate}.xlsx`;
+
+      // Save the file
+      XLSX.writeFile(workbook, filename);
+
+      toast.success('Tasks exported to Excel successfully');
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   const tabs = [
     'Account settings',
     ...(user.role === 'Admin' || user.role === 'Team Head' ? ['Priority Management', 'Stages', 'Works'] : []),
@@ -603,31 +704,56 @@ const Settings = () => {
     <div className="bg-white min-h-screen">
       {/* Profile Card */}
       <div className="bg-[#485bbd] px-4 sm:px-8 py-4 flex flex-col md:flex-row items-center gap-4 md:gap-6 relative">
-        {/* Admin Backup Button */}
+        {/* Admin Buttons */}
         {user.role === 'Admin' && (
-          <button
-            onClick={handleBackup}
-            disabled={isBackingUp}
-            className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Download Database Backup"
-          >
-            {isBackingUp ? (
-              <>
-                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Creating...
-              </>
-            ) : (
-              <>
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                </svg>
-                Backup DB
-              </>
-            )}
-          </button>
+          <div className="absolute top-4 right-4 flex gap-2">
+            <button
+              onClick={handleExcelExport}
+              disabled={isExportingExcel}
+              className="bg-green-600/20 hover:bg-green-600/30 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Export All Tasks to Excel"
+            >
+              {isExportingExcel ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Backup Excel
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleBackup}
+              disabled={isBackingUp}
+              className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Download Database Backup"
+            >
+              {isBackingUp ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                  </svg>
+                  Backup DB
+                </>
+              )}
+            </button>
+          </div>
         )}
         
         <div className="flex flex-col md:flex-row items-center w-full md:w-auto gap-4">
