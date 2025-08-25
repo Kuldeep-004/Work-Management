@@ -99,8 +99,17 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
     doc.text(`Total: ${formatTimeHM(totalMins)}`, pageWidth - margin, cursorY, { align: 'right' });
     cursorY += 5;
 
-    // Table data
-    const rows = (ts.entries || []).map(e => {
+    // Table data - Sort entries by start time before processing
+    const sortedEntries = [...(ts.entries || [])].sort((a, b) => {
+      if (!a.startTime || !b.startTime) return 0;
+      const [aHour, aMin] = a.startTime.split(':').map(Number);
+      const [bHour, bMin] = b.startTime.split(':').map(Number);
+      const aTime = aHour * 60 + aMin;
+      const bTime = bHour * 60 + bMin;
+      return aTime - bTime;
+    });
+
+    const rows = sortedEntries.map(e => {
       const timeslot = (e.startTime && e.endTime) ? `${e.startTime} - ${e.endTime}` : 'N/A';
       const taskName = e?.task?.title || e?.manualTaskName || 'N/A';
       const description = e?.workDescription || 'N/A';
@@ -109,8 +118,8 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
         if (e.approvalStatus.toLowerCase() === 'accepted') statusIcon = 'A';
         else if (e.approvalStatus.toLowerCase() === 'rejected') statusIcon = 'R';
       }
-      const mins = getMinutesBetween(e.startTime, e.endTime);
-      const timeSpent = `${mins} min`;
+  const mins = getMinutesBetween(e.startTime, e.endTime);
+  const timeSpent = formatTimeHM(mins);
       // New order: Timeslot, Task Name, Description, Time Spent, Status (Status at very right)
       return [timeslot, taskName, description, timeSpent, statusIcon];
     });

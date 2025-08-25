@@ -190,22 +190,20 @@ const Timesheets = () => {
       ...timesheet,
       entries: newEntries
     });
-    if (debounceTimeout.current) {
-      clearTimeout(debounceTimeout.current);
-    }
     const entry = newEntries[idx];
     // Check if entry has task (object or string) or manual task name
     const hasTask = entry.task || entry.manualTaskName;
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
     if ((field === 'task' && hasTask) ||
         (field === 'startTime' && hasTask) ||
         (field === 'endTime' && hasTask)) {
+      saveEntry(entry);
+    } else if (field === 'workDescription' && hasTask) {
       debounceTimeout.current = setTimeout(() => {
         saveEntry(entry);
-      }, 500);
-    } else if (hasTask && entry.workDescription) {
-      debounceTimeout.current = setTimeout(() => {
-        saveEntry(entry);
-      }, 1000);
+      }, 1200);
     }
   };
 
@@ -305,19 +303,30 @@ const Timesheets = () => {
     }
   };
 
-  const defaultStart = '09:00 AM';
-  const defaultEnd = '10:00 AM';
+
 
   const handleAddTimeslot = async () => {
     if (!timesheet) return;
     try {
+      // Get current time, round up to next multiple of 5 minutes
+      const now = new Date();
+      let minutes = now.getMinutes();
+      let add = 5 - (minutes % 5);
+      if (add === 5) add = 0;
+      now.setMinutes(minutes + add);
+      now.setSeconds(0);
+      now.setMilliseconds(0);
+      const pad = (n) => n.toString().padStart(2, '0');
+      const startTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      // End time same as start time
+      const endTime = startTime;
       const payload = {
-        taskId: 'other',  // This will be converted to null in backend with manualTaskName set to 'Other'
-        manualTaskName: '',  // Backend will set this to 'Other'
+        taskId: '', // No default, so dropdown shows 'Select Task'
+        manualTaskName: '',
         workDescription: '',
-        startTime: to24Hour(defaultStart),
-        endTime: to24Hour(defaultEnd),
-        date: selectedDate.toISOString().split('T')[0] // Pass the selected date
+        startTime,
+        endTime,
+        date: selectedDate.toISOString().split('T')[0]
       };
       const res = await fetch(`${API_BASE_URL}/api/timesheets/add-entry`, {
         method: 'POST',
@@ -349,7 +358,10 @@ const Timesheets = () => {
     }
   };
 
-  const formatTime = (minutes) => `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  const formatTime = (minutes) => {
+    if (!minutes || minutes <= 0) return '0h 0m';
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  };
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const getTimeOptions = (max = 150) => {
     const options = [];
@@ -412,6 +424,24 @@ const Timesheets = () => {
   useEffect(() => {
     fetchData(selectedDate);
   }, [fetchData, selectedDate]);
+
+  // Auto-resize all textareas when timesheet data changes
+  useEffect(() => {
+    if (!timesheet || !timesheet.entries) return;
+    
+    // Small delay to ensure DOM is updated
+    const timer = setTimeout(() => {
+      timesheet.entries.forEach(entry => {
+        const textarea = document.querySelector(`textarea[data-entry-id="${entry._id}"]`);
+        if (textarea && entry.workDescription) {
+          textarea.style.height = 'auto';
+          textarea.style.height = (textarea.scrollHeight) + 'px';
+        }
+      });
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [timesheet]);
 
   if (loading) return <div className="p-8 text-center">Loading...</div>;
 
@@ -639,7 +669,17 @@ const Timesheets = () => {
         )}
         {/* Timeslot Entries */}
         <div className="space-y-4 overflow-x-auto scrollbar-hide">
-          {[...(timesheet?.entries || [])].map((entry) => {
+          {[...(timesheet?.entries || [])]
+            .sort((a, b) => {
+              // Sort by start time (earliest to latest)
+              if (!a.startTime || !b.startTime) return 0;
+              const [aHour, aMin] = a.startTime.split(':').map(Number);
+              const [bHour, bMin] = b.startTime.split(':').map(Number);
+              const aTime = aHour * 60 + aMin;
+              const bTime = bHour * 60 + bMin;
+              return aTime - bTime;
+            })
+            .map((entry) => {
             // Robustly determine the correct value for the dropdown
             let taskValue = '';
             let taskDisplayName = '';
@@ -850,14 +890,34 @@ const Timesheets = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Description
+                        <span className="text-xs text-gray-500 ml-1">(Shift+Enter for new line)</span>
                       </label>
-                      <input
-                        type="text"
+                      <textarea
                         value={entry?.workDescription || ''}
-                        onChange={(e) => !isSaving && !isLocked && handleEntryChange(key, 'workDescription', e.target.value)}
+                        data-entry-id={entry._id}
+                        onChange={e => {
+                          // Auto-resize
+                          const ta = e.target;
+                          ta.style.height = 'auto';
+                          ta.style.height = (ta.scrollHeight) + 'px';
+                          !isSaving && !isLocked && handleEntryChange(key, 'workDescription', e.target.value);
+                        }}
+                        onInput={e => {
+                          // Auto-resize on paste etc.
+                          const ta = e.target;
+                          ta.style.height = 'auto';
+                          ta.style.height = (ta.scrollHeight) + 'px';
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                          }
+                        }}
                         placeholder="Enter work description"
-                        className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none min-h-[38px] max-h-72"
                         disabled={isSaving || isLocked}
+                        rows={1}
+                        style={{ overflow: 'hidden' }}
                       />
                     </div>
                     {/* Time Spent */}

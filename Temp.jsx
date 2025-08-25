@@ -155,6 +155,10 @@ const AdvancedTaskTable = ({
   // State for custom delete confirmation modal
   const [deleteConfirmTask, setDeleteConfirmTask] = useState(null);
   
+  // Pagination state for infinite scroll
+  const [loadedTasksCount, setLoadedTasksCount] = useState(25);
+  const TASKS_PER_BATCH = 25;
+  
   // Get columns based on task type, or use provided allColumns, plus custom columns
   const getExtendedColumns = () => {
     const baseColumns = allColumns || getColumnsForTaskType(taskType);
@@ -186,6 +190,8 @@ const AdvancedTaskTable = ({
       isMounted.current = false;
     };
   }, []);
+
+  
 
   // Fetch dynamic priorities
   useEffect(() => {
@@ -1277,6 +1283,63 @@ const AdvancedTaskTable = ({
     return task[groupField];
   };
 
+
+  // Reset loaded tasks count when tasks change or view type changes
+  useEffect(() => {
+    setLoadedTasksCount(25);
+  }, [tasks, taskType]);
+
+  // Load more tasks function
+  const loadMoreTasks = () => {
+    setLoadedTasksCount(prev => prev + TASKS_PER_BATCH);
+  };
+
+  // Check if should show load more button
+  const shouldShowLoadMore = (totalTasks) => {
+    return totalTasks > loadedTasksCount;
+  };
+
+  // Create a ref for the load more trigger element
+  const loadMoreTriggerRef = useRef(null);
+
+  // Auto-load more tasks when user scrolls near the bottom
+  useEffect(() => {
+    const triggerElement = loadMoreTriggerRef.current;
+    if (!triggerElement) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting) {
+          // Use correct total count for grouped/ungrouped
+          const totalTasks = shouldGroup
+            ? Object.values(groupedTasks || {}).reduce((sum, arr) => sum + arr.length, 0)
+            : (tasks?.length || 0);
+          if (shouldShowLoadMore(totalTasks)) {
+            loadMoreTasks();
+          }
+        }
+      },
+      {
+        root: null,
+        rootMargin: '200px', // Aggressive early trigger
+        threshold: 0.01 // Very early detection
+      }
+    );
+
+    observer.observe(triggerElement);
+
+    return () => {
+      if (triggerElement) {
+        observer.unobserve(triggerElement);
+      }
+    };
+  }, [tasks, loadedTasksCount, shouldGroup, groupedTasks]);
+
+
+  // Track last scroll position for scroll direction detection
+  const lastScrollTopRef = useRef(0);
+
   // Refactor the useEffect that fetches and applies task order
   useEffect(() => {
     let isMounted = true;
@@ -1596,8 +1659,19 @@ const AdvancedTaskTable = ({
             )}
             <tbody>
               {shouldGroup ? (
-                Object.entries(renderGroupedTasks).map(([group, groupTasks]) => (
-                  <React.Fragment key={group}>
+                (() => {
+                  // For grouped view, we need to count tasks across all groups and limit to loadedTasksCount
+                  let totalTasksShown = 0;
+                  return Object.entries(renderGroupedTasks).map(([group, groupTasks]) => {
+                    // Only show groups and tasks if we haven't exceeded the limit
+                    const tasksToShow = groupTasks.slice(0, Math.max(0, loadedTasksCount - totalTasksShown));
+                    const shouldShowGroup = totalTasksShown < loadedTasksCount && tasksToShow.length > 0;
+                    totalTasksShown += tasksToShow.length;
+                    
+                    if (!shouldShowGroup) return null;
+                    
+                    return (
+                      <React.Fragment key={group}>
                     <tr 
                       key={group + '-header'} 
                       className={`group-header ${dragOverGroup === group && draggedGroup ? 'bg-blue-100' : ''} cursor-grab`}
@@ -1699,7 +1773,7 @@ const AdvancedTaskTable = ({
                         <th key="actions" className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none">Actions</th>
                       )}
                     </tr>
-                    {groupTasks.map((task, idx) => (
+                    {tasksToShow.map((task, idx) => (
                       <tr
                         key={task._id}
                         className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''}`}
@@ -2794,9 +2868,11 @@ const AdvancedTaskTable = ({
                       </tr>
                     ))}
                   </React.Fragment>
-                ))
+                    );
+                  }).filter(Boolean);
+                })()
               ) : (
-                orderedTasks.map((task, idx) => (
+                orderedTasks.slice(0, loadedTasksCount).map((task, idx) => (
                   <tr
                     key={task._id}
                     className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''}`}
@@ -3879,6 +3955,27 @@ const AdvancedTaskTable = ({
             </tbody>
           </table>
         </div>
+
+
+        {/* Invisible trigger for auto-loading more tasks - moved above the Load More button for earlier triggering */}
+        <div 
+          ref={loadMoreTriggerRef} 
+          className="w-full"
+          style={{ height: '0px', marginTop: '0px', marginBottom: '0px' }}
+        ></div>
+
+        {/* Load More Button */}
+        {(() => {
+          const totalTasks = shouldGroup 
+            ? Object.values(groupedTasks || {}).reduce((sum, tasks) => sum + tasks.length, 0)
+            : orderedTasks.length;
+          
+          return shouldShowLoadMore(totalTasks) && (
+            <div className="flex justify-center">
+              
+            </div>
+          );
+        })()}
 
         {/* File Upload and Comments Modal */}
         {selectedTask && (showFileUpload || showComments) && (

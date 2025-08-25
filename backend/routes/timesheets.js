@@ -135,11 +135,14 @@ router.get('/my-tasks', protect, async (req, res) => {
           break;
         }
       }
-      if (!lastAssignedVerifier) {
-        return task.assignedTo && task.assignedTo.toString() === req.user._id.toString();
-      } else {
-        return lastAssignedVerifier === req.user._id.toString();
+
+      if (task.assignedTo && task.assignedTo.toString() === req.user._id.toString()) {
+        return true;
       }
+
+      return lastAssignedVerifier === req.user._id.toString();
+
+      return false;
     });
 
     res.json(filteredTasks);
@@ -978,16 +981,45 @@ router.post('/submit', protect, async (req, res) => {
 router.patch('/entry/:entryId/approve', protect, async (req, res) => {
   try {
     const { entryId } = req.params;
-    const timesheet = await Timesheet.findOne({ 'entries._id': entryId });
+    const timesheet = await Timesheet.findOne({ 'entries._id': entryId })
+      .populate('user', 'firstName lastName email')
+      .populate('entries.task', 'title');
+    
     if (!timesheet) {
       return res.status(404).json({ message: 'Entry not found' });
     }
+    
     const entry = timesheet.entries.id(entryId);
     if (!entry) {
       return res.status(404).json({ message: 'Entry not found' });
     }
+    
+    const previousStatus = entry.approvalStatus;
     entry.approvalStatus = 'accepted';
     await timesheet.save();
+
+    // Log activity for timesheet entry approval
+    const ActivityLogger = (await import('../utils/activityLogger.js')).default;
+    const taskName = entry.task ? entry.task.title : (entry.manualTaskName || 'Manual Task');
+    await ActivityLogger.log({
+      userId: req.user._id,
+      action: 'timesheet_entry_approved',
+      entity: 'Timesheet',
+      entityId: entryId,
+      description: `Approved timesheet entry: ${taskName} (${entry.startTime} - ${entry.endTime}) for ${timesheet.user.firstName} ${timesheet.user.lastName}`,
+      metadata: {
+        targetUserId: timesheet.user._id,
+        taskName,
+        timeSlot: `${entry.startTime} - ${entry.endTime}`,
+        timesheetDate: timesheet.date,
+        previousStatus,
+        newStatus: 'accepted'
+      },
+      severity: 'medium',
+      targetUserId: timesheet.user._id,
+      req
+    });
+    
     res.json({ message: 'Entry approved', entry });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -998,18 +1030,48 @@ router.patch('/entry/:entryId/approve', protect, async (req, res) => {
 router.patch('/entry/:entryId/reject', protect, async (req, res) => {
   try {
     const { entryId } = req.params;
-    const timesheet = await Timesheet.findOne({ 'entries._id': entryId });
+    const timesheet = await Timesheet.findOne({ 'entries._id': entryId })
+      .populate('user', 'firstName lastName email')
+      .populate('entries.task', 'title');
+    
     if (!timesheet) {
       return res.status(404).json({ message: 'Entry not found' });
     }
+    
     const entry = timesheet.entries.id(entryId);
     if (!entry) {
       return res.status(404).json({ message: 'Entry not found' });
     }
+    
+    const previousStatus = entry.approvalStatus;
     entry.approvalStatus = 'rejected';
     // Unsubmit the timesheet so user can edit and resubmit
     timesheet.isCompleted = false;
     await timesheet.save();
+
+    // Log activity for timesheet entry rejection
+    const ActivityLogger = (await import('../utils/activityLogger.js')).default;
+    const taskName = entry.task ? entry.task.title : (entry.manualTaskName || 'Manual Task');
+    await ActivityLogger.log({
+      userId: req.user._id,
+      action: 'timesheet_entry_rejected',
+      entity: 'Timesheet',
+      entityId: entryId,
+      description: `Rejected timesheet entry: ${taskName} (${entry.startTime} - ${entry.endTime}) for ${timesheet.user.firstName} ${timesheet.user.lastName}`,
+      metadata: {
+        targetUserId: timesheet.user._id,
+        taskName,
+        timeSlot: `${entry.startTime} - ${entry.endTime}`,
+        timesheetDate: timesheet.date,
+        previousStatus,
+        newStatus: 'rejected',
+        timesheetUnsubmitted: true
+      },
+      severity: 'high',
+      targetUserId: timesheet.user._id,
+      req
+    });
+    
     res.json({ message: 'Entry rejected and timesheet unsubmitted', entry });
   } catch (error) {
     res.status(500).json({ message: error.message });

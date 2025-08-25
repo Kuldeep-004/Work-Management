@@ -95,7 +95,7 @@ const AdvancedTaskTable = ({
     setDragOverTaskId, dragOverGroupKey, setDragOverGroupKey, orderedTasks,
     setOrderedTasks, orderLoaded, setOrderLoaded, lastTaskIdsRef, lastGroupFieldRef,
     isControlled, isColumnOrderControlled, isUpdating, setIsUpdating, isUpdating2,
-    setIsUpdating2, loadMoreTriggerRef, handleDragStart, handleDragOver,
+    setIsUpdating2, loadMoreTriggerRef, lastScrollTopRef, handleDragStart, handleDragOver,
     handleDragLeave, handleDrop, handleResizeStart, handleResizeMove, handleResizeEnd,
     getOrderedVisibleColumns, handleTaskClick, handleFileUploaded, handleFileDeleted,
     handleDescriptionEditSave, handleCustomTextEditSave, handleCustomTagsChange,
@@ -118,6 +118,7 @@ const AdvancedTaskTable = ({
       </div>
     );
   }
+
 
   return (
     <>

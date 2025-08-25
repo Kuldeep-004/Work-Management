@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import AutomationTask from './AutomationTask';
 import AutomationPopup from './AutomationPopup';
 import AutomationsModal from './AutomationsModal';
@@ -123,6 +123,7 @@ const AdminDashboard = () => {
   const [taskHours, setTaskHours] = useState([]);
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const columnsDropdownRef = useRef(null);
+  const groupByDropdownRef = useRef(null);
   const tableRef = useRef(null);
   const [showPDFColumnSelector, setShowPDFColumnSelector] = useState(false);
   const [editingDescriptionTaskId, setEditingDescriptionTaskId] = useState(null);
@@ -173,23 +174,13 @@ const AdminDashboard = () => {
   const [filterDraft, setFilterDraft] = useState([]);
   const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
 
-  // When opening the filter popup, copy the current tab's filters to the draft
-  const openFilterPopup = () => {
-    setFilterDraft([...activeTabObj.filters]);
-    setIsFilterPopupOpen(true);
-  };
+  // Get active tab object - memoized
+  const activeTabObj = useMemo(() => {
+    return tabs.find(tab => tab.id === activeTabId) || tabs[0] || DEFAULT_TAB(customColumnsLoaded ? customColumns : []);
+  }, [tabs, activeTabId, customColumnsLoaded, customColumns]);
 
-  // When saving filters, update the tab's filters and close the popup
-  const saveFilters = () => {
-    updateActiveTab({ filters: filterDraft });
-    setIsFilterPopupOpen(false);
-  };
-
-  // Get active tab object
-  const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0] || DEFAULT_TAB(customColumnsLoaded ? customColumns : []);
-
-  // Get extended columns including custom columns
-  const getExtendedColumns = () => {
+  // Get extended columns including custom columns - memoized
+  const extendedColumns = useMemo(() => {
     const baseColumns = [...ALL_COLUMNS];
     
     if (!customColumnsLoaded || customColumns.length === 0) {
@@ -206,45 +197,10 @@ const AdminDashboard = () => {
     }));
 
     return [...baseColumns, ...customCols];
-  };
+  }, [customColumnsLoaded, customColumns]);
 
-  const extendedColumns = getExtendedColumns();
-
-  // Tab actions
-  const addTab = async () => {
-    const newId = String(Date.now());
-    const newTabs = [...tabs, { ...DEFAULT_TAB(customColumns), id: newId, title: `Tab ${tabs.length + 1}` }];
-    setTabs(newTabs);
-    setActiveTabId(newId);
-
-    // Sync with backend
-    try {
-      await fetch(`${API_BASE_URL}/api/users/user-tab-state/adminDashboard`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
-        body: JSON.stringify({ state: { tabs: newTabs, activeTabId: newId } }),
-      });
-    } catch (err) {
-      // Optionally handle error
-    }
-  };
-  const closeTab = (id) => {
-    let idx = tabs.findIndex(tab => tab.id === id);
-    if (tabs.length === 1) return; // Don't close last tab
-    const newTabs = tabs.filter(tab => tab.id !== id);
-    setTabs(newTabs);
-    if (activeTabId === id) {
-      setActiveTabId(newTabs[Math.max(0, idx - 1)].id);
-    }
-  };
-  const renameTab = (id, newTitle) => {
-    setTabs(tabs.map(tab => tab.id === id ? { ...tab, title: newTitle } : tab));
-  };
   // 6. Update updateActiveTab to allow patching visibleColumns and columnWidths
-  const updateActiveTab = (patch) => {
+  const updateActiveTab = useCallback((patch) => {
     setTabs(tabs.map(tab => {
       if (tab.id !== activeTabId) return tab;
       let newTab = { ...tab, ...patch };
@@ -282,6 +238,52 @@ const AdminDashboard = () => {
       }
       return newTab;
     }));
+  }, [tabs, activeTabId, priorities]);
+
+  // When opening the filter popup, copy the current tab's filters to the draft
+  const openFilterPopup = useCallback(() => {
+    setFilterDraft([...activeTabObj.filters]);
+    setIsFilterPopupOpen(true);
+  }, [activeTabObj.filters]);
+
+  // When saving filters, update the tab's filters and close the popup
+  const saveFilters = useCallback(() => {
+    updateActiveTab({ filters: filterDraft });
+    setIsFilterPopupOpen(false);
+  }, [filterDraft, updateActiveTab]);
+
+  // Tab actions
+  const addTab = async () => {
+    const newId = String(Date.now());
+    const newTabs = [...tabs, { ...DEFAULT_TAB(customColumns), id: newId, title: `Tab ${tabs.length + 1}` }];
+    setTabs(newTabs);
+    setActiveTabId(newId);
+
+    // Sync with backend
+    try {
+      await fetch(`${API_BASE_URL}/api/users/user-tab-state/adminDashboard`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ state: { tabs: newTabs, activeTabId: newId } }),
+      });
+    } catch (err) {
+      // Optionally handle error
+    }
+  };
+  const closeTab = (id) => {
+    let idx = tabs.findIndex(tab => tab.id === id);
+    if (tabs.length === 1) return; // Don't close last tab
+    const newTabs = tabs.filter(tab => tab.id !== id);
+    setTabs(newTabs);
+    if (activeTabId === id) {
+      setActiveTabId(newTabs[Math.max(0, idx - 1)].id);
+    }
+  };
+  const renameTab = (id, newTitle) => {
+    setTabs(tabs.map(tab => tab.id === id ? { ...tab, title: newTitle } : tab));
   };
 
   // Fetch tabs and activeTabId from backend on mount
@@ -344,13 +346,36 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     const handleClickOutside = (event) => {
+      // Handle filter popup
       if (filterPopupRef.current && !filterPopupRef.current.contains(event.target)) {
         setIsFilterPopupOpen(false);
       }
+      
+      // Handle columns dropdown
+      if (columnsDropdownRef.current && !columnsDropdownRef.current.contains(event.target)) {
+        setShowColumnDropdown(false);
+      }
+      
+      // Handle group by dropdown
+      if (groupByDropdownRef.current && !groupByDropdownRef.current.contains(event.target)) {
+        setShowGroupByDropdown(false);
+      }
     };
+
+    const handleKeyDown = (event) => {
+      // Close dropdowns on ESC key
+      if (event.key === 'Escape') {
+        setIsFilterPopupOpen(false);
+        setShowColumnDropdown(false);
+        setShowGroupByDropdown(false);
+      }
+    };
+    
     document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
@@ -380,7 +405,7 @@ const AdminDashboard = () => {
     }
   }, [user]);
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -403,28 +428,7 @@ const AdminDashboard = () => {
       if (!Array.isArray(data)) {
         throw new Error('Invalid response format');
       }
-      // Fetch saved order for this tab
-      let orderedTasks = data;
-      try {
-        const tabKey = 'adminDashboard';
-        const tabId = activeTabObj.id;
-        const orderRes = await fetch(`${API_BASE_URL}/api/users/tabstate/taskOrder?tabKey=${tabKey}&tabId=${tabId}`, {
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
-        if (orderRes.ok) {
-          const orderData = await orderRes.json();
-          const savedOrder = orderData.taskOrder;
-          if (savedOrder && Array.isArray(savedOrder)) {
-            const idToTask = Object.fromEntries(data.map(t => [t._id, t]));
-            orderedTasks = savedOrder.map(id => idToTask[id]).filter(Boolean);
-            // Add any new tasks not in savedOrder
-            for (const t of data) if (!orderedTasks.includes(t)) orderedTasks.push(t);
-          }
-        }
-      } catch (err) {
-        // If order fetch fails, just use default order
-      }
-      setTasks(orderedTasks);
+      setTasks(data);
     } catch (error) {
       console.error('Error fetching tasks:', error);
       setError(error.message);
@@ -433,13 +437,13 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user.role, user.token]);
 
   useEffect(() => {
     if (tabsLoaded && activeTabId) {
       fetchTasks();
     }
-  }, [tabsLoaded, activeTabId]);
+  }, [tabsLoaded, fetchTasks]);
 
   // Clear selections when tasks or filters change
   useEffect(() => {
@@ -457,8 +461,20 @@ const AdminDashboard = () => {
     }
   }, [tabsLoaded, activeTabId]);
 
+  // Optimized column visibility toggle
+  const toggleColumnVisibility = useCallback((columnId) => {
+    const cols = activeTabObj.visibleColumns || [];
+    let newCols;
+    if (cols.includes(columnId)) {
+      newCols = cols.filter(c => c !== columnId);
+    } else {
+      newCols = [...cols, columnId];
+    }
+    updateActiveTab({ visibleColumns: [...newCols] });
+  }, [activeTabObj.visibleColumns, updateActiveTab]);
+
   // Toggle bulk selection mode
-  const toggleBulkSelection = () => {
+  const toggleBulkSelection = useCallback(() => {
     const newShowCheckboxes = !showCheckboxes;
     setShowCheckboxes(newShowCheckboxes);
     
@@ -468,7 +484,7 @@ const AdminDashboard = () => {
       setIsAllSelected(false);
       setShowBulkActions(false);
     }
-  };
+  }, [showCheckboxes]);
 
   // Clear selections when showCheckboxes changes to false
   useEffect(() => {
@@ -498,7 +514,7 @@ const AdminDashboard = () => {
     }
   }, [user]);
 
-  const getFilteredAndSortedTasks = (tasks, filtersToUse) => {
+  const getFilteredAndSortedTasks = useCallback((tasks, filtersToUse) => {
     if (!Array.isArray(tasks)) return [];
     const filters = filtersToUse || activeTabObj.filters;
 
@@ -639,7 +655,7 @@ const AdminDashboard = () => {
       if (aValue > bValue) return activeTabObj.sortOrder === 'asc' ? 1 : -1;
       return 0;
     });
-  };
+  }, [priorities, activeTabObj.filters, activeTabObj.searchTerm, activeTabObj.sortBy, activeTabObj.sortOrder]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -681,38 +697,68 @@ const AdminDashboard = () => {
     }
   };
 
-  // Calculate statistics
-  const stats = {
-    totalTasks: tasks.length,
-    completedTasks: tasks.filter(t => t.status === 'completed').length,
-    inProgressTasks: tasks.filter(t => t.status === 'in_progress').length,
-    pendingTasks: tasks.filter(t => t.status === 'pending').length,
-    yetToStartTasks: tasks.filter(t => t.status === 'yet_to_start').length,
-    todayTasks: tasks.filter(t => new Date(t.dueDate).toDateString() === new Date().toDateString()).length,
-  };
+  // Calculate statistics - memoized for performance
+  const stats = useMemo(() => {
+    const today = new Date().toDateString();
+    return {
+      totalTasks: tasks.length,
+      completedTasks: tasks.filter(t => t.status === 'completed').length,
+      inProgressTasks: tasks.filter(t => t.status === 'in_progress').length,
+      pendingTasks: tasks.filter(t => t.status === 'pending').length,
+      yetToStartTasks: tasks.filter(t => t.status === 'yet_to_start').length,
+      todayTasks: tasks.filter(t => new Date(t.dueDate).toDateString() === today).length,
+    };
+  }, [tasks]);
 
   const handleStatusClick = (taskId, status) => {
     // Implement the logic to handle status click
     console.log(`Status clicked for task ${taskId}, new status: ${status}`);
   };
 
-  const handleEditTask = (task) => {
+  const handleEditTask = useCallback((task) => {
     setEditTask(task);
     setEditModalOpen(true);
-  };
-  const handleTaskSubmit = (updatedOrCreated) => {
+  }, []);
+
+  const handleTaskSubmit = useCallback(async (updatedOrCreated) => {
     setEditModalOpen(false);
     setCreateModalOpen(false);
+    const isUpdate = editTask !== null;
     setEditTask(null);
-    fetchTasks(); // Light reload after create or edit
-  };
+    
+    if (isUpdate) {
+      // For updates, use optimistic update instead of full refetch
+      setTasks(prevTasks => prevTasks.map(task => 
+        task._id === updatedOrCreated._id ? updatedOrCreated : task
+      ));
+      
+      // Optionally refetch just this task to ensure consistency
+      try {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const res = await fetch(`${API_BASE_URL}/api/tasks/${updatedOrCreated._id}`, {
+          headers: { Authorization: `Bearer ${user.token}` }
+        });
+        if (res.ok) {
+          const refreshedTask = await res.json();
+          setTasks(prevTasks => prevTasks.map(task =>
+            task._id === updatedOrCreated._id ? refreshedTask : task
+          ));
+        }
+      } catch (e) {
+        console.error('Error refreshing updated task:', e);
+      }
+    } else {
+      // For new tasks, just add to the beginning of the list
+      setTasks(prevTasks => [updatedOrCreated, ...prevTasks]);
+    }
+  }, [editTask, user.token]);
 
   // Handler for editing task templates
-  const handleEditTemplate = (template, index) => {
+  const handleEditTemplate = useCallback((template, index) => {
     setEditingTemplate(template);
     setEditingTemplateIndex(index);
     setEditTemplateModalOpen(true);
-  };
+  }, []);
 
   // Handler for template submit (when editing)
   const handleTemplateSubmit = async (updatedTemplate) => {
@@ -772,7 +818,7 @@ const AdminDashboard = () => {
   };
 
   // Bulk selection handlers
-  const handleTaskSelect = (taskId, isSelected) => {
+  const handleTaskSelect = useCallback((taskId, isSelected) => {
     setSelectedTasks(prev => {
       const newSelected = isSelected 
         ? [...prev, taskId] 
@@ -787,9 +833,9 @@ const AdminDashboard = () => {
       
       return newSelected;
     });
-  };
+  }, [showCheckboxes, tasks, activeTabObj.filters]);
 
-  const handleSelectAll = (isSelected) => {
+  const handleSelectAll = useCallback((isSelected) => {
     const currentTasks = getFilteredAndSortedTasks(tasks, activeTabObj.filters);
     if (isSelected) {
       setSelectedTasks(currentTasks.map(task => task._id));
@@ -799,7 +845,7 @@ const AdminDashboard = () => {
       setShowBulkActions(false);
     }
     setIsAllSelected(isSelected);
-  };
+  }, [tasks, activeTabObj.filters, showCheckboxes]);
 
   const handleBulkDelete = async () => {
     if (selectedTasks.length === 0) return;
@@ -1185,11 +1231,17 @@ const AdminDashboard = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?._id]);
 
-  // Calculate widget numbers before return
-  const yetToStartCount = tasks.filter(t => t.status === 'yet_to_start').length;
-  const todayCount = tasks.filter(t => t.priority === 'today' && t.status !== 'completed').length;
-  const totalCount = tasks.filter(t => t.status !== 'completed').length;
-  const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length;
+  // Calculate widget numbers - memoized for performance
+  const dashboardCounts = useMemo(() => {
+    return {
+      yetToStartCount: tasks.filter(t => t.status === 'yet_to_start').length,
+      todayCount: tasks.filter(t => t.priority === 'today' && t.status !== 'completed').length,
+      totalCount: tasks.filter(t => t.status !== 'completed').length,
+      urgentCount: tasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length,
+    };
+  }, [tasks]);
+
+  const { yetToStartCount, todayCount, totalCount, urgentCount } = dashboardCounts;
 
   // Only render table UI after tabsLoaded and tabs.length > 0
   if (!tabsLoaded || tabs.length === 0) {
@@ -1329,7 +1381,7 @@ const AdminDashboard = () => {
                 Columns
               </button>
               {showColumnDropdown && (
-                <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56 animate-fade-in">
+                <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56">
                   <div className="font-semibold text-gray-700 mb-2 text-sm">Show/Hide Columns</div>
                   <div className="max-h-56 overflow-y-auto pr-1 custom-scrollbar">
                     {extendedColumns.map(col => (
@@ -1337,16 +1389,7 @@ const AdminDashboard = () => {
                         <input
                           type="checkbox"
                           checked={activeTabObj.visibleColumns.includes(col.id)}
-                          onChange={() => {
-                            const cols = activeTabObj.visibleColumns || [];
-                            let newCols;
-                            if (cols.includes(col.id)) {
-                              newCols = cols.filter(c => c !== col.id);
-                            } else {
-                              newCols = [...cols, col.id];
-                            }
-                            updateActiveTab({ visibleColumns: [...newCols] });
-                          }}
+                          onChange={() => toggleColumnVisibility(col.id)}
                           className="accent-blue-500"
                         />
                         <span className="text-gray-800 text-sm">{col.label}</span>
@@ -1366,7 +1409,7 @@ const AdminDashboard = () => {
                 <span className="font-semibold">Group By</span>
               </button>
               {showGroupByDropdown && (
-                <div className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44 animate-fade-in" style={{minWidth: '160px'}}>
+                <div ref={groupByDropdownRef} className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44" style={{minWidth: '160px'}}>
                   <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">Group By</div>
                   <button className={`block w-full text-left px-4 py-2 rounded ${!activeTabObj.sortBy || activeTabObj.sortBy === '' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: '' }); setShowGroupByDropdown(false); }}>None</button>
                   <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'createdAt' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'createdAt' }); setShowGroupByDropdown(false); }}>Assigned On</button>
@@ -1475,7 +1518,7 @@ const AdminDashboard = () => {
               Columns
             </button>
             {showColumnDropdown && (
-              <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56 animate-fade-in">
+              <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56">
                 <div className="font-semibold text-gray-700 mb-2 text-sm">Show/Hide Columns</div>
                 <div className="max-h-56 overflow-y-auto pr-1 custom-scrollbar">
                   {extendedColumns.map(col => (
@@ -1483,16 +1526,7 @@ const AdminDashboard = () => {
                       <input
                         type="checkbox"
                         checked={activeTabObj.visibleColumns.includes(col.id)}
-                        onChange={() => {
-                          const cols = activeTabObj.visibleColumns || [];
-                          let newCols;
-                          if (cols.includes(col.id)) {
-                            newCols = cols.filter(c => c !== col.id);
-                          } else {
-                            newCols = [...cols, col.id];
-                          }
-                          updateActiveTab({ visibleColumns: [...newCols] });
-                        }}
+                        onChange={() => toggleColumnVisibility(col.id)}
                         className="accent-blue-500"
                       />
                       <span className="text-gray-800 text-sm">{col.label}</span>
@@ -1512,7 +1546,7 @@ const AdminDashboard = () => {
               <span className="font-semibold">Group By</span>
             </button>
             {showGroupByDropdown && (
-              <div className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44 animate-fade-in" style={{minWidth: '160px'}}>
+              <div ref={groupByDropdownRef} className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44" style={{minWidth: '160px'}}>
                 <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">Group By</div>
                 <button className={`block w-full text-left px-4 py-2 rounded ${!activeTabObj.sortBy || activeTabObj.sortBy === '' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: '' }); setShowGroupByDropdown(false); }}>None</button>
                 <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'createdAt' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'createdAt' }); setShowGroupByDropdown(false); }}>Assigned On</button>

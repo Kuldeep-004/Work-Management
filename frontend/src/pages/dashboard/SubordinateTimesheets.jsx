@@ -17,7 +17,11 @@ const SubordinateTimesheets = () => {
   const [subordinates, setSubordinates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState('');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday.toISOString().split('T')[0];
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [selectedTimesheet, setSelectedTimesheet] = useState(null);
@@ -388,7 +392,17 @@ const SubordinateTimesheets = () => {
                           {timesheet.entries.length === 0 ? (
                             <tr><td colSpan="5" className="text-center text-gray-400 py-3">No Entries</td></tr>
                           ) : (
-                            timesheet.entries.map((entry, idx) => {
+                            [...timesheet.entries]
+                              .sort((a, b) => {
+                                // Sort by start time (earliest to latest)
+                                if (!a.startTime || !b.startTime) return 0;
+                                const [aHour, aMin] = a.startTime.split(':').map(Number);
+                                const [bHour, bMin] = b.startTime.split(':').map(Number);
+                                const aTime = aHour * 60 + aMin;
+                                const bTime = bHour * 60 + bMin;
+                                return aTime - bTime;
+                              })
+                              .map((entry, idx) => {
                               let statusColor = '';
                               if (entry.approvalStatus === 'accepted') statusColor = 'text-green-600 font-semibold';
                               else if (entry.approvalStatus === 'rejected') statusColor = 'text-red-600 font-semibold';
@@ -399,8 +413,8 @@ const SubordinateTimesheets = () => {
                                     {entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : 'N/A'}
                                   </td>
                                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{entry.task ? entry.task.title : (entry.manualTaskName || 'N/A')}</td>
-                                  <td className="px-4 py-3 text-sm text-gray-700 break-words min-w-[200px] max-w-[400px]">{entry.workDescription || 'N/A'}</td>
-                                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">{getMinutesBetween(entry.startTime, entry.endTime)} min</td>
+                                  <td className="px-4 py-3 text-sm text-gray-700 break-words min-w-[200px] max-w-[400px]" style={{ whiteSpace: 'pre-wrap' }}>{entry.workDescription || 'N/A'}</td>
+                                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">{formatTime(getMinutesBetween(entry.startTime, entry.endTime))}</td>
                                   <td className={`px-4 py-3 whitespace-nowrap text-sm ${statusColor}`}>{
                                     entry.approvalStatus === 'accepted' ? 'Accepted' : entry.approvalStatus === 'rejected' ? 'Rejected' : 'Pending'
                                   }</td>
@@ -489,19 +503,29 @@ const SubordinateTimesheets = () => {
             
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {selectedTimesheet.entries.map((entry, index) => (
+                {[...selectedTimesheet.entries]
+                  .sort((a, b) => {
+                    // Sort by start time (earliest to latest)
+                    if (!a.startTime || !b.startTime) return 0;
+                    const [aHour, aMin] = a.startTime.split(':').map(Number);
+                    const [bHour, bMin] = b.startTime.split(':').map(Number);
+                    const aTime = aHour * 60 + aMin;
+                    const bTime = bHour * 60 + bMin;
+                    return aTime - bTime;
+                  })
+                  .map((entry, index) => (
                   <div key={index} className="bg-gray-50 rounded-lg p-4">
                     <div className="flex justify-between items-start mb-3">
                       <h4 className="font-medium text-gray-900">
                         {entry.task ? entry.task.title : entry.manualTaskName || 'Manual Task'}
                       </h4>
                       <span className="text-sm font-medium text-blue-600">
-                        {getMinutesBetween(entry.startTime, entry.endTime)} min
+                        {formatTime(getMinutesBetween(entry.startTime, entry.endTime))}
                       </span>
                     </div>
                     
                     {entry.workDescription && (
-                      <p className="text-sm text-gray-600 mb-3">
+                      <p className="text-sm text-gray-600 mb-3" style={{ whiteSpace: 'pre-wrap' }}>
                         {entry.workDescription}
                       </p>
                     )}
@@ -523,7 +547,7 @@ const SubordinateTimesheets = () => {
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-medium text-gray-900">Total Time Spent</span>
                   <span className="text-2xl font-bold text-blue-600">
-                    {selectedTimesheet.entries.reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0)} min
+                    {formatTime(selectedTimesheet.entries.reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0))}
                   </span>
                 </div>
               </div>

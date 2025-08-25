@@ -55,9 +55,9 @@ const activityLogSchema = new mongoose.Schema(
         // Timesheet actions
         'timesheet_created', 'timesheet_updated', 'timesheet_deleted',
         'timesheet_submitted', 'timesheet_approved', 'timesheet_rejected',
-        'timesheet_verified', 'timesheet_billed_status_changed',
-        'timesheet_entry_added', 'timesheet_entry_updated', 'timesheet_entry_deleted',
-        
+        'timesheet_verified', 'timesheet_billed_status_changed','timesheet_entry_added', 'timesheet_entry_updated', 'timesheet_entry_deleted',
+        'timesheet_entry_approved', 'timesheet_entry_rejected',
+          
         // Announcement actions
         'announcement_created', 'announcement_updated', 'announcement_deleted',
         'announcement_published', 'announcement_unpublished',
