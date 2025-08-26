@@ -31,6 +31,9 @@ const Timesheets = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submittedDates, setSubmittedDates] = useState([]); // Array of yyyy-mm-dd
   const [incompleteDates, setIncompleteDates] = useState([]); // Array of yyyy-mm-dd (red)
+  const [pendingEntries, setPendingEntries] = useState([]); // For new timeslots that aren't saved yet
+  const [editingEntries, setEditingEntries] = useState(new Set()); // For existing entries being edited
+  const [originalEntryOrder, setOriginalEntryOrder] = useState([]); // Store original order for editing entries
 
   const debounceTimeout = useRef(null);
   // Fetch all submitted and incomplete timesheet dates for calendar highlight
@@ -165,7 +168,30 @@ const Timesheets = () => {
   }
 
   const handleEntryChange = (entryId, field, value) => {
-    if (!timesheet) return;
+    // Check if this is a pending entry
+    const pendingEntry = pendingEntries.find(e => e._id === entryId);
+    if (pendingEntry) {
+      setPendingEntries(prev => prev.map(e => 
+        e._id === entryId ? { ...e, [field]: value } : e
+      ));
+      
+      // Update manual task name logic for pending entries
+      if (field === 'task' && value !== 'other') {
+        setPendingEntries(prev => prev.map(e => 
+          e._id === entryId ? { ...e, manualTaskName: '' } : e
+        ));
+      }
+      if (field === 'task' && value === 'other') {
+        setPendingEntries(prev => prev.map(e => 
+          e._id === entryId ? { ...e, manualTaskName: 'Other' } : e
+        ));
+      }
+      return;
+    }
+    
+    // Handle existing timesheet entries (but only if in editing mode)
+    if (!timesheet || !editingEntries.has(entryId)) return;
+    
     // Deep clone entries to avoid reference issues
     const newEntries = timesheet.entries.map(e => {
       // Create a deep copy but preserve task objects properly
@@ -190,21 +216,8 @@ const Timesheets = () => {
       ...timesheet,
       entries: newEntries
     });
-    const entry = newEntries[idx];
-    // Check if entry has task (object or string) or manual task name
-    const hasTask = entry.task || entry.manualTaskName;
-    if (debounceTimeout.current) {
-      clearTimeout(debounceTimeout.current);
-    }
-    if ((field === 'task' && hasTask) ||
-        (field === 'startTime' && hasTask) ||
-        (field === 'endTime' && hasTask)) {
-      saveEntry(entry);
-    } else if (field === 'workDescription' && hasTask) {
-      debounceTimeout.current = setTimeout(() => {
-        saveEntry(entry);
-      }, 1200);
-    }
+    
+    // No automatic saving - only save when user clicks accept
   };
 
   // Utility to check for valid MongoDB ObjectId
@@ -307,55 +320,157 @@ const Timesheets = () => {
 
   const handleAddTimeslot = async () => {
     if (!timesheet) return;
-    try {
-      // Get current time, round up to next multiple of 5 minutes
-      const now = new Date();
-      let minutes = now.getMinutes();
-      let add = 5 - (minutes % 5);
-      if (add === 5) add = 0;
-      now.setMinutes(minutes + add);
-      now.setSeconds(0);
-      now.setMilliseconds(0);
-      const pad = (n) => n.toString().padStart(2, '0');
-      const startTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-      // End time same as start time
-      const endTime = startTime;
-      const payload = {
-        taskId: '', // No default, so dropdown shows 'Select Task'
-        manualTaskName: '',
-        workDescription: '',
-        startTime,
-        endTime,
-        date: selectedDate.toISOString().split('T')[0]
-      };
-      const res = await fetch(`${API_BASE_URL}/api/timesheets/add-entry`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || 'Failed to add timeslot');
+    
+    // Get current time, round up to next multiple of 5 minutes
+    const now = new Date();
+    let minutes = now.getMinutes();
+    let add = 5 - (minutes % 5);
+    if (add === 5) add = 0;
+    now.setMinutes(minutes + add);
+    now.setSeconds(0);
+    now.setMilliseconds(0);
+    const pad = (n) => n.toString().padStart(2, '0');
+    const startTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    // End time same as start time
+    const endTime = startTime;
+    
+    // Create a temporary ID for the pending entry
+    const tempId = `temp_${Date.now()}`;
+    
+    const newEntry = {
+      _id: tempId,
+      task: '', // Default to no task selected
+      manualTaskName: '',
+      workDescription: '',
+      startTime,
+      endTime,
+      isPending: true
+    };
+    
+    setPendingEntries(prev => [...prev, newEntry]);
+    
+    // Update entryTimeParts for the new entry
+    setEntryTimeParts(parts => ({
+      ...parts,
+      [tempId]: {
+        start: split24Hour(startTime),
+        end: split24Hour(endTime)
       }
-      const updatedTimesheet = await res.json();
-      setTimesheet(normalizeTimesheetTasks(updatedTimesheet));
-      // Update entryTimeParts for the new entry
-      if (updatedTimesheet.entries && updatedTimesheet.entries.length > 0) {
-        const lastEntry = updatedTimesheet.entries[updatedTimesheet.entries.length - 1];
-        setEntryTimeParts(parts => ({
-          ...parts,
-          [lastEntry._id]: {
-            start: split24Hour(lastEntry.startTime),
-            end: split24Hour(lastEntry.endTime)
+    }));
+  };
+
+  // Handle accepting a pending or editing timeslot
+  const handleAcceptTimeslot = async (entryId, entry) => {
+    try {
+      if (entry.isPending) {
+        // This is a new pending entry - save to MongoDB
+        const payload = {
+          workDescription: entry.workDescription || '',
+          startTime: entry.startTime,
+          endTime: entry.endTime,
+          date: selectedDate.toISOString().split('T')[0]
+        };
+        
+        // Extract task ID properly
+        let taskId = null;
+        if (entry.task === 'other') {
+          taskId = 'other';
+          payload.taskId = 'other';
+          payload.manualTaskName = 'Other';
+        } else if (entry.task) {
+          taskId = (typeof entry.task === 'object' && entry.task._id) ? entry.task._id : entry.task;
+          payload.taskId = taskId;
+        } else {
+          payload.taskId = null;
+          payload.manualTaskName = entry.manualTaskName || '';
+        }
+        
+        if (!payload.taskId && !payload.manualTaskName) {
+          toast.error('Please select a task before accepting.');
+          return;
+        }
+        
+        const res = await fetch(`${API_BASE_URL}/api/timesheets/add-entry`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${user.token}`
+          },
+          body: JSON.stringify(payload),
+        });
+        
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.message || 'Failed to save timeslot');
+        }
+        
+        const updatedTimesheet = await res.json();
+        setTimesheet(normalizeTimesheetTasks(updatedTimesheet));
+        
+        // Remove from pending entries
+        setPendingEntries(prev => prev.filter(e => e._id !== entryId));
+        
+        toast.success('Timeslot saved!');
+      } else {
+        // This is an existing entry being edited - update in MongoDB
+        await saveEntry(entry);
+        
+        // Remove from editing state
+        setEditingEntries(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(entryId);
+          // Clear original order when no more entries are being edited
+          if (newSet.size === 0) {
+            setOriginalEntryOrder([]);
           }
-        }));
+          return newSet;
+        });
+        
+        toast.success('Timeslot updated!');
       }
     } catch (error) {
       toast.error(error.message);
     }
+  };
+  
+  // Handle rejecting a pending or editing timeslot
+  const handleRejectTimeslot = (entryId, entry) => {
+    if (entry.isPending) {
+      // Remove from pending entries
+      setPendingEntries(prev => prev.filter(e => e._id !== entryId));
+    } else {
+      // Remove from editing state (revert changes)
+      setEditingEntries(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(entryId);
+        // Clear original order when no more entries are being edited
+        if (newSet.size === 0) {
+          setOriginalEntryOrder([]);
+        }
+        return newSet;
+      });
+      
+      // Refresh data to revert any unsaved changes
+      fetchData(selectedDate);
+    }
+  };
+  
+  // Handle starting to edit an existing timeslot
+  const handleEditTimeslot = (entryId) => {
+    // Store original sorted order when starting to edit
+    if (originalEntryOrder.length === 0) {
+      const sortedEntries = [...(timesheet?.entries || [])]
+        .sort((a, b) => {
+          if (!a.startTime || !b.startTime) return 0;
+          const [aHour, aMin] = a.startTime.split(':').map(Number);
+          const [bHour, bMin] = b.startTime.split(':').map(Number);
+          const aTime = aHour * 60 + aMin;
+          const bTime = bHour * 60 + bMin;
+          return aTime - bTime;
+        });
+      setOriginalEntryOrder(sortedEntries.map(e => e._id));
+    }
+    setEditingEntries(prev => new Set([...prev, entryId]));
   };
 
   const formatTime = (minutes) => {
@@ -423,6 +538,10 @@ const Timesheets = () => {
 
   useEffect(() => {
     fetchData(selectedDate);
+    // Clear pending entries when date changes
+    setPendingEntries([]);
+    setEditingEntries(new Set());
+    setOriginalEntryOrder([]);
   }, [fetchData, selectedDate]);
 
   // Auto-resize all textareas when timesheet data changes
@@ -446,8 +565,31 @@ const Timesheets = () => {
   if (loading) return <div className="p-8 text-center">Loading...</div>;
 
   const handleEntryTimePartChange = (entryId, type, part, value) => {
-    const entry = timesheet.entries.find(e => e._id === entryId);
-    if (!entry) return;
+    // Check if this is a pending entry
+    const pendingEntry = pendingEntries.find(e => e._id === entryId);
+    if (pendingEntry) {
+      const prev = entryTimeParts[entryId] || { start: split24Hour(pendingEntry.startTime), end: split24Hour(pendingEntry.endTime) };
+      const updated = {
+        ...prev,
+        [type]: {
+          ...prev[type],
+          [part]: value
+        }
+      };
+      setEntryTimeParts({ ...entryTimeParts, [entryId]: updated });
+      const newTime = build12Hour(updated[type].hour, updated[type].minute, updated[type].ampm);
+      
+      // Update pending entry
+      setPendingEntries(prev => prev.map(e => 
+        e._id === entryId ? { ...e, [type === 'start' ? 'startTime' : 'endTime']: to24Hour(newTime) } : e
+      ));
+      return;
+    }
+    
+    // Handle existing entries (only if in editing mode)
+    const entry = timesheet?.entries.find(e => e._id === entryId);
+    if (!entry || !editingEntries.has(entryId)) return;
+    
     const prev = entryTimeParts[entryId] || { start: split24Hour(entry.startTime), end: split24Hour(entry.endTime) };
     const updated = {
       ...prev,
@@ -458,7 +600,6 @@ const Timesheets = () => {
     };
     setEntryTimeParts({ ...entryTimeParts, [entryId]: updated });
     const newTime = build12Hour(updated[type].hour, updated[type].minute, updated[type].ampm);
-    const entryIndex = timesheet.entries.findIndex(e => e._id === entryId);
     handleEntryChange(entryId, type === 'start' ? 'startTime' : 'endTime', to24Hour(newTime));
   };
 
@@ -598,64 +739,6 @@ const Timesheets = () => {
             </div>
           </div>
         </div>
-        {/* Submit Button */}
-        {timesheet && !timesheet.isCompleted && (
-          <div>
-            <button
-              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-              onClick={() => setShowSubmitConfirm(true)}
-            >
-              Submit Timesheet
-            </button>
-            {/* Confirmation Popup */}
-            {showSubmitConfirm && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 bg-opacity-40">
-                <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-                  <h2 className="text-lg font-semibold mb-2 text-gray-800">Submit Timesheet?</h2>
-                  <p className="mb-4 text-gray-700">If you submit the timesheet, you <span className='font-semibold text-red-600'>can't edit it</span> anymore. Are you sure you want to submit?</p>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      className="px-4 py-2 rounded bg-gray-200 text-gray-800 hover:bg-gray-300"
-                      onClick={() => setShowSubmitConfirm(false)}
-                      disabled={submitting}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
-                      onClick={async () => {
-                        setSubmitting(true);
-                        try {
-                          const dateStr = selectedDate.toISOString().split('T')[0];
-                          const res = await fetch(`${API_BASE_URL}/api/timesheets/submit`, {
-                            method: 'POST',
-                            headers: { 
-                              'Content-Type': 'application/json',
-                              Authorization: `Bearer ${user.token}` 
-                            },
-                            body: JSON.stringify({ date: dateStr })
-                          });
-                          const data = await res.json();
-                          if (!res.ok) throw new Error(data.message || 'Failed to submit timesheet');
-                          setTimesheet(data.timesheet);
-                          toast.success('Timesheet submitted!');
-                          setShowSubmitConfirm(false);
-                        } catch (error) {
-                          toast.error(error.message);
-                        } finally {
-                          setSubmitting(false);
-                        }
-                      }}
-                      disabled={submitting}
-                    >
-                      {submitting ? 'Submitting...' : 'Confirm'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
         {/* Add Timeslot Button */}
         {timesheet && isEditable(timesheet) && (
           <div>
@@ -667,11 +750,168 @@ const Timesheets = () => {
             </button>
           </div>
         )}
+
         {/* Timeslot Entries */}
         <div className="space-y-4 overflow-x-auto scrollbar-hide">
+          {/* Pending Entries (new timeslots) */}
+          {pendingEntries.map((entry) => {
+            const key = entry._id;
+            const startParts = (entryTimeParts[key] && entryTimeParts[key].start) || split24Hour(entry.startTime);
+            const endParts = (entryTimeParts[key] && entryTimeParts[key].end) || split24Hour(entry.endTime);
+            
+            return (
+              <div key={key} className="bg-green-50 border-2 border-green-200 rounded-lg shadow">
+                <div className="p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2 sm:gap-4">
+                    <div className="flex flex-wrap gap-2 items-center justify-center w-full sm:w-auto">
+                      {/* Editable Start Time */}
+                      <div className="flex gap-1 items-center">
+                        <select
+                          value={startParts.hour}
+                          onChange={e => handleEntryTimePartChange(key, 'start', 'hour', e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-2"
+                        >
+                          {Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0')).map(h => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                        <span>:</span>
+                        <select
+                          value={startParts.minute}
+                          onChange={e => handleEntryTimePartChange(key, 'start', 'minute', e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-2 max-h-32 overflow-y-auto"
+                        >
+                          {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                        <select
+                          value={startParts.ampm}
+                          onChange={e => handleEntryTimePartChange(key, 'start', 'ampm', e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-2"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                      <span>-</span>
+                      {/* Editable End Time */}
+                      <div className="flex gap-1 items-center">
+                        <select
+                          value={endParts.hour}
+                          onChange={e => handleEntryTimePartChange(key, 'end', 'hour', e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-2"
+                        >
+                          {Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0')).map(h => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                        <span>:</span>
+                        <select
+                          value={endParts.minute}
+                          onChange={e => handleEntryTimePartChange(key, 'end', 'minute', e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-2 max-h-32 overflow-y-auto"
+                        >
+                          {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                        <select
+                          value={endParts.ampm}
+                          onChange={e => handleEntryTimePartChange(key, 'end', 'ampm', e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-2"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    {/* Accept/Reject buttons for pending entries */}
+                    <div className="flex gap-2 mt-2 sm:mt-0">
+                      <button
+                        className="bg-green-600 text-white p-2 rounded hover:bg-green-700 flex items-center justify-center"
+                        onClick={() => handleAcceptTimeslot(key, entry)}
+                        title="Accept"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </button>
+                      <button
+                        className="bg-red-600 text-white p-2 rounded hover:bg-red-700 flex items-center justify-center"
+                        onClick={() => handleRejectTimeslot(key, entry)}
+                        title="Reject"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Task Selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Task
+                      </label>
+                      <select
+                        value={entry.task || ''}
+                        onChange={e => handleEntryChange(key, 'task', e.target.value)}
+                        className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select task</option>
+                        <option value="other">Other</option>
+                        {tasks.map(task => (
+                          <option key={task._id} value={task._id}>
+                            {task.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    {/* Work Description */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Description
+                        <span className="text-xs text-gray-500 ml-1">(Shift+Enter for new line)</span>
+                      </label>
+                      <textarea
+                        value={entry.workDescription || ''}
+                        onChange={e => handleEntryChange(key, 'workDescription', e.target.value)}
+                        placeholder="Enter work description"
+                        className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none min-h-[38px] max-h-72"
+                        rows={1}
+                      />
+                    </div>
+                    
+                    {/* Time Spent */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Time Spent
+                      </label>
+                      <div className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded">
+                        {entry.startTime && entry.endTime ? formatTime(getMinutesBetween(entry.startTime, entry.endTime)) : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          
+          {/* Existing Timeslots */}
           {[...(timesheet?.entries || [])]
             .sort((a, b) => {
-              // Sort by start time (earliest to latest)
+              // If we have editing entries, use original order for those entries
+              if (editingEntries.size > 0 && originalEntryOrder.length > 0) {
+                const aEditingIndex = originalEntryOrder.indexOf(a._id);
+                const bEditingIndex = originalEntryOrder.indexOf(b._id);
+                
+                // If both entries are in the original order (being edited), maintain that order
+                if (aEditingIndex !== -1 && bEditingIndex !== -1) {
+                  return aEditingIndex - bEditingIndex;
+                }
+                
+                // If only one is being edited, place it based on whether it was in original order
+                if (aEditingIndex !== -1) return aEditingIndex;
+                if (bEditingIndex !== -1) return bEditingIndex;
+              }
+              
+              // Default sort by start time (earliest to latest)
               if (!a.startTime || !b.startTime) return 0;
               const [aHour, aMin] = a.startTime.split(':').map(Number);
               const [bHour, bMin] = b.startTime.split(':').map(Number);
@@ -693,7 +933,6 @@ const Timesheets = () => {
               taskValue = entry.task;
               // Try to find the display name from available tasks
               const foundTask = tasks.find(t => t._id === entry.task);
-              console.log(foundTask)
               taskDisplayName = foundTask ? foundTask.title : null;
             } else if (
               (entry?.task === 'other' || entry?.manualTaskName === 'Other') && !entry?.task?._id
@@ -704,49 +943,29 @@ const Timesheets = () => {
               taskValue = '';
               taskDisplayName = '';
             }
+            
             const key = entry._id;
             const startParts = (entryTimeParts[key] && entryTimeParts[key].start) || split24Hour(entry.startTime);
             const endParts = (entryTimeParts[key] && entryTimeParts[key].end) || split24Hour(entry.endTime);
-            const isSaving = entry.isNew === true ? false : !entry._id;
             const isLocked = !isEditable(timesheet);
-            const handleTaskChange = async (e) => {
-              const value = e.target.value;
-              if (entry.isNew) {
-                setTimesheet(ts => ({
-                  ...ts,
-                  entries: ts.entries.map(en =>
-                    en._id === entry._id ? { ...en, task: value, isSaving: true } : en
-                  )
-                }));
-                const updatedEntry = { ...entry, task: value };
-                delete updatedEntry.isNew;
-                try {
-                  const saved = await saveEntry({
-                    ...updatedEntry,
-                    startTime: entry.startTime,
-                    endTime: entry.endTime,
-                    workDescription: entry.workDescription
-                  }, true, entry._id);
-                  setTimesheet(ts => ({
-                    ...ts,
-                    entries: ts.entries.map(en =>
-                      en._id === entry._id ? saved : en
-                    )
-                  }));
-                } catch (error) {
-                  setTimesheet(ts => ({
-                    ...ts,
-                    entries: ts.entries.map(en =>
-                      en._id === entry._id ? { ...en, isSaving: false } : en
-                    )
-                  }));
-                }
+            const isEditing = editingEntries.has(key);
+            
+            // Determine background color based on approval status (only for submitted timesheets)
+            let backgroundClass = 'bg-white border-gray-200';
+            if (timesheet?.isCompleted && !isEditing) {
+              if (entry.approvalStatus === 'accepted') {
+                backgroundClass = 'bg-green-50 border-green-200';
+              } else if (entry.approvalStatus === 'rejected') {
+                backgroundClass = 'bg-red-50 border-red-200';
               } else {
-                handleEntryChange(key, 'task', value);
+                backgroundClass = 'bg-white border-gray-200'; // pending
               }
-            };
+            } else if (isEditing) {
+              backgroundClass = 'bg-green-50 border-green-200';
+            }
+            
             return (
-              <div key={key || Math.random()} className="bg-white rounded-lg shadow border-2 border-gray-200">
+              <div key={key || Math.random()} className={`rounded-lg shadow border-2 ${backgroundClass}`}>
                 <div className="p-4 sm:p-6">
                   <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2 sm:gap-4">
                     <div className="flex flex-wrap gap-2 items-center justify-center w-full sm:w-auto">
@@ -754,26 +973,26 @@ const Timesheets = () => {
                       <div className="flex gap-1 items-center">
                         <select
                           value={startParts.hour}
-                          onChange={e => !isSaving && !isLocked && handleEntryTimePartChange(key, 'start', 'hour', e.target.value)}
+                          onChange={e => isEditing && handleEntryTimePartChange(key, 'start', 'hour', e.target.value)}
                           className="border border-gray-300 rounded px-2 py-2"
-                          disabled={isSaving || isLocked}
+                          disabled={!isEditing || isLocked}
                         >
                           {Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0')).map(h => <option key={h} value={h}>{h}</option>)}
                         </select>
                         <span>:</span>
                         <select
                           value={startParts.minute}
-                          onChange={e => !isSaving && !isLocked && handleEntryTimePartChange(key, 'start', 'minute', e.target.value)}
+                          onChange={e => isEditing && handleEntryTimePartChange(key, 'start', 'minute', e.target.value)}
                           className="border border-gray-300 rounded px-2 py-2 max-h-32 overflow-y-auto"
-                          disabled={isSaving || isLocked}
+                          disabled={!isEditing || isLocked}
                         >
                           {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map(m => <option key={m} value={m}>{m}</option>)}
                         </select>
                         <select
                           value={startParts.ampm}
-                          onChange={e => !isSaving && !isLocked && handleEntryTimePartChange(key, 'start', 'ampm', e.target.value)}
+                          onChange={e => isEditing && handleEntryTimePartChange(key, 'start', 'ampm', e.target.value)}
                           className="border border-gray-300 rounded px-2 py-2"
-                          disabled={isSaving || isLocked}
+                          disabled={!isEditing || isLocked}
                         >
                           <option value="AM">AM</option>
                           <option value="PM">PM</option>
@@ -784,55 +1003,95 @@ const Timesheets = () => {
                       <div className="flex gap-1 items-center">
                         <select
                           value={endParts.hour}
-                          onChange={e => !isSaving && !isLocked && handleEntryTimePartChange(key, 'end', 'hour', e.target.value)}
+                          onChange={e => isEditing && handleEntryTimePartChange(key, 'end', 'hour', e.target.value)}
                           className="border border-gray-300 rounded px-2 py-2"
-                          disabled={isSaving || isLocked}
+                          disabled={!isEditing || isLocked}
                         >
                           {Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0')).map(h => <option key={h} value={h}>{h}</option>)}
                         </select>
                         <span>:</span>
                         <select
                           value={endParts.minute}
-                          onChange={e => !isSaving && !isLocked && handleEntryTimePartChange(key, 'end', 'minute', e.target.value)}
+                          onChange={e => isEditing && handleEntryTimePartChange(key, 'end', 'minute', e.target.value)}
                           className="border border-gray-300 rounded px-2 py-2 max-h-32 overflow-y-auto"
-                          disabled={isSaving || isLocked}
+                          disabled={!isEditing || isLocked}
                         >
                           {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map(m => <option key={m} value={m}>{m}</option>)}
                         </select>
                         <select
                           value={endParts.ampm}
-                          onChange={e => !isSaving && !isLocked && handleEntryTimePartChange(key, 'end', 'ampm', e.target.value)}
+                          onChange={e => isEditing && handleEntryTimePartChange(key, 'end', 'ampm', e.target.value)}
                           className="border border-gray-300 rounded px-2 py-2"
-                          disabled={isSaving || isLocked}
+                          disabled={!isEditing || isLocked}
                         >
                           <option value="AM">AM</option>
                           <option value="PM">PM</option>
                         </select>
                       </div>
                     </div>
+                    
                     {!isLocked && (
-                      <button
-                        className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 mt-2 sm:mt-0 sm:ml-4"
-                        onClick={() => handleDeleteEntry(entry._id)}
-                        disabled={isSaving}
-                      >
-                        Delete
-                      </button>
+                      <div className="flex gap-2 mt-2 sm:mt-0">
+                        {isEditing ? (
+                          // Accept/Reject buttons when editing
+                          <>
+                            <button
+                              className="bg-green-600 text-white p-2 rounded hover:bg-green-700 flex items-center justify-center"
+                              onClick={() => handleAcceptTimeslot(key, entry)}
+                              title="Accept Changes"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </button>
+                            <button
+                              className="bg-red-600 text-white p-2 rounded hover:bg-red-700 flex items-center justify-center"
+                              onClick={() => handleRejectTimeslot(key, entry)}
+                              title="Cancel Changes"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </>
+                        ) : (
+                          // Edit/Delete buttons when not editing
+                          <>
+                            <button
+                              className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 flex items-center justify-center"
+                              onClick={() => handleEditTimeslot(key)}
+                              title="Edit"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              className="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 flex items-center justify-center"
+                              onClick={() => handleDeleteEntry(entry._id)}
+                              title="Delete"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
-                  {isSaving && <div className="text-blue-500 text-sm">Saving...</div>}
+                  
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {/* Task Selection */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Task
                       </label>
-                      {/* Always show dropdown for task selection */}
                       <select
                         value={taskValue}
-                        onChange={handleTaskChange}
+                        onChange={e => isEditing && handleEntryChange(key, 'task', e.target.value)}
                         className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        disabled={isSaving || isLocked}
+                        disabled={!isEditing || isLocked}
                       >
                         <option value="">Select task</option>
                         <option value="other">Other</option>
@@ -886,6 +1145,7 @@ const Timesheets = () => {
                         })()}
                       </select>
                     </div>
+                    
                     {/* Work Description */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -900,7 +1160,7 @@ const Timesheets = () => {
                           const ta = e.target;
                           ta.style.height = 'auto';
                           ta.style.height = (ta.scrollHeight) + 'px';
-                          !isSaving && !isLocked && handleEntryChange(key, 'workDescription', e.target.value);
+                          isEditing && handleEntryChange(key, 'workDescription', e.target.value);
                         }}
                         onInput={e => {
                           // Auto-resize on paste etc.
@@ -915,11 +1175,12 @@ const Timesheets = () => {
                         }}
                         placeholder="Enter work description"
                         className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none min-h-[38px] max-h-72"
-                        disabled={isSaving || isLocked}
+                        disabled={!isEditing || isLocked}
                         rows={1}
                         style={{ overflow: 'hidden' }}
                       />
                     </div>
+                    
                     {/* Time Spent */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -935,6 +1196,65 @@ const Timesheets = () => {
             );
           })}
         </div>
+
+        {/* Submit Button - Moved to bottom */}
+        {timesheet && !timesheet.isCompleted && (
+          <div className="mt-8">
+            <button
+              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-lg font-semibold"
+              onClick={() => setShowSubmitConfirm(true)}
+            >
+              Submit Timesheet
+            </button>
+            {/* Confirmation Popup */}
+            {showSubmitConfirm && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 bg-opacity-40">
+                <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+                  <h2 className="text-lg font-semibold mb-2 text-gray-800">Submit Timesheet?</h2>
+                  <p className="mb-4 text-gray-700">If you submit the timesheet, you <span className='font-semibold text-red-600'>can't edit it</span> anymore. Are you sure you want to submit?</p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      className="px-4 py-2 rounded bg-gray-200 text-gray-800 hover:bg-gray-300"
+                      onClick={() => setShowSubmitConfirm(false)}
+                      disabled={submitting}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                      onClick={async () => {
+                        setSubmitting(true);
+                        try {
+                          const dateStr = selectedDate.toISOString().split('T')[0];
+                          const res = await fetch(`${API_BASE_URL}/api/timesheets/submit`, {
+                            method: 'POST',
+                            headers: { 
+                              'Content-Type': 'application/json',
+                              Authorization: `Bearer ${user.token}` 
+                            },
+                            body: JSON.stringify({ date: dateStr })
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.message || 'Failed to submit timesheet');
+                          setTimesheet(data.timesheet);
+                          toast.success('Timesheet submitted!');
+                          setShowSubmitConfirm(false);
+                        } catch (error) {
+                          toast.error(error.message);
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      }}
+                      disabled={submitting}
+                    >
+                      {submitting ? 'Submitting...' : 'Confirm'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

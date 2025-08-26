@@ -1045,8 +1045,7 @@ router.patch('/entry/:entryId/reject', protect, async (req, res) => {
     
     const previousStatus = entry.approvalStatus;
     entry.approvalStatus = 'rejected';
-    // Unsubmit the timesheet so user can edit and resubmit
-    timesheet.isCompleted = false;
+    // Don't modify isCompleted - keep timesheet as submitted
     await timesheet.save();
 
     // Log activity for timesheet entry rejection
@@ -1065,14 +1064,53 @@ router.patch('/entry/:entryId/reject', protect, async (req, res) => {
         timesheetDate: timesheet.date,
         previousStatus,
         newStatus: 'rejected',
-        timesheetUnsubmitted: true
+        timesheetUnsubmitted: false
       },
       severity: 'high',
       targetUserId: timesheet.user._id,
       req
     });
     
-    res.json({ message: 'Entry rejected and timesheet unsubmitted', entry });
+    res.json({ message: 'Entry rejected', entry });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Return a timesheet for editing (set isCompleted to false)
+router.patch('/:timesheetId/return', protect, async (req, res) => {
+  try {
+    const { timesheetId } = req.params;
+    const timesheet = await Timesheet.findById(timesheetId)
+      .populate('user', 'firstName lastName email');
+    
+    if (!timesheet) {
+      return res.status(404).json({ message: 'Timesheet not found' });
+    }
+    
+    // Set isCompleted to false so user can edit
+    timesheet.isCompleted = false;
+    await timesheet.save();
+
+    // Log activity for timesheet return
+    const ActivityLogger = (await import('../utils/activityLogger.js')).default;
+    await ActivityLogger.log({
+      userId: req.user._id,
+      action: 'timesheet_returned',
+      entity: 'Timesheet',
+      entityId: timesheetId,
+      description: `Returned timesheet for editing: ${timesheet.user.firstName} ${timesheet.user.lastName} (${timesheet.date.toISOString().split('T')[0]})`,
+      metadata: {
+        targetUserId: timesheet.user._id,
+        timesheetDate: timesheet.date,
+        returnedForEditing: true
+      },
+      severity: 'medium',
+      targetUserId: timesheet.user._id,
+      req
+    });
+    
+    res.json({ message: 'Timesheet returned for editing', timesheet });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

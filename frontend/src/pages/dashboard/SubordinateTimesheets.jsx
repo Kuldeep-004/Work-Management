@@ -242,6 +242,34 @@ const SubordinateTimesheets = () => {
     }
   };
 
+  const handleReturnTimesheet = async (timesheetId) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/timesheets/${timesheetId}/return`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      if (!res.ok) throw new Error('Failed to return timesheet');
+      
+      // Remove the returned timesheet from the list since it's no longer submitted
+      setTimesheets(prev => prev.filter(ts => ts._id !== timesheetId));
+      setGroupedTimesheets(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(date => {
+          updated[date] = updated[date].filter(ts => ts._id !== timesheetId);
+          // Remove empty dates
+          if (updated[date].length === 0) {
+            delete updated[date];
+          }
+        });
+        return updated;
+      });
+      
+      toast.success('Timesheet returned for editing');
+    } catch (error) {
+      toast.error('Failed to return timesheet');
+    }
+  };
+
   if (!isAuthenticated()) {
     return <div className="p-8 text-center">Please log in to view this page.</div>;
   }
@@ -353,10 +381,18 @@ const SubordinateTimesheets = () => {
                   <div key={timesheet._id} className="p-6">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <span className="text-lg font-medium text-blue-600">
-                            {timesheet.user.firstName?.[0]}{timesheet.user.lastName?.[0]}
-                          </span>
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {timesheet.user.photo?.url ? (
+                            <img 
+                              src={timesheet.user.photo.url} 
+                              alt={`${timesheet.user.firstName} ${timesheet.user.lastName}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-lg font-medium text-blue-600">
+                              {timesheet.user.firstName?.[0]}{timesheet.user.lastName?.[0]}
+                            </span>
+                          )}
                         </div>
                         <div>
                           <h3 className="font-semibold text-gray-900">
@@ -371,8 +407,18 @@ const SubordinateTimesheets = () => {
                       <div className="text-right flex-shrink-0">
                         <p className="text-sm text-gray-600">Total Time</p>
                         <p className="text-xl font-bold text-blue-600">{
-                          formatTime(timesheet.entries.reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0))
+                          formatTime(timesheet.entries
+                            .filter(entry => entry.approvalStatus === 'pending' || entry.approvalStatus === 'accepted')
+                            .reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0)
+                          )
                         }</p>
+                        <button
+                          onClick={() => handleReturnTimesheet(timesheet._id)}
+                          className="mt-2 bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600 text-sm font-medium"
+                          title="Return timesheet for editing"
+                        >
+                          Return
+                        </button>
                       </div>
                     </div>
 

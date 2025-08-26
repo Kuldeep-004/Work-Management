@@ -57,7 +57,10 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
 
   // Optional total for all
   try {
-    const grandTotal = timesheets.reduce((acc, ts) => acc + ts.entries.reduce((s, e) => s + getMinutesBetween(e.startTime, e.endTime), 0), 0);
+    const grandTotal = timesheets.reduce((acc, ts) => 
+      acc + ts.entries
+        .filter(e => e.approvalStatus === 'pending' || e.approvalStatus === 'accepted')
+        .reduce((s, e) => s + getMinutesBetween(e.startTime, e.endTime), 0), 0);
     doc.setFontSize(10);
     doc.setTextColor(60);
     doc.text(`Total (all users): ${formatTimeHM(grandTotal)}`, margin, cursorY);
@@ -93,7 +96,9 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
     if (role) doc.text(`Role: ${role}`, margin + 80, cursorY); // same line to save space
 
     // Total time on right
-    const totalMins = ts.entries.reduce((sum, e) => sum + getMinutesBetween(e.startTime, e.endTime), 0);
+    const totalMins = ts.entries
+      .filter(e => e.approvalStatus === 'pending' || e.approvalStatus === 'accepted')
+      .reduce((sum, e) => sum + getMinutesBetween(e.startTime, e.endTime), 0);
     doc.setFontSize(10);
     doc.setTextColor(20, 80, 180);
     doc.text(`Total: ${formatTimeHM(totalMins)}`, pageWidth - margin, cursorY, { align: 'right' });
