@@ -494,7 +494,7 @@ router.post('/user-tab-state/:tabKey', protect, async (req, res) => {
 // PATCH: Update task order for a tab (flat array, not per-group)
 router.patch('/tabstate/taskOrder', protect, async (req, res) => {
   try {
-    const { tabKey, order, tabId } = req.body;
+    const { tabKey, order, tabId, groupOrder } = req.body;
     validateTabKey(tabKey);
     if (!tabKey || !Array.isArray(order)) {
       return res.status(400).json({ message: 'tabKey and order array are required' });
@@ -505,36 +505,35 @@ router.patch('/tabstate/taskOrder', protect, async (req, res) => {
       return res.status(400).json({ message: 'Tab state must be initialized before updating taskOrder.' });
     }
     if (!userTabState.state) userTabState.state = {};
-    if (tabKey === 'billedTasks' || tabKey === 'unbilledTasks') {
-      userTabState.state.rowOrder = order;
-      // Remove tabs array if it exists
-      if (userTabState.state.tabs) delete userTabState.state.tabs;
-      userTabState.markModified('state.rowOrder');
-    } else {
-      // Ensure tabs array exists
-      if (!Array.isArray(userTabState.state.tabs)) {
-        userTabState.state.tabs = [];
-      }
-      // Find or create tab object
-      let tabObj;
-      if (tabId) {
-        tabObj = userTabState.state.tabs.find(t => t.id == tabId);
-        if (!tabObj) {
-          tabObj = { id: tabId };
-          userTabState.state.tabs.push(tabObj);
-        }
-      } else {
-        if (userTabState.state.tabs.length === 0) {
-          tabObj = { id: 'default' };
-          userTabState.state.tabs.push(tabObj);
-        } else {
-          tabObj = userTabState.state.tabs[0];
-        }
-      }
-      // Store taskOrder as a flat array
-      tabObj.taskOrder = order;
-      userTabState.markModified('state.tabs');
+    
+    // Ensure tabs array exists for all tab types now
+    if (!Array.isArray(userTabState.state.tabs)) {
+      userTabState.state.tabs = [];
     }
+    
+    // Find or create tab object
+    let tabObj;
+    if (tabId) {
+      tabObj = userTabState.state.tabs.find(t => t.id == tabId);
+      if (!tabObj) {
+        tabObj = { id: tabId };
+        userTabState.state.tabs.push(tabObj);
+      }
+    } else {
+      if (userTabState.state.tabs.length === 0) {
+        tabObj = { id: 'default' };
+        userTabState.state.tabs.push(tabObj);
+      } else {
+        tabObj = userTabState.state.tabs[0];
+      }
+    }
+    
+    // Store taskOrder and groupOrder in the tab object
+    tabObj.taskOrder = order;
+    if (groupOrder && Array.isArray(groupOrder)) {
+      tabObj.groupOrder = groupOrder;
+    }
+    userTabState.markModified('state.tabs');
     await userTabState.save();
     res.json({ success: true, state: userTabState.state });
   } catch (err) {
@@ -621,6 +620,8 @@ router.get('/tabstate/taskOrder', protect, async (req, res) => {
     const userId = req.user.id;
     const userTabState = await UserTabState.findOne({ user: userId, tabKey });
     let taskOrder = null;
+    let groupOrder = null;
+    
     if (userTabState?.state?.tabs && Array.isArray(userTabState.state.tabs) && userTabState.state.tabs.length > 0) {
       let tabObj;
       if (tabId) {
@@ -631,14 +632,100 @@ router.get('/tabstate/taskOrder', protect, async (req, res) => {
       }
       if (tabObj && Array.isArray(tabObj.taskOrder)) {
         taskOrder = tabObj.taskOrder;
-      } else {
-        taskOrder = null;
+      }
+      if (tabObj && Array.isArray(tabObj.groupOrder)) {
+        groupOrder = tabObj.groupOrder;
+      }
+    } else if (userTabState?.state?.rowOrder) {
+      // Legacy support for old rowOrder structure
+      taskOrder = userTabState.state.rowOrder;
+      if (userTabState?.state?.groupOrder) {
+        groupOrder = userTabState.state.groupOrder;
       }
     }
-    res.json({ taskOrder });
+    res.json({ taskOrder, groupOrder });
   } catch (err) {
     res.status(500).json({ message: err.message || 'Failed to get task order' });
   }
 });
+
+// PATCH: Update group order for a tab
+router.patch('/tabstate/groupOrder', protect, async (req, res) => {
+  try {
+    const { tabKey, groupOrder, tabId } = req.body;
+    validateTabKey(tabKey);
+    if (!tabKey || !Array.isArray(groupOrder)) {
+      return res.status(400).json({ message: 'tabKey and groupOrder array are required' });
+    }
+    const userId = req.user.id;
+    let userTabState = await UserTabState.findOne({ user: userId, tabKey });
+    if (!userTabState) {
+      return res.status(400).json({ message: 'Tab state must be initialized before updating groupOrder.' });
+    }
+    if (!userTabState.state) userTabState.state = {};
+    
+    // Ensure tabs array exists for all tab types now
+    if (!Array.isArray(userTabState.state.tabs)) {
+      userTabState.state.tabs = [];
+    }
+    
+    // Find or create tab object
+    let tabObj;
+    if (tabId) {
+      tabObj = userTabState.state.tabs.find(t => t.id == tabId);
+      if (!tabObj) {
+        tabObj = { id: tabId };
+        userTabState.state.tabs.push(tabObj);
+      }
+    } else {
+      if (userTabState.state.tabs.length === 0) {
+        tabObj = { id: 'default' };
+        userTabState.state.tabs.push(tabObj);
+      } else {
+        tabObj = userTabState.state.tabs[0];
+      }
+    }
+    
+    // Store groupOrder in the tab object
+    tabObj.groupOrder = groupOrder;
+    userTabState.markModified('state.tabs');
+    await userTabState.save();
+    res.json({ success: true, groupOrder: groupOrder });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to update group order' });
+  }
+});
+
+// GET: Get group order for a tab
+router.get('/tabstate/groupOrder', protect, async (req, res) => {
+  try {
+    const { tabKey, tabId } = req.query;
+    if (!tabKey) return res.status(400).json({ message: 'tabKey is required' });
+    validateTabKey(tabKey);
+    const userId = req.user.id;
+    const userTabState = await UserTabState.findOne({ user: userId, tabKey });
+    let groupOrder = null;
+    
+    if (userTabState?.state?.tabs && Array.isArray(userTabState.state.tabs) && userTabState.state.tabs.length > 0) {
+      let tabObj;
+      if (tabId) {
+        tabObj = userTabState.state.tabs.find(t => t.id == tabId);
+      }
+      if (!tabObj) {
+        tabObj = userTabState.state.tabs[0];
+      }
+      if (tabObj && Array.isArray(tabObj.groupOrder)) {
+        groupOrder = tabObj.groupOrder;
+      }
+    } else if (userTabState?.state?.groupOrder) {
+      // Legacy support for old groupOrder structure
+      groupOrder = userTabState.state.groupOrder;
+    }
+    res.json({ groupOrder });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to get group order' });
+  }
+});
+
 
 export default router; 

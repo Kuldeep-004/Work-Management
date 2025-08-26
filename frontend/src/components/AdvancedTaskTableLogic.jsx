@@ -415,6 +415,8 @@ export const useAdvancedTaskTableLogic = (props) => {
     const [dragOverGroupKey, setDragOverGroupKey] = useState(null);
     const [orderedTasks, setOrderedTasks] = useState(tasks);
     const [orderLoaded, setOrderLoaded] = useState(false);
+    const [groupOrder, setGroupOrder] = useState([]);
+    const [groupOrderLoaded, setGroupOrderLoaded] = useState(false);
   
     // Add a ref to track the last set of task IDs and grouping
     const lastTaskIdsRef = useRef([]);
@@ -1360,32 +1362,66 @@ export const useAdvancedTaskTableLogic = (props) => {
           setOrderLoaded(false);
           try {
             if (!tabKey || !tabId) return;
-            const res = await fetch(`${API_BASE_URL}/api/users/tabstate/taskOrder?tabKey=${tabKey}&tabId=${tabId}`, {
-              headers: { Authorization: `Bearer ${user.token}` },
-            });
-            if (res.ok) {
-              const data = await res.json();
-              let orderArr = data.taskOrder;
-              if (orderArr && Array.isArray(orderArr)) {
-                // Use a Set for fast lookup
-                const idToTask = Object.fromEntries(tasks.map(t => [t._id, t]));
-                const orderedSet = new Set(orderArr);
-                let newOrderedTasks = orderArr.map(id => idToTask[id]).filter(Boolean);
-                for (const t of tasks) {
-                  if (!orderedSet.has(t._id)) newOrderedTasks.push(t);
-                }
-                // Only update if order actually changed
-                if (isMounted && (newOrderedTasks.length !== orderedTasks.length || newOrderedTasks.some((t, i) => t !== orderedTasks[i]))) {
-                  setOrderedTasks(newOrderedTasks);
-                }
-              } else {
-                if (isMounted && tasks !== orderedTasks) setOrderedTasks(tasks);
+            
+            let orderArr = null;
+            let groupOrderArr = null;
+            
+            // Use different API for billedTasks and unbilledTasks (they use user-tab-state)
+            if (tabKey === 'billedTasks' || tabKey === 'unbilledTasks') {
+              const res = await fetch(`${API_BASE_URL}/api/users/user-tab-state/${tabKey}`, {
+                headers: { Authorization: `Bearer ${user.token}` },
+              });
+              if (res.ok) {
+                const data = await res.json();
+                orderArr = data.rowOrder;
+                groupOrderArr = data.groupOrder;
+              }
+            } else {
+              // Use tabstate API for other pages (they use tabs structure)
+              const res = await fetch(`${API_BASE_URL}/api/users/tabstate/taskOrder?tabKey=${tabKey}&tabId=${tabId}`, {
+                headers: { Authorization: `Bearer ${user.token}` },
+              });
+              if (res.ok) {
+                const data = await res.json();
+                orderArr = data.taskOrder;
+                groupOrderArr = data.groupOrder;
+              }
+            }
+            
+            if (orderArr && Array.isArray(orderArr)) {
+              // Use a Set for fast lookup
+              const idToTask = Object.fromEntries(tasks.map(t => [t._id, t]));
+              const orderedSet = new Set(orderArr);
+              let newOrderedTasks = orderArr.map(id => idToTask[id]).filter(Boolean);
+              for (const t of tasks) {
+                if (!orderedSet.has(t._id)) newOrderedTasks.push(t);
+              }
+              // Only update if order actually changed
+              if (isMounted && (newOrderedTasks.length !== orderedTasks.length || newOrderedTasks.some((t, i) => t !== orderedTasks[i]))) {
+                setOrderedTasks(newOrderedTasks);
               }
             } else {
               if (isMounted && tasks !== orderedTasks) setOrderedTasks(tasks);
             }
+            
+            // Load group order
+            if (groupOrderArr && Array.isArray(groupOrderArr)) {
+              if (isMounted) {
+                setGroupOrder(groupOrderArr);
+                setGroupOrderLoaded(true);
+              }
+            } else {
+              if (isMounted) {
+                setGroupOrder([]);
+                setGroupOrderLoaded(true);
+              }
+            }
           } catch (err) {
             if (isMounted && tasks !== orderedTasks) setOrderedTasks(tasks);
+            if (isMounted) {
+              setGroupOrder([]);
+              setGroupOrderLoaded(true);
+            }
           } finally {
             if (isMounted) setOrderLoaded(true);
             lastTaskIdsRef.current = tasks.map(t => t._id);
@@ -1398,17 +1434,90 @@ export const useAdvancedTaskTableLogic = (props) => {
     }, [tasks, shouldGroup, groupField, tabKey, tabId]);
   
     // Save order to backend
-    const saveOrder = async (newOrder) => {
+    const saveOrder = async (newOrder, newGroupOrder = null) => {
       try {
-        if (!tabKey || !tabId) return;
-        await fetch(`${API_BASE_URL}/api/users/tabstate/taskOrder`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
-          body: JSON.stringify({ tabKey, order: newOrder, tabId }),
-        });
+        if (!tabKey) return;
+        
+        if (tabKey === 'billedTasks' || tabKey === 'unbilledTasks') {
+          // For billedTasks/unbilledTasks, get current state and update it
+          const getRes = await fetch(`${API_BASE_URL}/api/users/user-tab-state/${tabKey}`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          });
+          
+          let currentState = {};
+          if (getRes.ok) {
+            currentState = await getRes.json();
+          }
+          
+          // Update the state with new order data
+          const updatedState = {
+            ...currentState,
+            rowOrder: newOrder
+          };
+          
+          if (newGroupOrder) {
+            updatedState.groupOrder = newGroupOrder;
+          }
+          
+          // Save the updated state
+          await fetch(`${API_BASE_URL}/api/users/user-tab-state/${tabKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+            body: JSON.stringify({ state: updatedState }),
+          });
+        } else {
+          // Use tabstate API for other pages
+          if (!tabId) return;
+          await fetch(`${API_BASE_URL}/api/users/tabstate/taskOrder`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+            body: JSON.stringify({ tabKey, order: newOrder, tabId, groupOrder: newGroupOrder }),
+          });
+        }
         // No refetchTasks here for smooth UI
       } catch (err) {
         console.error('Error saving task order:', err);
+      }
+    };
+
+    const saveGroupOrder = async (newGroupOrder) => {
+      try {
+        if (!tabKey) return;
+        
+        if (tabKey === 'billedTasks' || tabKey === 'unbilledTasks') {
+          // For billedTasks/unbilledTasks, get current state and update it
+          const getRes = await fetch(`${API_BASE_URL}/api/users/user-tab-state/${tabKey}`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          });
+          
+          let currentState = {};
+          if (getRes.ok) {
+            currentState = await getRes.json();
+          }
+          
+          // Update the state with new group order
+          const updatedState = {
+            ...currentState,
+            groupOrder: newGroupOrder
+          };
+          
+          // Save the updated state
+          await fetch(`${API_BASE_URL}/api/users/user-tab-state/${tabKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+            body: JSON.stringify({ state: updatedState }),
+          });
+        } else {
+          // Use tabstate API for other pages
+          if (!tabId) return;
+          await fetch(`${API_BASE_URL}/api/users/tabstate/groupOrder`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+            body: JSON.stringify({ tabKey, groupOrder: newGroupOrder, tabId }),
+          });
+        }
+      } catch (err) {
+        console.error('Error saving group order:', err);
       }
     };
   
@@ -1536,8 +1645,11 @@ export const useAdvancedTaskTableLogic = (props) => {
       // Update the task order
       setOrderedTasks(newOrderedTasks);
       
-      // Save the new order to backend
-      saveOrder(newOrderedTasks.map(t => t._id));
+      // Update the group order state
+      setGroupOrder(newGroupOrder);
+      
+      // Save the new order and group order to backend
+      saveOrder(newOrderedTasks.map(t => t._id), newGroupOrder);
     };
     
     // Add this useEffect to ensure orderedTasks are updated with latest task data while preserving order
@@ -1577,6 +1689,27 @@ export const useAdvancedTaskTableLogic = (props) => {
         const gk = getGroupKey(t);
         if (!renderGroupedTasks[gk]) renderGroupedTasks[gk] = [];
         renderGroupedTasks[gk].push(t);
+      }
+
+      // Apply custom group order if available
+      if (groupOrderLoaded && groupOrder.length > 0) {
+        const orderedGroupedTasks = {};
+        
+        // First, add groups in the saved order
+        groupOrder.forEach(groupKey => {
+          if (renderGroupedTasks[groupKey]) {
+            orderedGroupedTasks[groupKey] = renderGroupedTasks[groupKey];
+          }
+        });
+        
+        // Then add any new groups that aren't in the saved order (newly created groups)
+        Object.entries(renderGroupedTasks).forEach(([groupKey, tasks]) => {
+          if (!orderedGroupedTasks[groupKey]) {
+            orderedGroupedTasks[groupKey] = tasks;
+          }
+        });
+        
+        renderGroupedTasks = orderedGroupedTasks;
       }
     }
 
@@ -1774,6 +1907,7 @@ export const useAdvancedTaskTableLogic = (props) => {
     handleRowDragEnd,
     handleGroupDrop,
     saveOrder,
+    saveGroupOrder,
     getAssignedVerifierIds,
     getGroupKey,
     loadMoreTasks,
@@ -1785,6 +1919,8 @@ export const useAdvancedTaskTableLogic = (props) => {
     groupedTasks,
     renderGroupedTasks,
     user,
+    groupOrder,
+    groupOrderLoaded,
     
     // Loading state for grouped mode
     isGroupedModeLoading: shouldGroup && !orderLoaded

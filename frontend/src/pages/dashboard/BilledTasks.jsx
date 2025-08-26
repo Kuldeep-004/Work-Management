@@ -105,33 +105,41 @@ const BilledTasks = () => {
     return orderedTasks;
   };
 
+
+  // Fetch both tasks and rowOrder together to avoid flicker
   useEffect(() => {
-    const fetchTasks = async () => {
+    if (!user?.token) return;
+    let isMounted = true;
+    (async () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(`${API_BASE_URL}/api/tasks/all`, {
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
+        // Fetch both tab state and tasks in parallel
+        const [state, response] = await Promise.all([
+          fetchTabState('billedTasks', user.token),
+          fetch(`${API_BASE_URL}/api/tasks/all`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          })
+        ]);
         if (!response.ok) throw new Error('Failed to fetch tasks');
         let data = await response.json();
         data = data.filter(task => task.billed === false && task.status !== 'completed');
-        
-        // Apply row order if available
-        if (rowOrder.length > 0) {
-          data = applyRowOrder(data, rowOrder);
+        let order = Array.isArray(state?.rowOrder) ? state.rowOrder : [];
+        if (order.length > 0) {
+          data = applyRowOrder(data, order);
         }
-        
-        setTasks(data);
+        if (isMounted) setTasks(data);
       } catch (err) {
-        setError(err.message);
-        setTasks([]);
+        if (isMounted) {
+          setError(err.message);
+          setTasks([]);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
-    };
-    if (user && user.token) fetchTasks();
-  }, [user, rowOrder]);
+    })();
+    return () => { isMounted = false; };
+  }, [user, tableStateLoaded]);
 
   if (!isAuthenticated() || user.role !== 'Admin') return null;
   if (!tableStateLoaded || !visibleColumns || !columnOrder || !columnWidths) {

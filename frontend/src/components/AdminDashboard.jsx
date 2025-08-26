@@ -1091,13 +1091,35 @@ const AdminDashboard = () => {
         tableData.push(row);
       });
     }
+    // Calculate available width for table
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const marginLeft = 24;
+    const marginRight = 24;
+    const availableWidth = pageWidth - marginLeft - marginRight;
+    // Calculate widths for columns
+    const noColWidth = 40;
+    let colWidths = selectedColumnDefs.map(col => col.defaultWidth || 120);
+    let totalWidth = noColWidth + colWidths.reduce((a, b) => a + b, 0);
+    // If only one data column and there is extra space, expand it to fill
+    if (colWidths.length === 1 && totalWidth < availableWidth) {
+      colWidths[0] = availableWidth - noColWidth;
+      totalWidth = noColWidth + colWidths[0];
+    }
+    // If multiple columns and totalWidth < availableWidth, expand last column
+    if (colWidths.length > 1 && totalWidth < availableWidth) {
+      colWidths[colWidths.length - 1] += (availableWidth - totalWidth);
+      totalWidth = availableWidth;
+    }
     doc.autoTable({
       head: [headers],
       body: tableData,
       theme: 'striped',
-      margin: { left: 24, right: 24, top: 40, bottom: 24 },
+      margin: { left: marginLeft, right: marginRight, top: 40, bottom: 24 },
       tableWidth: 'auto',
-      columnStyles: Object.fromEntries(selectedColumnDefs.map((col, idx) => [idx + 1, { cellWidth: col.defaultWidth || 120 }])),
+      columnStyles: Object.fromEntries([
+        [0, { cellWidth: noColWidth }],
+        ...colWidths.map((w, idx) => [idx + 1, { cellWidth: w }])
+      ]),
       styles: {
         fontSize: fontSize,
         font: fontFamily,

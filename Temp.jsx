@@ -1,15 +1,31 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import AutomationTask from './AutomationTask';
+import AutomationPopup from './AutomationPopup';
+import AutomationsModal from './AutomationsModal';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import defaultProfile from '../assets/avatar.jpg';
+import {
+  ChartBarIcon,
+  UserGroupIcon,
+  ClockIcon,
+  ExclamationCircleIcon,
+  PaperClipIcon,
+  ChatBubbleLeftIcon,
+  AdjustmentsHorizontalIcon,
+  PlusIcon,
+} from '@heroicons/react/24/outline';
 import FileUpload from './FileUpload';
 import FileList from './FileList';
 import TaskComments from './TaskComments';
-import VerificationRemarksModal from './VerificationRemarksModal';
-import SearchableStatusDropdown from './SearchableStatusDropdown';
-import { API_BASE_URL } from '../apiConfig';
-import ReactDOM from 'react-dom';
-import React from 'react';
+import defaultProfile from '../assets/avatar.jpg';
+import FilterPopup from './FilterPopup';
+import EnhancedPDFColumnSelector from './EnhancedPDFColumnSelector';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { API_BASE_URL, fetchTabState, saveTabState } from '../apiConfig';
+import AdvancedTaskTable from './AdvancedTaskTable';
+import CreateTask from './CreateTask';
+import TabBar from './TabBar';
 
 function formatDate(date) {
   if (!date) return 'NA';
@@ -31,7 +47,7 @@ function formatDateTime(date) {
   });
 }
 
-const BASE_COLUMNS = [
+const ALL_COLUMNS = [
   { id: 'title', label: 'Title', defaultWidth: 256 },
   { id: 'description', label: 'Status', defaultWidth: 180 },
   { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
@@ -51,117 +67,121 @@ const BASE_COLUMNS = [
   { id: 'thirdVerificationAssignedTo', label: 'Third Verifier', defaultWidth: 150 },
   { id: 'fourthVerificationAssignedTo', label: 'Fourth Verifier', defaultWidth: 150 },
   { id: 'fifthVerificationAssignedTo', label: 'Fifth Verifier', defaultWidth: 150 },
-  { id: 'guides', label: 'Guide', defaultWidth: 200 },
+  { id: 'guides', label: 'Guide', defaultWidth: 150 },
   { id: 'files', label: 'Files', defaultWidth: 120 },
   { id: 'comments', label: 'Comments', defaultWidth: 120 },
 ];
 
-// Add verification column only for receivedVerification tab
-const getColumnsForTaskType = (taskType) => {
-  const columns = [...BASE_COLUMNS];
+// 1. Add columnOrder to DEFAULT_TAB
+const DEFAULT_TAB = (customColumns = []) => {
+  const baseColumns = ALL_COLUMNS.map(col => col.id);
+  const customCols = customColumns.map(col => `custom_${col.name}`);
+  const allColumns = [...baseColumns, ...customCols];
   
-  if (taskType === 'receivedVerification') {
-    // Insert verification column after priority
-    const priorityIndex = columns.findIndex(col => col.id === 'priority');
-    columns.splice(priorityIndex + 1, 0, { id: 'verification', label: 'Verifications', defaultWidth: 130 });
-  }
-  
-  return columns;
+  return {
+    id: String(Date.now()),
+    title: 'Tab 1',
+    filters: [],
+    sortBy: 'createdAt',
+    sortOrder: 'desc',
+    searchTerm: '',
+    visibleColumns: allColumns,
+    columnWidths: Object.fromEntries([
+      ...ALL_COLUMNS.map(col => [col.id, col.defaultWidth]),
+      ...customColumns.map(col => [`custom_${col.name}`, 150])
+    ]),
+    columnOrder: allColumns,
+  };
 };
 
-const PRIORITY_OPTIONS = [
-  { value: 'urgent', label: 'Urgent' },
-  { value: 'today', label: 'Today' },
-  { value: 'lessThan3Days', label: '< 3 days' },
-  { value: 'thisWeek', label: 'This week' },
-  { value: 'thisMonth', label: 'This month' },
-  { value: 'regular', label: 'Regular' },
-  { value: 'filed', label: 'Filed' },
-  { value: 'dailyWorksOffice', label: 'Daily works office' },
-  { value: 'monthlyWorks', label: 'Monthly works' },
-];
-
-const VERIFICATION_OPTIONS = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'rejected', label: 'Return' },
-  { value: 'accepted', label: 'Accepted' },
-  { value: 'next verification', label: 'Next Verification' },
-];
-
-const STATUS_OPTIONS = [
-  { value: 'Yet to Start', label: 'Yet to Start' },
-  { value: 'In Progress', label: 'In Progress' },
-  { value: 'Completed', label: 'Completed' },
-];
-
-// Add at the top, after other useRef/useState:
-const DRAG_ROW_CLASS = 'drag-row-highlight';
-
-const AdvancedTaskTable = ({ 
-  tasks, 
-  viewType, 
-  taskType, 
-  showControls = true,
-  onTaskUpdate,
-  onTaskDelete,
-  onStatusChange,
-  onVerificationStatusChange,
-  shouldDisableActions,
-  shouldDisableFileActions,
-  taskHours = [],
-  visibleColumns,
-  setVisibleColumns,
-  columnWidths,
-  setColumnWidths,
-  columnOrder,
-  setColumnOrder,
-  storageKeyPrefix = 'advancedtasktable',
-  users = [],
-  currentUser = null,
-  refetchTasks,
-  onEditTask,
-  sortBy,
-  tabKey = 'defaultTabKey',
-  tabId,
-  allColumns, // Accept allColumns prop
-  highlightedTaskId, // Add highlighted task ID prop
-  // Bulk selection props
-  enableBulkSelection = false,
-  selectedTasks = [],
-  onTaskSelect,
-  isAllSelected = false,
-  onSelectAll,
-}) => {
+const AdminDashboard = () => {
   const { user } = useAuth();
-  const [prevColumnOrder, setPrevColumnOrder] = useState([]);
-  const isMounted = useRef(true);
+  // Helper to get saved columns for the user
+  // 2. Remove getSavedVisibleColumns and all per-user localStorage for columns/widths
+  // 3. Update tabs state to include columnWidths per tab
+  const [tabs, setTabs] = useState([]);
+  const [activeTabId, setActiveTabId] = useState(null);
+  const [tabsLoaded, setTabsLoaded] = useState(false);
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [hoveredTask, setHoveredTask] = useState(null);
+  const [selectedTask, setSelectedTask] = useState(null);
   
-  // State for dynamic priorities
-  const [dynamicPriorities, setDynamicPriorities] = useState([]);
-  const [prioritiesLoaded, setPrioritiesLoaded] = useState(false);
-
-  // State for dynamic task statuses
-  const [dynamicTaskStatuses, setDynamicTaskStatuses] = useState([]);
-  const [taskStatusesLoaded, setTaskStatusesLoaded] = useState(false);
-
-  // State for custom columns
+  // Custom columns state
   const [customColumns, setCustomColumns] = useState([]);
   const [customColumnsLoaded, setCustomColumnsLoaded] = useState(false);
-  
-  // State for No column dropdown functionality
-  const [showDeleteDropdown, setShowDeleteDropdown] = useState(null);
-  const [deleteDropdownPosition, setDeleteDropdownPosition] = useState({ x: 0, y: 0 });
-  const deleteDropdownRef = useRef(null);
-  // State for custom delete confirmation modal
-  const [deleteConfirmTask, setDeleteConfirmTask] = useState(null);
-  
-  // Pagination state for infinite scroll
-  const [loadedTasksCount, setLoadedTasksCount] = useState(25);
-  const TASKS_PER_BATCH = 25;
-  
-  // Get columns based on task type, or use provided allColumns, plus custom columns
-  const getExtendedColumns = () => {
-    const baseColumns = allColumns || getColumnsForTaskType(taskType);
+  const [showFileUpload, setShowFileUpload] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [isFilterPopupOpen, setIsFilterPopupOpen] = useState(false);
+  const filterPopupRef = useRef(null);
+  const [users, setUsers] = useState([]);
+  const [clientNames, setClientNames] = useState([]);
+  const [clientGroups, setClientGroups] = useState([]);
+  const [workTypes, setWorkTypes] = useState([]);
+  const [priorities, setPriorities] = useState([]);
+  const [taskHours, setTaskHours] = useState([]);
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const columnsDropdownRef = useRef(null);
+  const groupByDropdownRef = useRef(null);
+  const tableRef = useRef(null);
+  const [showPDFColumnSelector, setShowPDFColumnSelector] = useState(false);
+  const [editingDescriptionTaskId, setEditingDescriptionTaskId] = useState(null);
+  const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editTask, setEditTask] = useState(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [automationModalOpen, setAutomationModalOpen] = useState(false);
+  const [showAutomationsModal, setShowAutomationsModal] = useState(false);
+  const [selectedAutomation, setSelectedAutomation] = useState(null);
+  const [automationTasks, setAutomationTasks] = useState([]);
+  const [showAddAutomationTask, setShowAddAutomationTask] = useState(false);
+  const [templateSearchTerm, setTemplateSearchTerm] = useState('');
+  // Template editing state
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [editTemplateModalOpen, setEditTemplateModalOpen] = useState(false);
+  const [editingTemplateIndex, setEditingTemplateIndex] = useState(null);
+  // Bulk selection state
+  const [selectedTasks, setSelectedTasks] = useState([]);
+  const [isAllSelected, setIsAllSelected] = useState(false);
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [showCheckboxes, setShowCheckboxes] = useState(false);
+  // Handler for Automation submit
+  const handleAutomationSubmit = (data) => {
+    setAutomationModalOpen(false);
+  };
+
+  // Fetch tasks for selected automation
+  useEffect(() => {
+    if (!selectedAutomation || !user?.token) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/automations/${selectedAutomation._id}/tasks`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        const data = await res.json();
+        setAutomationTasks(Array.isArray(data) ? data : []);
+      } catch {
+        setAutomationTasks([]);
+      }
+    })();
+  }, [selectedAutomation, user, API_BASE_URL]);
+  // 8. Remove columnWidths, columnOrder, setColumnWidths, setColumnOrder from top-level state (move to per-tab)
+  // const [columnWidths, setColumnWidths] = useState({});
+  // const [columnOrder, setColumnOrder] = useState(() => ALL_COLUMNS.map(col => col.id));
+  // Add local state for filter popup
+  const [filterDraft, setFilterDraft] = useState([]);
+  const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
+
+  // Get active tab object - memoized
+  const activeTabObj = useMemo(() => {
+    return tabs.find(tab => tab.id === activeTabId) || tabs[0] || DEFAULT_TAB(customColumnsLoaded ? customColumns : []);
+  }, [tabs, activeTabId, customColumnsLoaded, customColumns]);
+
+  // Get extended columns including custom columns - memoized
+  const extendedColumns = useMemo(() => {
+    const baseColumns = [...ALL_COLUMNS];
     
     if (!customColumnsLoaded || customColumns.length === 0) {
       return baseColumns;
@@ -177,71 +197,126 @@ const AdvancedTaskTable = ({
     }));
 
     return [...baseColumns, ...customCols];
+  }, [customColumnsLoaded, customColumns]);
+
+  // 6. Update updateActiveTab to allow patching visibleColumns and columnWidths
+  const updateActiveTab = useCallback((patch) => {
+    setTabs(tabs.map(tab => {
+      if (tab.id !== activeTabId) return tab;
+      let newTab = { ...tab, ...patch };
+      // If grouping by 'priority', always reset groupOrder to fixed order
+      if (patch.groupBy === 'priority') {
+        // Build fixed group order: default priorities first, then custom
+        const defaultPriorityNames = [
+          'urgent',
+          'today',
+          'lessThan3Days',
+          'thisWeek',
+          'thisMonth',
+          'regular',
+          'filed',
+          'dailyWorksOffice',
+          'monthlyWorks'
+        ];
+        let groupOrder = [...defaultPriorityNames];
+        // Add custom priorities (not in default list) at the end
+        priorities
+          .filter(p => !defaultPriorityNames.includes(p.name))
+          .forEach(priority => {
+            groupOrder.push(priority.name);
+          });
+        newTab.groupOrder = groupOrder;
+      }
+      if (patch.visibleColumns) {
+        // Remove hidden columns from order, add new visible columns at the end
+        const currentOrder = newTab.columnOrder || ALL_COLUMNS.map(col => col.id);
+        const newOrder = currentOrder.filter(colId => patch.visibleColumns.includes(colId));
+        patch.visibleColumns.forEach(colId => {
+          if (!newOrder.includes(colId)) newOrder.push(colId);
+        });
+        newTab.columnOrder = newOrder;
+      }
+      return newTab;
+    }));
+  }, [tabs, activeTabId, priorities]);
+
+  // When opening the filter popup, copy the current tab's filters to the draft
+  const openFilterPopup = useCallback(() => {
+    setFilterDraft([...activeTabObj.filters]);
+    setIsFilterPopupOpen(true);
+  }, [activeTabObj.filters]);
+
+  // When saving filters, update the tab's filters and close the popup
+  const saveFilters = useCallback(() => {
+    updateActiveTab({ filters: filterDraft });
+    setIsFilterPopupOpen(false);
+  }, [filterDraft, updateActiveTab]);
+
+  // Tab actions
+  const addTab = async () => {
+    const newId = String(Date.now());
+    const newTabs = [...tabs, { ...DEFAULT_TAB(customColumns), id: newId, title: `Tab ${tabs.length + 1}` }];
+    setTabs(newTabs);
+    setActiveTabId(newId);
+
+    // Sync with backend
+    try {
+      await fetch(`${API_BASE_URL}/api/users/user-tab-state/adminDashboard`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ state: { tabs: newTabs, activeTabId: newId } }),
+      });
+    } catch (err) {
+      // Optionally handle error
+    }
+  };
+  const closeTab = (id) => {
+    let idx = tabs.findIndex(tab => tab.id === id);
+    if (tabs.length === 1) return; // Don't close last tab
+    const newTabs = tabs.filter(tab => tab.id !== id);
+    setTabs(newTabs);
+    if (activeTabId === id) {
+      setActiveTabId(newTabs[Math.max(0, idx - 1)].id);
+    }
+  };
+  const renameTab = (id, newTitle) => {
+    setTabs(tabs.map(tab => tab.id === id ? { ...tab, title: newTitle } : tab));
   };
 
-  // Memoized ALL_COLUMNS that updates when custom columns change
-  const ALL_COLUMNS = useMemo(() => {
-    return getExtendedColumns();
-  }, [allColumns, taskType, customColumns, customColumnsLoaded]);
+  const reorderTabs = (newTabsOrder) => {
+    setTabs(newTabsOrder);
+  };
 
-  // Cleanup on unmount
+  // Fetch tabs and activeTabId from backend on mount
   useEffect(() => {
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
-  
-
-  // Fetch dynamic priorities
-  useEffect(() => {
-    const fetchPriorities = async () => {
-      if (!user?.token) return;
-      
+    if (!user?.token) return;
+    let isMounted = true;
+    (async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/priorities`, {
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
-        if (response.ok) {
-          const priorities = await response.json();
-          setDynamicPriorities(priorities);
+        const tabStates = await fetchTabState('adminDashboard', user.token);
+        if (isMounted && tabStates && Array.isArray(tabStates.tabs) && tabStates.tabs.length > 0) {
+          setTabs(tabStates.tabs);
+          setActiveTabId(tabStates.activeTabId);
+        } else if (isMounted) {
+          const def = { ...DEFAULT_TAB(customColumns) };
+          setTabs([def]);
+          setActiveTabId(def.id);
         }
-      } catch (error) {
-        console.error('Error fetching priorities:', error);
-        // Fallback to static priorities if fetch fails
-        setDynamicPriorities([]);
-      } finally {
-        setPrioritiesLoaded(true);
-      }
-    };
-
-    fetchPriorities();
-  }, [user?.token]);
-
-  // Fetch dynamic task statuses
-  useEffect(() => {
-    const fetchTaskStatuses = async () => {
-      if (!user?.token) return;
-      
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/task-statuses`, {
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
-        if (response.ok) {
-          const statuses = await response.json();
-          setDynamicTaskStatuses(statuses);
+      } catch {
+        if (isMounted) {
+          const def = { ...DEFAULT_TAB(customColumns) };
+          setTabs([def]);
+          setActiveTabId(def.id);
         }
-      } catch (error) {
-        console.error('Error fetching task statuses:', error);
-        // Fallback to static status options if fetch fails
-        setDynamicTaskStatuses(STATUS_OPTIONS);
       } finally {
-        setTaskStatusesLoaded(true);
+        if (isMounted) setTabsLoaded(true);
       }
-    };
-
-    fetchTaskStatuses();
-  }, [user?.token]);
+    })();
+    return () => { isMounted = false; };
+  }, [user]);
 
   // Fetch custom columns
   useEffect(() => {
@@ -267,180 +342,333 @@ const AdvancedTaskTable = ({
     fetchCustomColumns();
   }, [user?.token]);
 
-  // Get current priority options (dynamic + static fallback)
-  const getCurrentPriorityOptions = () => {
-    if (!prioritiesLoaded) {
-      return PRIORITY_OPTIONS; // Use static options while loading
-    }
-    
-    if (dynamicPriorities.length > 0) {
-      return dynamicPriorities.map(p => ({
-        value: p.name,
-        label: p.name.charAt(0).toUpperCase() + p.name.slice(1).replace(/([A-Z])/g, ' $1')
-      }));
-    }
-    
-    return PRIORITY_OPTIONS; // Fallback to static if no dynamic priorities
-  };
-
-  // Drag and drop state
-  const [draggedColumn, setDraggedColumn] = useState(null);
-  const [dragOverColumn, setDragOverColumn] = useState(null);
-  const [isResizing, setIsResizing] = useState(false);
-  const [resizingColumn, setResizingColumn] = useState(null);
-  const [resizeStartX, setResizeStartX] = useState(0);
-  const [resizeStartWidth, setResizeStartWidth] = useState(0);
-  
-  // Group drag and drop state
-  const [draggedGroup, setDraggedGroup] = useState(null);
-  const [dragOverGroup, setDragOverGroup] = useState(null);
-
-  // Use refs to track resizing state for event handlers
-  const isResizingRef = useRef(false);
-  const resizingColumnRef = useRef(null);
-  const resizeStartXRef = useRef(0);
-  const resizeStartWidthRef = useRef(0);
-
-  const tableRef = useRef(null);
-
-  // Modal state
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [showFileUpload, setShowFileUpload] = useState(false);
-  const [showComments, setShowComments] = useState(false);
-  const [editingDescriptionTaskId, setEditingDescriptionTaskId] = useState(null);
-  const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
-  
-  // Verification remarks modal state
-  const [showRemarksModal, setShowRemarksModal] = useState(false);
-  const [remarksModalTask, setRemarksModalTask] = useState(null);
-  const [remarksModalType, setRemarksModalType] = useState('accepted');
-  const [remarksModalLoading, setRemarksModalLoading] = useState(false);
-  
-  // Custom field editing states
-  const [editingCustomTextTaskId, setEditingCustomTextTaskId] = useState(null);
-  const [editingCustomTextColumnName, setEditingCustomTextColumnName] = useState('');
-  const [editingCustomTextValue, setEditingCustomTextValue] = useState('');
-  const [editingCustomTagsTaskId, setEditingCustomTagsTaskId] = useState(null);
-  const [editingCustomTagsColumnName, setEditingCustomTagsColumnName] = useState('');
-  const [editingPriorityTaskId, setEditingPriorityTaskId] = useState(null);
-  const [priorityLoading, setPriorityLoading] = useState(false);
-  const priorityDropdownRef = useRef(null);
-  const [editingVerificationTaskId, setEditingVerificationTaskId] = useState(null);
-  const [verificationLoading, setVerificationLoading] = useState(false);
-  const verificationDropdownRef = useRef(null);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
-  const [editingStatusTaskId, setEditingStatusTaskId] = useState(null);
-  const [statusLoading, setStatusLoading] = useState(false);
-  const statusDropdownRef = useRef(null);
-  const [editingVerifierTaskId, setEditingVerifierTaskId] = useState(null);
-  const [verifierDropdownPosition, setVerifierDropdownPosition] = useState({ top: 0, left: 0 });
-  const [verifierLoading, setVerifierLoading] = useState(false);
-  const verifierDropdownRef = useRef(null);
-
-
-  // State for search in verifier dropdown (should be inside component, not inside render)
-  const [verifierSearch, setVerifierSearch] = useState('');
-
-  // Add at the top, after other useRef/useState:
-  const guideDropdownRef = useRef(null);
-  const [openGuideDropdownTaskId, setOpenGuideDropdownTaskId] = useState(null);
-
-  // --- Dropdown close on outside click ---
+  // Save tabs and activeTabId to backend whenever they change (after load)
   useEffect(() => {
-    function handleClickOutside(event) {
-      // Priority dropdown
-      if (editingPriorityTaskId && priorityDropdownRef.current && !priorityDropdownRef.current.contains(event.target)) {
-        setEditingPriorityTaskId(null);
+    if (!user?.token || !tabsLoaded) return;
+    saveTabState('adminDashboard', { tabs, activeTabId }, user.token).catch(() => {});
+  }, [tabs, activeTabId, user, tabsLoaded]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // Handle filter popup
+      if (filterPopupRef.current && !filterPopupRef.current.contains(event.target)) {
+        setIsFilterPopupOpen(false);
       }
-      // Verification dropdown
-      if (editingVerificationTaskId && verificationDropdownRef.current && !verificationDropdownRef.current.contains(event.target)) {
-        setEditingVerificationTaskId(null);
+      
+      // Handle columns dropdown
+      if (columnsDropdownRef.current && !columnsDropdownRef.current.contains(event.target)) {
+        setShowColumnDropdown(false);
       }
-      // Status dropdown
-      if (editingStatusTaskId && statusDropdownRef.current && !statusDropdownRef.current.contains(event.target)) {
-        setEditingStatusTaskId(null);
+      
+      // Handle group by dropdown
+      if (groupByDropdownRef.current && !groupByDropdownRef.current.contains(event.target)) {
+        setShowGroupByDropdown(false);
       }
-      // Verifier dropdown
-      if (editingVerifierTaskId && verifierDropdownRef.current && !verifierDropdownRef.current.contains(event.target)) {
-        setEditingVerifierTaskId(null);
+    };
+
+    const handleKeyDown = (event) => {
+      // Close dropdowns on ESC key
+      if (event.key === 'Escape') {
+        setIsFilterPopupOpen(false);
+        setShowColumnDropdown(false);
+        setShowGroupByDropdown(false);
       }
-      // Guide dropdown
-      if (openGuideDropdownTaskId && guideDropdownRef.current && !guideDropdownRef.current.contains(event.target)) {
-        setOpenGuideDropdownTaskId(null);
-      }
-      // Custom tags dropdown
-      if (editingCustomTagsTaskId && priorityDropdownRef.current && !priorityDropdownRef.current.contains(event.target)) {
-        setEditingCustomTagsTaskId(null);
-        setEditingCustomTagsColumnName('');
-      }
-      // Delete dropdown for No column
-      if (showDeleteDropdown && deleteDropdownRef.current && !deleteDropdownRef.current.contains(event.target)) {
-        setShowDeleteDropdown(null);
-      }
-    }
+    };
+    
     document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [editingPriorityTaskId, editingVerificationTaskId, editingStatusTaskId, editingVerifierTaskId, openGuideDropdownTaskId, editingCustomTagsTaskId, showDeleteDropdown]);
+  }, []);
 
-  // Add scroll event listener to close delete dropdown
   useEffect(() => {
-    function handleScroll() {
-      if (showDeleteDropdown) {
-        setShowDeleteDropdown(null);
+    const fetchData = async (url, setter) => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/${url}`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch data from ${url}`);
+        }
+        const data = await response.json();
+        setter(data);
+      } catch (error) {
+        console.error(error);
+        toast.error(error.message);
       }
+    };
+
+    if (user && user.token) {
+      fetchData('users', setUsers);
+      fetchData('tasks/unique/client-names', setClientNames);
+      fetchData('tasks/unique/client-groups', setClientGroups);
+      fetchData('tasks/unique/work-types', setWorkTypes);
+      fetchData('priorities', setPriorities);
     }
+  }, [user]);
+
+  const fetchTasks = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      let endpoint = '';
+      if (user.role === 'Admin' || user.role === 'Senior' || user.role === 'Team Head') {
+        endpoint = 'tasks/all';
+      } else {
+        endpoint = 'tasks';
+      }
+      const response = await fetch(`${API_BASE_URL}/api/${endpoint}`, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to fetch tasks');
+      }
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid response format');
+      }
+      setTasks(data);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      setError(error.message);
+      toast.error(error.message || 'Failed to fetch tasks');
+      setTasks([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user.role, user.token]);
+
+  useEffect(() => {
+    if (tabsLoaded && activeTabId) {
+      fetchTasks();
+    }
+  }, [tabsLoaded, fetchTasks]);
+
+  // Clear selections when tasks or filters change
+  useEffect(() => {
+    setSelectedTasks([]);
+    setIsAllSelected(false);
+    setShowBulkActions(false);
+  }, [tasks.length]);
+
+  // Separate useEffect for filter and search changes to prevent infinite loops
+  useEffect(() => {
+    if (tabsLoaded) {
+      setSelectedTasks([]);
+      setIsAllSelected(false);
+      setShowBulkActions(false);
+    }
+  }, [tabsLoaded, activeTabId]);
+
+  // Optimized column visibility toggle
+  const toggleColumnVisibility = useCallback((columnId) => {
+    const cols = activeTabObj.visibleColumns || [];
+    let newCols;
+    if (cols.includes(columnId)) {
+      newCols = cols.filter(c => c !== columnId);
+    } else {
+      newCols = [...cols, columnId];
+    }
+    updateActiveTab({ visibleColumns: [...newCols] });
+  }, [activeTabObj.visibleColumns, updateActiveTab]);
+
+  // Toggle bulk selection mode
+  const toggleBulkSelection = useCallback(() => {
+    const newShowCheckboxes = !showCheckboxes;
+    setShowCheckboxes(newShowCheckboxes);
     
-    if (showDeleteDropdown) {
-      window.addEventListener('scroll', handleScroll, true);
-      return () => {
-        window.removeEventListener('scroll', handleScroll, true);
-      };
+    // Clear selections when hiding checkboxes
+    if (!newShowCheckboxes) {
+      setSelectedTasks([]);
+      setIsAllSelected(false);
+      setShowBulkActions(false);
     }
-  }, [showDeleteDropdown]);
+  }, [showCheckboxes]);
 
-  // Row drag-and-drop state
-  const [draggedTaskId, setDraggedTaskId] = useState(null);
-  const [dragOverTaskId, setDragOverTaskId] = useState(null);
-  const [dragOverGroupKey, setDragOverGroupKey] = useState(null);
-  const [orderedTasks, setOrderedTasks] = useState(tasks);
-  const [orderLoaded, setOrderLoaded] = useState(false);
+  // Clear selections when showCheckboxes changes to false
+  useEffect(() => {
+    if (!showCheckboxes) {
+      setSelectedTasks([]);
+      setIsAllSelected(false);
+      setShowBulkActions(false);
+    }
+  }, [showCheckboxes]);
 
-  // Add a ref to track the last set of task IDs and grouping
-  const lastTaskIdsRef = useRef([]);
-  const lastGroupFieldRef = useRef(null);
+  useEffect(() => {
+    // Fetch task hours for all users
+    const fetchTaskHours = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/timesheets/task-hours`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch task hours');
+        const data = await response.json();
+        setTaskHours(data);
+      } catch (error) {
+        console.error('Error fetching task hours:', error);
+      }
+    };
+    if (user && user.token) {
+      fetchTaskHours();
+    }
+  }, [user]);
 
-  const isControlled = !!visibleColumns && !!setVisibleColumns;
+  const getFilteredAndSortedTasks = useCallback((tasks, filtersToUse) => {
+    if (!Array.isArray(tasks)) return [];
+    const filters = filtersToUse || activeTabObj.filters;
 
-  // Add a new variable:
-  const isColumnOrderControlled = typeof columnOrder !== 'undefined' && typeof setColumnOrder === 'function';
+    // Priority order mapping for sorting - default priorities first, then custom
+    const defaultPriorityNames = [
+      'urgent',
+      'today',
+      'lessThan3Days',
+      'thisWeek',
+      'thisMonth',
+      'regular',
+      'filed',
+      'dailyWorksOffice',
+      'monthlyWorks'
+    ];
+    const priorityOrder = {};
+    // Add default priorities in fixed order
+    let order = 1;
+    defaultPriorityNames.forEach(name => {
+      priorityOrder[name] = order++;
+    });
+    // Add custom priorities (not in default list) at the end
+    priorities
+      .filter(p => !defaultPriorityNames.includes(p.name))
+      .forEach((priority, idx) => {
+        priorityOrder[priority.name] = 100 + idx;
+      });
 
-  // Fix: move selfVerification update state hooks to top level to avoid hook order issues
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [isUpdating2, setIsUpdating2] = useState(false);
+    let filteredTasks = tasks.filter(task => {
+      // Exclude tasks with verificationStatus 'pending'
+      if (task.verificationStatus === 'pending') return false;
+      // Apply search filter
+      if (activeTabObj.searchTerm) {
+        const lowercasedTerm = activeTabObj.searchTerm.toLowerCase();
+        const matches = (
+          (task.title?.toString().toLowerCase().includes(lowercasedTerm)) ||
+          (task.description?.toString().toLowerCase().includes(lowercasedTerm)) ||
+          (task.clientName?.toString().toLowerCase().includes(lowercasedTerm)) ||
+          (task.clientGroup?.toString().toLowerCase().includes(lowercasedTerm)) ||
+          (task.workType?.toString().toLowerCase().includes(lowercasedTerm))
+        );
+        if (!matches) {
+          return false;
+        }
+      }
 
-  // Helper functions
+      // Apply advanced filters with AND/OR logic
+      if (!filters.length) return true;
+      let result = null;
+      for (let i = 0; i < filters.length; i++) {
+        const filter = filters[i];
+        const { column, operator, value } = filter;
+        // Handle nested properties like assignedTo.firstName
+        const getTaskValue = (task, column) => {
+          const keys = column.split('.');
+          let result = task;
+          for (const key of keys) {
+            if (result === null || result === undefined) {
+              return undefined;
+            }
+            result = result[key];
+          }
+          return result;
+        };
+        const taskValue = getTaskValue(task, column);
+        let filterResult;
+        if (taskValue === undefined || taskValue === null) {
+          if (operator === 'is_empty') filterResult = true;
+          else if (operator === 'is_not_empty') filterResult = false;
+          else filterResult = false;
+        } else {
+          switch (operator) {
+            case 'is':
+              if (column === 'assignedTo' || column === 'assignedBy') {
+                filterResult = taskValue._id === value;
+              } else {
+                filterResult = String(taskValue) === String(value);
+              }
+              break;
+            case 'is_not':
+              if (column === 'assignedTo' || column === 'assignedBy') {
+                filterResult = taskValue._id !== value;
+              } else {
+                filterResult = String(taskValue) !== String(value);
+              }
+              break;
+            case 'contains':
+              filterResult = String(taskValue).toLowerCase().includes(String(value).toLowerCase());
+              break;
+            case 'does_not_contain':
+              filterResult = !String(taskValue).toLowerCase().includes(String(value).toLowerCase());
+              break;
+            case 'is_empty':
+              filterResult = taskValue === '' || taskValue === null || taskValue === undefined;
+              break;
+            case 'is_not_empty':
+              filterResult = taskValue !== '' && taskValue !== null && taskValue !== undefined;
+              break;
+            default:
+              filterResult = true;
+          }
+        }
+        if (i === 0) {
+          result = filterResult;
+        } else {
+          const logic = filter.logic || 'AND';
+          if (logic === 'AND') {
+            result = result && filterResult;
+          } else {
+            result = result || filterResult;
+          }
+        }
+      }
+      return result;
+    });
+
+    if (!activeTabObj.sortBy) return filteredTasks;
+
+    return filteredTasks.sort((a, b) => {
+      let aValue = a[activeTabObj.sortBy];
+      let bValue = b[activeTabObj.sortBy];
+
+      if (activeTabObj.sortBy === 'createdAt') {
+        aValue = new Date(aValue);
+        bValue = new Date(bValue);
+      } else if (activeTabObj.sortBy === 'priority') {
+        // Use priority order mapping for priority sorting
+        aValue = priorityOrder[aValue] || 999;
+        bValue = priorityOrder[bValue] || 999;
+        // For priority, descending should show highest priority first (urgent=1, today=2, etc.)
+        // So we swap the logic for priority sorting
+        if (aValue < bValue) return activeTabObj.sortOrder === 'desc' ? -1 : 1;
+        if (aValue > bValue) return activeTabObj.sortOrder === 'desc' ? 1 : -1;
+        return 0;
+      }
+
+      if (aValue < bValue) return activeTabObj.sortOrder === 'asc' ? -1 : 1;
+      if (aValue > bValue) return activeTabObj.sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [priorities, activeTabObj.filters, activeTabObj.searchTerm, activeTabObj.sortBy, activeTabObj.sortOrder]);
+
   const getStatusColor = (status) => {
-    // Find the status in dynamic task statuses first
-    const dynamicStatus = dynamicTaskStatuses.find(s => s.name === status);
-    if (dynamicStatus) {
-      // If it's a Tailwind class, return it directly
-      if (dynamicStatus.color && !dynamicStatus.color.startsWith('#')) {
-        return dynamicStatus.color;
-      }
-      // If it's a hex color, return null to use inline styles
-      if (dynamicStatus.color && dynamicStatus.color.startsWith('#')) {
-        return null;
-      }
-    }
-    
-    // Use hardcoded colors for default statuses if not found in dynamic statuses
     switch (status) {
       case 'completed':
         return 'bg-green-100 text-green-800';
       case 'in_progress':
         return 'bg-blue-100 text-blue-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
       case 'yet_to_start':
         return 'bg-gray-100 text-gray-800';
       default:
@@ -448,192 +676,225 @@ const AdvancedTaskTable = ({
     }
   };
 
-  // Get inline styles for dynamic status colors (only for hex colors)
-  const getStatusStyles = (status) => {
-    const dynamicStatus = dynamicTaskStatuses.find(s => s.name === status);
-    if (dynamicStatus && dynamicStatus.color && dynamicStatus.color.startsWith('#')) {
-      const hex = dynamicStatus.color;
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
-      const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-      const textColor = brightness > 128 ? '#000000' : '#FFFFFF';
-      
-      return {
-        backgroundColor: hex,
-        color: textColor
-      };
-    }
-    return null;
-  };
-
-  // Get current status options (dynamic or static fallback)
-  const currentStatusOptions = taskStatusesLoaded && dynamicTaskStatuses.length > 0 
-    ? dynamicTaskStatuses.map(s => ({ value: s.name, label: s.name }))
-    : STATUS_OPTIONS;
-
   const getPriorityColor = (priority) => {
     switch (priority) {
       case 'urgent':
-        return 'bg-red-100 text-red-800 border border-red-200';
+        return 'bg-red-100 text-red-800 border border-red-200'; // Red - Highest importance
       case 'today':
-        return 'bg-orange-100 text-orange-800 border border-orange-200';
+        return 'bg-orange-100 text-orange-800 border border-orange-200'; // Orange - Very high importance
       case 'lessThan3Days':
-        return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+        return 'bg-yellow-100 text-yellow-800 border border-yellow-200'; // Yellow - High importance
       case 'thisWeek':
-        return 'bg-blue-100 text-blue-800 border border-blue-200';
+        return 'bg-blue-100 text-blue-800 border border-blue-200'; // Blue - Medium-high importance
       case 'thisMonth':
-        return 'bg-indigo-100 text-indigo-800 border border-indigo-200';
+        return 'bg-indigo-100 text-indigo-800 border border-indigo-200'; // Indigo - Medium importance
       case 'regular':
-        return 'bg-gray-100 text-gray-800 border border-gray-200';
+        return 'bg-gray-100 text-gray-800 border border-gray-200'; // Gray - Normal importance
       case 'filed':
-        return 'bg-purple-100 text-purple-800 border border-purple-200';
+        return 'bg-purple-100 text-purple-800 border border-purple-200'; // Purple - Low importance
       case 'dailyWorksOffice':
-        return 'bg-teal-100 text-teal-800 border border-teal-200';
+        return 'bg-teal-100 text-teal-800 border border-teal-200'; // Teal - Very low importance
       case 'monthlyWorks':
-        return 'bg-slate-100 text-slate-600 border border-slate-200';
+        return 'bg-slate-100 text-slate-600 border border-slate-200'; // Slate - Lowest importance
       default:
         return 'bg-gray-100 text-gray-800 border border-gray-200';
     }
   };
 
-  const getVerificationColor = (verification) => {
-    switch (verification) {
-      case 'pending':
-        return 'bg-gray-100 text-gray-800 border border-gray-200';
-      case 'rejected':
-        return 'bg-red-100 text-red-800 border border-red-200';
-      case 'accepted':
-        return 'bg-green-100 text-green-800 border border-green-200';
-      case 'next verification':
-        return 'bg-blue-100 text-blue-800 border border-blue-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border border-gray-200';
+  // Calculate statistics - memoized for performance
+  const stats = useMemo(() => {
+    const today = new Date().toDateString();
+    return {
+      totalTasks: tasks.length,
+      completedTasks: tasks.filter(t => t.status === 'completed').length,
+      inProgressTasks: tasks.filter(t => t.status === 'in_progress').length,
+      pendingTasks: tasks.filter(t => t.status === 'pending').length,
+      yetToStartTasks: tasks.filter(t => t.status === 'yet_to_start').length,
+      todayTasks: tasks.filter(t => new Date(t.dueDate).toDateString() === today).length,
+    };
+  }, [tasks]);
+
+  const handleStatusClick = (taskId, status) => {
+    // Implement the logic to handle status click
+    console.log(`Status clicked for task ${taskId}, new status: ${status}`);
+  };
+
+  const handleEditTask = useCallback((task) => {
+    setEditTask(task);
+    setEditModalOpen(true);
+  }, []);
+
+  const handleTaskSubmit = useCallback(async (updatedOrCreated) => {
+    setEditModalOpen(false);
+    setCreateModalOpen(false);
+    const isUpdate = editTask !== null;
+    setEditTask(null);
+    
+    if (isUpdate) {
+      // For updates, use optimistic update instead of full refetch
+      setTasks(prevTasks => prevTasks.map(task => 
+        task._id === updatedOrCreated._id ? updatedOrCreated : task
+      ));
+      
+      // Optionally refetch just this task to ensure consistency
+      try {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const res = await fetch(`${API_BASE_URL}/api/tasks/${updatedOrCreated._id}`, {
+          headers: { Authorization: `Bearer ${user.token}` }
+        });
+        if (res.ok) {
+          const refreshedTask = await res.json();
+          setTasks(prevTasks => prevTasks.map(task =>
+            task._id === updatedOrCreated._id ? refreshedTask : task
+          ));
+        }
+      } catch (e) {
+        console.error('Error refreshing updated task:', e);
+      }
+    } else {
+      // For new tasks, just add to the beginning of the list
+      setTasks(prevTasks => [updatedOrCreated, ...prevTasks]);
+    }
+  }, [editTask, user.token]);
+
+  // Handler for editing task templates
+  const handleEditTemplate = useCallback((template, index) => {
+    setEditingTemplate(template);
+    setEditingTemplateIndex(index);
+    setEditTemplateModalOpen(true);
+  }, []);
+
+  // Handler for template submit (when editing)
+  const handleTemplateSubmit = async (updatedTemplate) => {
+    try {
+      if (editingTemplateIndex === null || !selectedAutomation) return;
+
+      // Create a new array with the updated template
+      const updatedTemplates = [...selectedAutomation.taskTemplate];
+      updatedTemplates[editingTemplateIndex] = { 
+        ...updatedTemplate, 
+        _id: editingTemplate._id // Preserve the original _id
+      };
+
+      // Update the automation with the new templates array
+      const response = await fetch(`${API_BASE_URL}/api/automations/${selectedAutomation._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ taskTemplate: updatedTemplates }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update template');
+      }
+
+      // Update local state
+      const updatedAutomation = await response.json();
+      setSelectedAutomation(updatedAutomation);
+      setEditTemplateModalOpen(false);
+      setEditingTemplate(null);
+      setEditingTemplateIndex(null);
+      toast.success('Task template updated successfully');
+    } catch (error) {
+      toast.error(error.message || 'Failed to update template');
+      console.error('Error updating template:', error);
     }
   };
 
-  const getUserTaskHours = (taskId, userId) => {
-    const entry = taskHours.find(
-      (h) => h.taskId === (taskId?._id || taskId) && h.userId === (userId?._id || userId)
-    );
-    return entry ? entry.totalHours : 0;
-  };
-
-  // Drag and drop handlers
-  const handleDragStart = (e, columnId) => {
-    setDraggedColumn(columnId);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', columnId);
-  };
-
-  const handleDragOver = (e, columnId) => {
-    e.preventDefault();
-    if (draggedColumn && draggedColumn !== columnId) {
-      setDragOverColumn(columnId);
+  const handleDeleteTask = async (taskId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to delete task');
+      }
+      // setTasks(tasks.filter(task => task._id !== taskId));
+      fetchTasks(); // Light reload after delete
+      toast.success('Task deleted successfully');
+    } catch (error) {
+      toast.error(error.message || 'Failed to delete task');
     }
   };
 
-  const handleDragLeave = () => {
-    setDragOverColumn(null);
-  };
-
-  const handleDrop = (e, targetColumnId) => {
-    e.preventDefault();
-    if (draggedColumn && draggedColumn !== targetColumnId) {
-      const newOrder = [...columnOrder];
-      const draggedIndex = newOrder.indexOf(draggedColumn);
-      const targetIndex = newOrder.indexOf(targetColumnId);
-      newOrder.splice(draggedIndex, 1);
-      newOrder.splice(targetIndex, 0, draggedColumn);
-      if (isColumnOrderControlled) {
-        setColumnOrder(newOrder);
-      } // else: do nothing, or use local state if implemented
-    }
-    setDraggedColumn(null);
-    setDragOverColumn(null);
-  };
-
-  // Column resize handlers
-  const handleResizeStart = (e, columnId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    isResizingRef.current = true;
-    resizingColumnRef.current = columnId;
-    resizeStartXRef.current = e.clientX;
-    resizeStartWidthRef.current = columnWidths[columnId] || 150;
-    
-    setIsResizing(true);
-    setResizingColumn(columnId);
-    setResizeStartX(e.clientX);
-    setResizeStartWidth(columnWidths[columnId] || 150);
-    
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    
-    window.addEventListener('mousemove', handleResizeMove, { passive: false });
-    window.addEventListener('mouseup', handleResizeEnd, { passive: false });
-  };
-
-  const handleResizeMove = (e) => {
-    if (!isResizingRef.current || !resizingColumnRef.current) return;
-    
-    const deltaX = e.clientX - resizeStartXRef.current;
-    const newWidth = Math.max(80, resizeStartWidthRef.current + deltaX);
-    
-    setColumnWidths({
-      ...columnWidths,
-      [resizingColumnRef.current]: newWidth
+  // Bulk selection handlers
+  const handleTaskSelect = useCallback((taskId, isSelected) => {
+    setSelectedTasks(prev => {
+      const newSelected = isSelected 
+        ? [...prev, taskId] 
+        : prev.filter(id => id !== taskId);
+      
+      // Update show bulk actions based on selection and checkbox visibility
+      setShowBulkActions(newSelected.length > 0 && showCheckboxes);
+      
+      // Update select all state
+      const currentTasks = getFilteredAndSortedTasks(tasks, activeTabObj.filters);
+      setIsAllSelected(newSelected.length === currentTasks.length && currentTasks.length > 0);
+      
+      return newSelected;
     });
-    
-    e.preventDefault();
-  };
+  }, [showCheckboxes, tasks, activeTabObj.filters]);
 
-  const handleResizeEnd = () => {
-    isResizingRef.current = false;
-    resizingColumnRef.current = null;
-    resizeStartXRef.current = 0;
-    resizeStartWidthRef.current = 0;
-    
-    setIsResizing(false);
-    setResizingColumn(null);
-    setResizeStartX(0);
-    setResizeStartWidth(0);
-    
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-    
-    window.removeEventListener('mousemove', handleResizeMove);
-    window.removeEventListener('mouseup', handleResizeEnd);
-  };
-
-  // Get ordered columns based on current order and visibility
-  const getOrderedVisibleColumns = () => {
-    const orderedColumns = columnOrder.filter(colId => visibleColumns.includes(colId));
-    
-    // Filter out verification column for tabs other than receivedVerification
-    if (taskType !== 'receivedVerification') {
-      return orderedColumns.filter(colId => colId !== 'verification');
+  const handleSelectAll = useCallback((isSelected) => {
+    const currentTasks = getFilteredAndSortedTasks(tasks, activeTabObj.filters);
+    if (isSelected) {
+      setSelectedTasks(currentTasks.map(task => task._id));
+      setShowBulkActions(currentTasks.length > 0 && showCheckboxes);
+    } else {
+      setSelectedTasks([]);
+      setShowBulkActions(false);
     }
-    
-    return orderedColumns;
-  };
+    setIsAllSelected(isSelected);
+  }, [tasks, activeTabObj.filters, showCheckboxes]);
 
-  const handleTaskClick = (task) => {
-    setSelectedTask(task);
-    setShowFileUpload(true);
+  const handleBulkDelete = async () => {
+    if (selectedTasks.length === 0) return;
+
+    try {
+      const deletePromises = selectedTasks.map(taskId =>
+        fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${user.token}` },
+        })
+      );
+
+      const responses = await Promise.all(deletePromises);
+      const failedDeletes = responses.filter(response => !response.ok);
+
+      if (failedDeletes.length > 0) {
+        toast.error(`Failed to delete ${failedDeletes.length} task${failedDeletes.length > 1 ? 's' : ''}`);
+      } else {
+        toast.success(`Successfully deleted ${selectedTasks.length} task${selectedTasks.length > 1 ? 's' : ''}`);
+      }
+
+      // Clear selection and reload tasks
+      setSelectedTasks([]);
+      setIsAllSelected(false);
+      setShowBulkActions(false);
+      setShowDeleteConfirmation(false);
+      fetchTasks();
+    } catch (error) {
+      toast.error('Failed to delete selected tasks');
+      console.error('Bulk delete error:', error);
+    }
   };
 
   const handleFileUploaded = (files) => {
-    if (onTaskUpdate) {
-      onTaskUpdate(selectedTask._id, (prevTask) => ({
-        ...prevTask,
-        files: [
-          ...(prevTask.files || []),
-          ...files.filter(uf => !(prevTask.files || []).some(f => f._id === uf._id))
-        ]
-      }));
-    }
+    // Update the task in the list with new files
+    setTasks(prevTasks => 
+      prevTasks.map(t => 
+        t._id === selectedTask._id 
+          ? { ...t, files: [
+              ...(t.files || []),
+              ...files.filter(uf => !(t.files || []).some(f => f._id === uf._id))
+            ] }
+          : t
+      )
+    );
     setSelectedTask(prev =>
       prev && prev._id === selectedTask._id
         ? { ...prev, files: [
@@ -645,430 +906,299 @@ const AdvancedTaskTable = ({
   };
 
   const handleFileDeleted = (fileId) => {
-    if (onTaskUpdate) {
-      onTaskUpdate(selectedTask._id, (prevTask) => ({
-        ...prevTask,
-        files: (prevTask.files || []).filter(f => f._id !== fileId)
-      }));
-    }
+    // Update the task in the list after file deletion
+    setTasks(prevTasks => 
+      prevTasks.map(t => 
+        t._id === selectedTask._id 
+          ? { ...t, files: (t.files || []).filter(f => f._id !== fileId) }
+          : t
+      )
+    );
   };
 
-  const handleDescriptionEditSave = async (task) => {
-    if (editingDescriptionValue === task.description) {
-      setEditingDescriptionTaskId(null);
-      return;
-    }
+  const handleCommentSubmit = async (comment) => {
+    if (!selectedTask) return;
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/description`, {
-        method: 'PATCH',
+      const response = await fetch(`${API_BASE_URL}/api/tasks/${selectedTask._id}/comments`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${user.token}`,
         },
-        body: JSON.stringify({ description: editingDescriptionValue }),
+        body: JSON.stringify({ content: comment }),
       });
-      if (!response.ok) throw new Error('Failed to update description');
+
+      if (!response.ok) {
+        throw new Error('Failed to add comment');
+      }
+
       const updatedTask = await response.json();
-      if (onTaskUpdate) {
-        onTaskUpdate(task._id, () => ({ ...task, description: updatedTask.description }));
-      }
-      toast.success('Status updated');
+      setTasks(tasks.map(task => task._id === selectedTask._id ? updatedTask : task));
+      toast.success('Comment added successfully');
     } catch (error) {
-      toast.error(error.message || 'Failed to update status');
-    }
-    setEditingDescriptionTaskId(null);
-  };
-
-  // Handle custom text field editing
-  const handleCustomTextEditSave = async (task, columnName) => {
-    const currentValue = task.customFields?.[columnName] || '';
-    if (editingCustomTextValue === currentValue) {
-      setEditingCustomTextTaskId(null);
-      setEditingCustomTextColumnName('');
-      setEditingCustomTextValue('');
-      return;
-    }
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/custom-fields`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
-        body: JSON.stringify({
-          customFields: {
-            ...task.customFields,
-            [columnName]: editingCustomTextValue
-          }
-        })
-      });
-      
-      if (!response.ok) throw new Error('Failed to update custom field');
-      
-      // Update local state
-      if (onTaskUpdate) {
-        onTaskUpdate(task._id, (prevTask) => ({
-          ...prevTask,
-          customFields: {
-            ...prevTask.customFields,
-            [columnName]: editingCustomTextValue
-          }
-        }));
-      }
-      toast.success('Custom field updated');
-    } catch (error) {
-      toast.error(error.message || 'Failed to update custom field');
-    }
-    
-    setEditingCustomTextTaskId(null);
-    setEditingCustomTextColumnName('');
-    setEditingCustomTextValue('');
-  };
-
-  // Handle custom tags field change
-  const handleCustomTagsChange = async (task, columnName, newValue) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/custom-fields`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
-        body: JSON.stringify({
-          customFields: {
-            ...task.customFields,
-            [columnName]: newValue
-          }
-        })
-      });
-      
-      if (!response.ok) throw new Error('Failed to update custom field');
-      
-      // Update local state
-      if (onTaskUpdate) {
-        onTaskUpdate(task._id, (prevTask) => ({
-          ...prevTask,
-          customFields: {
-            ...prevTask.customFields,
-            [columnName]: newValue
-          }
-        }));
-      }
-      toast.success('Custom field updated');
-    } catch (error) {
-      toast.error(error.message || 'Failed to update custom field');
+      console.error('Error adding comment:', error);
+      toast.error(error.message || 'Failed to add comment');
     }
   };
 
-  const handlePriorityChange = async (task, newPriority) => {
-    setPriorityLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/priority`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
-        body: JSON.stringify({ priority: newPriority }),
-      });
-      if (!response.ok) throw new Error('Failed to update priority');
-      const updatedTask = await response.json();
-      if (onTaskUpdate) {
-        onTaskUpdate(task._id, () => ({ ...task, priority: updatedTask.priority }));
-      }
-      
-      // Update the task in orderedTasks without changing positions
-      const updatedOrderedTasks = orderedTasks.map(t => 
-        t._id === task._id ? { ...t, priority: newPriority } : t
-      );
-      setOrderedTasks(updatedOrderedTasks);
-      
-      // Refresh tasks from backend if refetchTasks is available
-      if (refetchTasks) {
-        refetchTasks();
-      }
-      
-      toast.success('Priority updated');
-    } catch (error) {
-      toast.error(error.message || 'Failed to update priority');
-    }
-    setPriorityLoading(false);
-    setEditingPriorityTaskId(null);
+  // Helper to get hours for a user on a task
+  const getUserTaskHours = (taskId, userId) => {
+    const entry = taskHours.find(
+      (h) => h.taskId === (taskId?._id || taskId) && h.userId === (userId?._id || userId)
+    );
+    return entry ? entry.totalHours : 0;
   };
 
-  // Get filtered verification options based on current verifier
-  const getVerificationOptions = (task, currentUser) => {
-    if (!currentUser) return VERIFICATION_OPTIONS;
-    
-    // Find which verifier the current user is
-    const verifierFields = [
-      'verificationAssignedTo',
-      'secondVerificationAssignedTo', 
-      'thirdVerificationAssignedTo',
-      'fourthVerificationAssignedTo',
-      'fifthVerificationAssignedTo'
+  const filteredAndSortedTasks = getFilteredAndSortedTasks(tasks);
+
+  // PDF export handler
+  const handleDownloadPDF = (selectedColumns, fontSize = 10, fontFamily = 'tahoma') => {
+    const filteredTasks = getFilteredAndSortedTasks(tasks);
+    // Get the selected column definitions (including custom columns)
+    const allAvailableColumns = [
+      ...ALL_COLUMNS.map(col => {
+        // Adjust widths for PDF export
+        if (col.id === 'title') return { ...col, defaultWidth: 200 };
+        if (col.id === 'description' || col.id === 'status') return { ...col, defaultWidth: 140 };
+        return col;
+      }),
+      ...customColumns.map(col => ({
+        id: `custom_${col.name}`,
+        label: col.label,
+        defaultWidth: 150,
+        isCustom: true,
+        customColumn: col
+      }))
     ];
-    
-    let currentVerifierIndex = -1;
-    verifierFields.forEach((field, idx) => {
-      if (task[field]?._id === currentUser._id) {
-        currentVerifierIndex = idx;
-      }
-    });
-    
-    // If user is the 5th (last) verifier, remove "next verification" option
-    if (currentVerifierIndex === 4) { // 5th verifier (0-indexed)
-      return VERIFICATION_OPTIONS.filter(opt => opt.value !== 'next verification');
-    }
-    
-    return VERIFICATION_OPTIONS;
-  };
-
-  const handleVerificationChange = async (task, newVerification) => {
-    console.log('Starting verification update for task:', task._id, 'new verification:', newVerification);
-    
-    // If it's accepted or rejected, show the remarks modal
-    if (newVerification === 'accepted' || newVerification === 'rejected') {
-      setRemarksModalTask(task);
-      setRemarksModalType(newVerification);
-      setShowRemarksModal(true);
-      setEditingVerificationTaskId(null);
-      return;
-    }
-
-    // For other statuses (pending, next verification), proceed directly
-    setVerificationLoading(true);
+  // Ensure columns are in the order selected by the user
+  const selectedColumnDefs = selectedColumns.map(colId => allAvailableColumns.find(col => col.id === colId)).filter(Boolean);
+    // Add No column at the start
+    const headers = ['No', ...selectedColumnDefs.map(col => col.label)];
+  // Use normal portrait A4, but keep reduced margins for wider table
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    // Set font family if available in jsPDF
     try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verification`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
-        body: JSON.stringify({ verification: newVerification }),
+      doc.setFont(fontFamily);
+    } catch (e) {
+      doc.setFont('helvetica'); // fallback
+    }
+    const tableData = [];
+    const groupBy = activeTabObj.sortBy;
+    if (groupBy && groupBy !== '') {
+      const groupedTasks = {};
+      filteredTasks.forEach(task => {
+        let groupKey;
+        switch (groupBy) {
+          case 'clientName':
+            groupKey = task.clientName || 'Unassigned';
+            break;
+          case 'clientGroup':
+            groupKey = task.clientGroup || 'Unassigned';
+            break;
+          case 'workType':
+            groupKey = Array.isArray(task.workType) ? (task.workType[0] || 'Unspecified') : (task.workType || 'Unspecified');
+            break;
+          case 'billed':
+            groupKey = task.billed ? 'Yes' : 'No';
+            break;
+          default:
+            groupKey = task[groupBy] || 'Unassigned';
+        }
+        if (!groupedTasks[groupKey]) groupedTasks[groupKey] = [];
+        groupedTasks[groupKey].push(task);
       });
-      
-      console.log('Verification update response status:', response.status);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update verification');
-      }
-      
-      const updatedTask = await response.json();
-      
-      console.log('Updated task received:', updatedTask);
-      
-      if (onTaskUpdate) {
-        onTaskUpdate(task._id, () => updatedTask);
-      }
-      
-      // Update the task in orderedTasks without changing positions
-      const updatedOrderedTasks = orderedTasks.map(t => 
-        t._id === task._id ? { ...t, ...updatedTask } : t
-      );
-      setOrderedTasks(updatedOrderedTasks);
-      
-      // Refresh tasks from backend if refetchTasks is available
-      if (refetchTasks) {
-        refetchTasks();
-      }
-      
-      toast.success('Verification updated');
-    } catch (error) {
-      console.error('Error updating verification:', error);
-      toast.error(error.message || 'Failed to update verification');
-    }
-    setVerificationLoading(false);
-    setEditingVerificationTaskId(null);
-  };
-
-  // Handle verification with remarks
-  const handleVerificationWithRemarks = async (remarks) => {
-    setRemarksModalLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${remarksModalTask._id}/verification`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
-        body: JSON.stringify({ 
-          verification: remarksModalType,
-          remarks: remarks 
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update verification');
-      }
-      
-      const updatedTask = await response.json();
-      
-      if (onTaskUpdate) {
-        onTaskUpdate(remarksModalTask._id, () => updatedTask);
-      }
-      
-      // Update the task in orderedTasks without changing positions
-      const updatedOrderedTasks = orderedTasks.map(t => 
-        t._id === remarksModalTask._id ? { ...t, ...updatedTask } : t
-      );
-      setOrderedTasks(updatedOrderedTasks);
-      
-      // Refresh tasks from backend if refetchTasks is available
-      if (refetchTasks) {
-        refetchTasks();
-      }
-      
-  toast.success(`Task ${remarksModalType === 'rejected' ? 'returned' : remarksModalType} successfully`);
-      setShowRemarksModal(false);
-    } catch (error) {
-      console.error('Error updating verification:', error);
-      toast.error(error.message || 'Failed to update verification');
-    }
-    setRemarksModalLoading(false);
-  };
-
-  // Close remarks modal
-  const closeRemarksModal = () => {
-    setShowRemarksModal(false);
-    setRemarksModalTask(null);
-    setRemarksModalType('accepted');
-    setRemarksModalLoading(false);
-  };
-
-  const handleStatusChangeLocal = async (task, newStatus) => {
-    setStatusLoading(true);
-    try {
-      if (newStatus === 'reject' && viewType === 'received') {
-        // Call backend to reject and clear verifiers, set status to pending
-        const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/status`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${user.token}`,
-          },
-          body: JSON.stringify({ status: 'reject' }),
+      Object.entries(groupedTasks).forEach(([groupKey, groupTasks], groupIndex) => {
+        if (groupIndex > 0) tableData.push(Array(headers.length).fill(''));
+        tableData.push([{
+          content: `${groupBy.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}: ${groupKey}`,
+          colSpan: headers.length,
+          styles: { fillColor: [220, 220, 220], fontStyle: 'bold', halign: 'left' }
+        }]);
+        groupTasks.forEach((task, idx) => {
+          const row = [idx + 1];
+          selectedColumnDefs.forEach(col => {
+            let value = '';
+            if (col.isCustom && col.id.startsWith('custom_')) {
+              // Custom column value
+              const customColumnName = col.id.replace('custom_', '');
+              const customValue = task.customFields?.[customColumnName];
+              if (col.customColumn?.type === 'checkbox') {
+                value = customValue ? 'Yes' : 'No';
+              } else if (col.customColumn?.type === 'tags') {
+                value = Array.isArray(customValue) ? customValue.join(', ') : (customValue || '');
+              } else {
+                value = customValue ?? '';
+              }
+            } else {
+              switch (col.id) {
+                case 'title': value = task.title || ''; break;
+                case 'description': value = task.description || ''; break;
+                case 'clientName': value = task.clientName || ''; break;
+                case 'clientGroup': value = task.clientGroup || ''; break;
+                case 'workType': value = Array.isArray(task.workType) ? task.workType.join(', ') : (task.workType || ''); break;
+                case 'billed': value = task.billed ? 'Yes' : 'No'; break;
+                case 'status': value = task.status || ''; break;
+                case 'priority': value = task.priority || ''; break;
+                case 'selfVerification': value = task.selfVerification ? '✓' : '✗'; break;
+                case 'inwardEntryDate': value = task.inwardEntryDate ? formatDateTime(task.inwardEntryDate) : ''; break;
+                case 'dueDate': value = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : ''; break;
+                case 'targetDate': value = task.targetDate ? new Date(task.targetDate).toLocaleDateString() : ''; break;
+                case 'assignedBy': value = task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : ''; break;
+                case 'assignedTo': value = Array.isArray(task.assignedTo) ? task.assignedTo.map(u => `${u.firstName} ${u.lastName}`).join(', ') : (task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : ''); break;
+                case 'verificationAssignedTo': value = task.verificationAssignedTo ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : ''; break;
+                case 'secondVerificationAssignedTo': value = task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : ''; break;
+                case 'guides': value = task.guides ? task.guides.map(g => g.name).join(', ') : ''; break;
+                case 'files': value = task.files && task.files.length > 0 ? task.files.map(f => f.originalName || f.originalname).join(', ') : ''; break;
+                case 'comments': value = task.comments ? task.comments.length.toString() : '0'; break;
+                default: value = '';
+              }
+            }
+            row.push(value);
+          });
+          tableData.push(row);
         });
-        if (!response.ok) throw new Error('Failed to reject task');
-        const updatedTask = await response.json();
-        if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
-        toast.success('Task rejected and set to pending');
-        if (refetchTasks) refetchTasks();
-      } else {
-        await onStatusChange(task._id, newStatus);
-        if (refetchTasks) refetchTasks();
-      }
-    } catch (error) {
-      toast.error(error.message || 'Failed to update status');
-    }
-    setStatusLoading(false);
-    setEditingStatusTaskId(null);
-  };
-
-  const handleDeleteTask = async (task) => {
-    if (shouldDisableActions && shouldDisableActions(task)) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-        },
       });
-      if (!response.ok) {
-        const errorData = await response.json();
-        if (response.status === 403) {
-          throw new Error('You can only delete tasks that you created');
-        }
-        // Only show error toast if not 'Task not found'
-        if (errorData.message !== 'Task not found') {
-          throw new Error(errorData.message || 'Failed to delete task');
-        } else {
-          // Silently ignore 'Task not found' error
-          return;
-        }
-      }
-      if (onTaskDelete) onTaskDelete(task._id);
-      if (refetchTasks) refetchTasks();
-      toast.success('Task deleted successfully');
-    } catch (error) {
-      if (error.message !== 'Task not found') {
-        console.error('Error deleting task:', error);
-        toast.error(error.message || 'Failed to delete task');
-      }
+    } else {
+      filteredTasks.forEach((task, idx) => {
+        const row = [idx + 1];
+        selectedColumnDefs.forEach(col => {
+          let value = '';
+          switch (col.id) {
+            case 'title': value = task.title || ''; break;
+            case 'description': value = task.description || ''; break;
+            case 'clientName': value = task.clientName || ''; break;
+            case 'clientGroup': value = task.clientGroup || ''; break;
+            case 'workType': value = Array.isArray(task.workType) ? task.workType.join(', ') : (task.workType || ''); break;
+            case 'billed': value = task.billed ? 'Yes' : 'No'; break;
+            case '': value = task.status || ''; break;
+            case 'priority': value = task.priority || ''; break;
+            case 'selfVerification': value = task.selfVerification ? '✓' : '✗'; break;
+            case 'inwardEntryDate': value = task.inwardEntryDate ? formatDateTime(task.inwardEntryDate) : ''; break;
+            case 'dueDate': value = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : ''; break;
+            case 'targetDate': value = task.targetDate ? new Date(task.targetDate).toLocaleDateString() : ''; break;
+            case 'assignedBy': value = task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : ''; break;
+            case 'assignedTo': value = Array.isArray(task.assignedTo) ? task.assignedTo.map(u => `${u.firstName} ${u.lastName}`).join(', ') : (task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : ''); break;
+            case 'verificationAssignedTo': value = task.verificationAssignedTo ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : ''; break;
+            case 'secondVerificationAssignedTo': value = task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : ''; break;
+            case 'guides': value = task.guides ? task.guides.map(g => g.name).join(', ') : ''; break;
+            case 'files': value = task.files && task.files.length > 0 ? task.files.map(f => f.originalName || f.originalname).join(', ') : ''; break;
+            case 'comments': value = task.comments ? task.comments.length.toString() : '0'; break;
+            default: value = '';
+          }
+          row.push(value);
+        });
+        tableData.push(row);
+      });
     }
-  };
-
-  // Handle left click on No column (edit task)
-  const handleNoColumnLeftClick = (task) => {
-    if (shouldDisableActions && shouldDisableActions(task)) return;
-    
-    // Check role permissions for edit
-    if (['Team Head', 'Admin', 'Senior'].includes(user?.role)) {
-      if (onEditTask) {
-        onEditTask(task);
+    // Calculate available width for table
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const marginLeft = 24, marginRight = 24;
+    const availableWidth = pageWidth - marginLeft - marginRight;
+    let columnStyles;
+    if (selectedColumnDefs.length === 1) {
+      // Only one data column: let it take all available width except for 'No' column
+      const noColWidth = 40;
+      const dataColWidth = availableWidth - noColWidth;
+      columnStyles = {
+        0: { cellWidth: noColWidth },
+        1: { cellWidth: dataColWidth > 80 ? dataColWidth : 80 }
+      };
+    } else {
+      // Multiple columns: keep all left-aligned, use their default widths, but let the last data col take up remaining space if any
+      const baseColWidths = [40, ...selectedColumnDefs.map(col => col.defaultWidth || 120)];
+      let totalWidth = baseColWidths.reduce((a, b) => a + b, 0);
+      let extra = availableWidth - totalWidth;
+      let colWidths = [...baseColWidths];
+      if (extra > 0) {
+        // Add extra width to the last data column
+        colWidths[colWidths.length - 1] += extra;
       }
+      columnStyles = Object.fromEntries(colWidths.map((w, idx) => [idx, { cellWidth: w }]));
     }
-  };
-
-  // Handle right click on No column (show delete dropdown)
-  const handleNoColumnRightClick = (e, task) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (shouldDisableActions && shouldDisableActions(task)) return;
-    
-    // Check role permissions for delete dropdown - only Admin and Team Head
-    if (!['Team Head', 'Admin'].includes(user?.role)) {
-      return;
-    }
-
-    const rect = e.target.getBoundingClientRect();
-    setDeleteDropdownPosition({
-      x: rect.right,
-      y: rect.top
+    doc.autoTable({
+      head: [headers],
+      body: tableData,
+      theme: 'striped',
+      margin: { left: marginLeft, right: marginRight, top: 40, bottom: 24 },
+      tableWidth: 'auto',
+      columnStyles,
+      styles: {
+        fontSize: fontSize,
+        font: fontFamily,
+        cellPadding: 4,
+        overflow: 'linebreak',
+      },
+      headStyles: {
+        fontSize: fontSize + 1,
+        font: fontFamily,
+        fillColor: [33, 111, 182],
+        textColor: 255,
+      },
+      didDrawPage: function (data) {
+        doc.setFontSize(8);
+        doc.text(
+          `Page ${doc.internal.getNumberOfPages()}`,
+          data.settings.margin.left,
+          doc.internal.pageSize.height - 10
+        );
+      },
     });
-    setShowDeleteDropdown(task._id);
+    doc.save(`tasks_${activeTabObj?.activeTab || 'dashboard'}.pdf`);
   };
 
-  // Show custom delete confirmation modal
-  const handleDeleteFromDropdown = (task) => {
-    setShowDeleteDropdown(null);
-    setDeleteConfirmTask(task);
+  const handlePDFButtonClick = () => {
+    setShowPDFColumnSelector(true);
   };
 
-  // Handle confirm/cancel in custom modal
-  const handleConfirmDelete = async () => {
-    if (deleteConfirmTask) {
-      await handleDeleteTask(deleteConfirmTask);
+  // 7. Remove useEffects for per-user columnWidths/columnOrder/visibleColumns localStorage
+  // 9. When rendering AdvancedTaskTable, pass activeTabObj.visibleColumns, activeTabObj.columnWidths, and handlers to update them
+  // 4. Pass columnOrder/setColumnOrder to AdvancedTaskTable
+  useEffect(() => {
+    const userId = user?._id || 'guest';
+    const key = `admindashboard_column_widths_${userId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          // This effect is now redundant as columnWidths are managed per tab
+          // setColumnWidths(parsed); 
+        }
+      } catch (e) {
+        // ignore
+      }
     }
-    setDeleteConfirmTask(null);
-  };
-  const handleCancelDelete = () => {
-    setDeleteConfirmTask(null);
-  };
+    // If nothing in localStorage, set defaults
+    if (!saved) {
+      const defaultWidths = {};
+      ALL_COLUMNS.forEach(col => {
+        defaultWidths[col.id] = col.defaultWidth;
+      });
+      // This effect is now redundant as columnWidths are managed per tab
+      // setColumnWidths(defaultWidths); 
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?._id]);
 
-  // Close delete dropdown
-  const closeDeleteDropdown = () => {
-    setShowDeleteDropdown(null);
-  };
+  // Calculate widget numbers - memoized for performance
+  const dashboardCounts = useMemo(() => {
+    return {
+      yetToStartCount: tasks.filter(t => t.status === 'yet_to_start').length,
+      todayCount: tasks.filter(t => t.priority === 'today' && t.status !== 'completed').length,
+      totalCount: tasks.filter(t => t.status !== 'completed').length,
+      urgentCount: tasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length,
+    };
+  }, [tasks]);
 
-  // Helper to group tasks by a field
-  function groupTasksBy(tasks, field, options = {}) {
-    const groups = {};
-    tasks.forEach(task => {
-      let key = task[field];
-      // Use label if options provided (e.g., for priority/status)
-      if (options && options[key]) key = options[key];
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(task);
-    });
-    return groups;
+  const { yetToStartCount, todayCount, totalCount, urgentCount } = dashboardCounts;
+
+  // Only render table UI after tabsLoaded and tabs.length > 0
+  if (!tabsLoaded || tabs.length === 0) {
+    return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div></div>;
   }
 
-  if (!user) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -1076,3012 +1206,778 @@ const AdvancedTaskTable = ({
     );
   }
 
-  // In the main render, before tbody:
-  const groupField = (!sortBy || sortBy === 'none') ? null : (
-    (columnOrder.includes('priority') && sortBy === 'priority') ? 'priority'
-    : (columnOrder.includes('status') && sortBy === 'status') ? 'status'
-    : (columnOrder.includes('clientName') && sortBy === 'clientName') ? 'clientName'
-    : (columnOrder.includes('clientGroup') && sortBy === 'clientGroup') ? 'clientGroup'
-    : (columnOrder.includes('workType') && sortBy === 'workType') ? 'workType'
-    : (columnOrder.includes('billed') && sortBy === 'billed') ? 'billed'
-    : null
-  );
-  const shouldGroup = groupField && sortBy !== 'createdAt';
-  let groupedTasks = null;
-  if (shouldGroup) {
-    let options = {};
-    if (groupField === 'priority') PRIORITY_OPTIONS.forEach(opt => options[opt.value] = opt.label);
-    if (groupField === 'status') currentStatusOptions.forEach(opt => options[opt.value] = opt.label);
-    if (groupField === 'billed') {
-      options[true] = 'Yes';
-      options[false] = 'No';
-    }
-    if (groupField === 'workType') {
-      // For workType, group by first type if array, or by value
-      groupedTasks = {};
-      tasks.forEach(task => {
-        let key = Array.isArray(task.workType) ? (task.workType[0] || 'Unspecified') : (task.workType || 'Unspecified');
-        if (!groupedTasks[key]) groupedTasks[key] = [];
-        groupedTasks[key].push(task);
-      });
-    } else if (groupField === 'billed') {
-      groupedTasks = {};
-      tasks.forEach(task => {
-        let key = task.billed ? 'Yes' : 'No';
-        if (!groupedTasks[key]) groupedTasks[key] = [];
-        groupedTasks[key].push(task);
-      });
-    } else {
-      groupedTasks = groupTasksBy(tasks, groupField, options);
-    }
-  }
-
-  // Wrap the initialization useEffect for columnOrder:
-  useEffect(() => {
-    if (!isColumnOrderControlled) {
-      if (!columnOrder.length && !visibleColumns.length) {
-        const defaultOrder = ALL_COLUMNS.map(col => col.id);
-        setColumnOrder(defaultOrder);
-        if (!isControlled) setVisibleColumns(defaultOrder);
-      }
-    }
-  }, [columnOrder, visibleColumns, isControlled, isColumnOrderControlled]);
-
-  // Wrap the fetchColumnOrder useEffect:
-  useEffect(() => {
-    if (!isColumnOrderControlled) {
-      if (!tabKey || !tabId) return;
-      async function fetchColumnOrder() {
-        try {
-          if (!tabKey || !tabId) return;
-          const res = await fetch(`${API_BASE_URL}/api/users/tabstate/columnOrder?tabKey=${tabKey}&tabId=${tabId}`, {
-            headers: { Authorization: `Bearer ${user.token}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            let order = data.columnOrder;
-            const allIds = ALL_COLUMNS.map(col => col.id);
-            // Fallback: ensure all columns present
-            if (!order || !Array.isArray(order) || order.some(colId => !allIds.includes(colId)) || allIds.some(colId => !order.includes(colId))) {
-              order = allIds;
-            }
-            if (isMounted.current) {
-              setColumnOrder(order);
-              if (!isControlled && setVisibleColumns) {
-                try {
-                  setVisibleColumns(order);
-                } catch (error) {
-                  console.error('Error setting visible columns:', error);
-                }
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Error fetching column order:', err);
-          // fallback: show all columns
-          if (isMounted.current) {
-            setColumnOrder(ALL_COLUMNS.map(col => col.id));
-            if (!isControlled && setVisibleColumns) setVisibleColumns(ALL_COLUMNS.map(col => col.id));
-          }
-        }
-      }
-      fetchColumnOrder();
-      return () => { isMounted.current = false; };
-    }
-    // eslint-disable-next-line
-  }, [tabKey, tabId, isControlled, isColumnOrderControlled]);
-
-  // Wrap the saveColumnOrder useEffect:
-  useEffect(() => {
-    if (!isColumnOrderControlled) {
-      if (!columnOrder || !Array.isArray(columnOrder) || columnOrder.length === 0) return;
-      async function saveColumnOrder() {
-        try {
-          if (!user?.token) {
-            console.error('Missing authentication token');
-            return;
-          }
-          if (!tabKey || !tabId || !Array.isArray(columnOrder)) {
-            console.error('Invalid column order data:', { tabKey, tabId, columnOrder });
-            return;
-          }
-          const allIds = ALL_COLUMNS.map(col => col.id);
-          if (columnOrder.some(colId => !allIds.includes(colId))) {
-            console.error('Invalid column IDs in order:', columnOrder);
-            return;
-          }
-          const response = await fetch(`${API_BASE_URL}/api/users/tabstate/columnOrder`, {
-            method: 'PATCH',
-            headers: { 
-              'Content-Type': 'application/json', 
-              Authorization: `Bearer ${user.token}` 
-            },
-            body: JSON.stringify({ tabKey, columnOrder, tabId }),
-          });
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-            console.error('Failed to save column order:', errorData);
-            toast.error(errorData.message || 'Failed to save column order');
-            // Fallback: restore previous order if save fails
-            setColumnOrder(prevColumnOrder);
-            if (!isControlled) setVisibleColumns(prevColumnOrder);
-          } else {
-            // Store successful order as previous order
-            setPrevColumnOrder(columnOrder);
-          }
-        } catch (err) {
-          console.error('Error saving column order:', err);
-          toast.error('Failed to save column order');
-          // Fallback: restore previous order if save fails
-          setColumnOrder(prevColumnOrder);
-          if (!isControlled) setVisibleColumns(prevColumnOrder);
-        }
-      }
-      saveColumnOrder();
-    }
-    // eslint-disable-next-line
-  }, [columnOrder, tabKey, tabId, isColumnOrderControlled]);
-
-  // When component mounts, fetch initial column order
-  useEffect(() => {
-    if (!isColumnOrderControlled) {
-      if (!tabKey || !tabId) return;
-      async function fetchColumnOrder() {
-        try {
-          if (!tabKey || !tabId) return;
-          const res = await fetch(`${API_BASE_URL}/api/users/tabstate/columnOrder?tabKey=${tabKey}&tabId=${tabId}`, {
-            headers: { Authorization: `Bearer ${user.token}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            let order = data.columnOrder;
-            const allIds = ALL_COLUMNS.map(col => col.id);
-            // Fallback: ensure all columns present
-            if (!order || !Array.isArray(order) || order.some(colId => !allIds.includes(colId)) || allIds.some(colId => !order.includes(colId))) {
-              order = allIds;
-            }
-            if (isMounted.current) {
-              setColumnOrder(order);
-              if (!isControlled && setVisibleColumns) {
-                try {
-                  setVisibleColumns(order);
-                } catch (error) {
-                  console.error('Error setting visible columns:', error);
-                }
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Error fetching column order:', err);
-          // fallback: show all columns
-          if (isMounted.current) {
-            setColumnOrder(ALL_COLUMNS.map(col => col.id));
-            if (!isControlled && setVisibleColumns) setVisibleColumns(ALL_COLUMNS.map(col => col.id));
-          }
-        }
-      }
-      fetchColumnOrder();
-      return () => { isMounted.current = false; };
-    }
-    // eslint-disable-next-line
-  }, [tabKey, tabId, isControlled, isColumnOrderControlled]);
-
-  // Helper to get all assigned verifier user IDs for a task
-  const getAssignedVerifierIds = (task) => [
-    task.verificationAssignedTo?._id,
-    task.secondVerificationAssignedTo?._id,
-    task.thirdVerificationAssignedTo?._id,
-    task.fourthVerificationAssignedTo?._id,
-    task.fifthVerificationAssignedTo?._id,
-  ].filter(Boolean);
-
-  // Helper: get group key for a task (if grouped)
-  const getGroupKey = (task) => {
-    if (!shouldGroup) return null;
-    if (groupField === 'workType') return Array.isArray(task.workType) ? (task.workType[0] || 'Unspecified') : (task.workType || 'Unspecified');
-    if (groupField === 'billed') return task.billed ? 'Yes' : 'No';
-    return task[groupField];
-  };
-
-
-  // Reset loaded tasks count when tasks change or view type changes
-  useEffect(() => {
-    setLoadedTasksCount(25);
-  }, [tasks, taskType]);
-
-  // Load more tasks function
-  const loadMoreTasks = () => {
-    setLoadedTasksCount(prev => prev + TASKS_PER_BATCH);
-  };
-
-  // Check if should show load more button
-  const shouldShowLoadMore = (totalTasks) => {
-    return totalTasks > loadedTasksCount;
-  };
-
-  // Create a ref for the load more trigger element
-  const loadMoreTriggerRef = useRef(null);
-
-  // Auto-load more tasks when user scrolls near the bottom
-  useEffect(() => {
-    const triggerElement = loadMoreTriggerRef.current;
-    if (!triggerElement) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        if (entry.isIntersecting) {
-          // Use correct total count for grouped/ungrouped
-          const totalTasks = shouldGroup
-            ? Object.values(groupedTasks || {}).reduce((sum, arr) => sum + arr.length, 0)
-            : (tasks?.length || 0);
-          if (shouldShowLoadMore(totalTasks)) {
-            loadMoreTasks();
-          }
-        }
-      },
-      {
-        root: null,
-        rootMargin: '200px', // Aggressive early trigger
-        threshold: 0.01 // Very early detection
-      }
-    );
-
-    observer.observe(triggerElement);
-
-    return () => {
-      if (triggerElement) {
-        observer.unobserve(triggerElement);
-      }
-    };
-  }, [tasks, loadedTasksCount, shouldGroup, groupedTasks]);
-
-
-  // Track last scroll position for scroll direction detection
-  const lastScrollTopRef = useRef(0);
-
-  // Refactor the useEffect that fetches and applies task order
-  useEffect(() => {
-    let isMounted = true;
-    // Get current task IDs
-    const currentTaskIds = tasks.map(t => t._id).join(',');
-    // Only fetch and apply order if the set of task IDs or grouping changes
-    if (
-      lastTaskIdsRef.current.join(',') !== currentTaskIds ||
-      lastGroupFieldRef.current !== groupField
-    ) {
-      async function fetchAndApplyOrder() {
-        setOrderLoaded(false);
-        try {
-          if (!tabKey || !tabId) return;
-          const res = await fetch(`${API_BASE_URL}/api/users/tabstate/taskOrder?tabKey=${tabKey}&tabId=${tabId}`, {
-            headers: { Authorization: `Bearer ${user.token}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            let orderArr = data.taskOrder;
-            if (orderArr && Array.isArray(orderArr)) {
-              // Use a Set for fast lookup
-              const idToTask = Object.fromEntries(tasks.map(t => [t._id, t]));
-              const orderedSet = new Set(orderArr);
-              let newOrderedTasks = orderArr.map(id => idToTask[id]).filter(Boolean);
-              for (const t of tasks) {
-                if (!orderedSet.has(t._id)) newOrderedTasks.push(t);
-              }
-              // Only update if order actually changed
-              if (isMounted && (newOrderedTasks.length !== orderedTasks.length || newOrderedTasks.some((t, i) => t !== orderedTasks[i]))) {
-                setOrderedTasks(newOrderedTasks);
-              }
-            } else {
-              if (isMounted && tasks !== orderedTasks) setOrderedTasks(tasks);
-            }
-          } else {
-            if (isMounted && tasks !== orderedTasks) setOrderedTasks(tasks);
-          }
-        } catch (err) {
-          if (isMounted && tasks !== orderedTasks) setOrderedTasks(tasks);
-        } finally {
-          if (isMounted) setOrderLoaded(true);
-          lastTaskIdsRef.current = tasks.map(t => t._id);
-          lastGroupFieldRef.current = groupField;
-        }
-      }
-      fetchAndApplyOrder();
-    }
-    // eslint-disable-next-line
-  }, [tasks, shouldGroup, groupField, tabKey, tabId]);
-
-  // Save order to backend
-  const saveOrder = async (newOrder) => {
-    try {
-      if (!tabKey || !tabId) return;
-      await fetch(`${API_BASE_URL}/api/users/tabstate/taskOrder`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
-        body: JSON.stringify({ tabKey, order: newOrder, tabId }),
-      });
-      // No refetchTasks here for smooth UI
-    } catch (err) {
-      console.error('Error saving task order:', err);
-    }
-  };
-
-  // Drag handlers for rows
-  const handleRowDragStart = (e, taskId) => {
-    setDraggedTaskId(taskId);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', taskId);
-  };
-  const handleRowDragOver = (e, overTaskId) => {
-    e.preventDefault();
-    if (draggedTaskId) {
-      setDragOverTaskId(overTaskId);
-    }
-  };
-  const handleRowDrop = (e, dropTaskId) => {
-    e.preventDefault();
-    if (!draggedTaskId) return;
-    let newOrder = [];
-    const idxFrom = orderedTasks.findIndex(t => t._id === draggedTaskId);
-    const idxTo = orderedTasks.findIndex(t => t._id === dropTaskId);
-    if (idxFrom === -1 || idxTo === -1) return;
-    
-    // Get the group keys for the dragged task and drop target
-    if (shouldGroup) {
-      const draggedTask = orderedTasks[idxFrom];
-      const dropTask = orderedTasks[idxTo];
-      const draggedGroupKey = getGroupKey(draggedTask);
-      const dropGroupKey = getGroupKey(dropTask);
-      
-      // Only allow reordering within the same group
-      if (draggedGroupKey !== dropGroupKey) {
-        console.log('Cannot reorder tasks between different groups');
-        setDraggedTaskId(null);
-        setDragOverTaskId(null);
-        return;
-      }
-      
-      // For grouped view, we need to keep tasks within their respective groups
-      // First, collect all tasks by their group
-      const tasksByGroup = {};
-      orderedTasks.forEach(task => {
-        const groupKey = getGroupKey(task);
-        if (!tasksByGroup[groupKey]) tasksByGroup[groupKey] = [];
-        tasksByGroup[groupKey].push(task);
-      });
-      
-      // Then reorganize within the specific group
-      const groupTasks = tasksByGroup[draggedGroupKey];
-      const groupIdxFrom = groupTasks.findIndex(t => t._id === draggedTaskId);
-      const groupIdxTo = groupTasks.findIndex(t => t._id === dropTaskId);
-      
-      // Reorder within the group
-      const [groupRemoved] = groupTasks.splice(groupIdxFrom, 1);
-      groupTasks.splice(groupIdxTo, 0, groupRemoved);
-      
-      // Reconstruct the full task order, preserving group order
-      newOrder = [];
-      Object.values(tasksByGroup).forEach(tasks => {
-        newOrder.push(...tasks);
-      });
-    } else {
-      // For ungrouped view, simple reordering
-      newOrder = [...orderedTasks];
-      const [removed] = newOrder.splice(idxFrom, 1);
-      newOrder.splice(idxTo, 0, removed);
-    }
-    
-    // Update the order in state
-    setOrderedTasks(newOrder);
-    
-    // Save the new order to backend
-    saveOrder(newOrder.map(t => t._id));
-    
-    // Clear drag states
-    setDraggedTaskId(null);
-    setDragOverTaskId(null);
-  };
-  const handleRowDragEnd = () => {
-    setDraggedTaskId(null);
-    setDragOverTaskId(null);
-  };
-
-  // New function for handling group drag and drop
-  const handleGroupDrop = (fromGroup, toGroup) => {
-    if (!shouldGroup || !fromGroup || !toGroup || fromGroup === toGroup) return;
-
-    // First, collect all tasks by their group
-    const tasksByGroup = {};
-    const groupOrder = [];
-    
-    // Extract current group order
-    Object.entries(renderGroupedTasks).forEach(([group, _]) => {
-      groupOrder.push(group);
-    });
-    
-    // Find the positions of the groups
-    const fromIndex = groupOrder.indexOf(fromGroup);
-    const toIndex = groupOrder.indexOf(toGroup);
-    
-    if (fromIndex === -1 || toIndex === -1) return;
-    
-    // Rearrange the group order
-    const newGroupOrder = [...groupOrder];
-    const [removed] = newGroupOrder.splice(fromIndex, 1);
-    newGroupOrder.splice(toIndex, 0, removed);
-    
-    // Reorganize tasks according to the new group order
-    let newOrderedTasks = [];
-    
-    // First, group all tasks
-    orderedTasks.forEach(task => {
-      const groupKey = getGroupKey(task);
-      if (!tasksByGroup[groupKey]) tasksByGroup[groupKey] = [];
-      tasksByGroup[groupKey].push(task);
-    });
-    
-    // Then rebuild the task order based on the new group order
-    newGroupOrder.forEach(group => {
-      if (tasksByGroup[group]) {
-        newOrderedTasks = [...newOrderedTasks, ...tasksByGroup[group]];
-      }
-    });
-    
-    // Update the task order
-    setOrderedTasks(newOrderedTasks);
-    
-    // Save the new order to backend
-    saveOrder(newOrderedTasks.map(t => t._id));
-  };
-  
-  // Add this useEffect to ensure orderedTasks are updated with latest task data while preserving order
-  useEffect(() => {
-    if (!orderedTasks || !tasks || tasks.length === 0) return;
-    
-    // Map of task IDs to updated task data
-    const taskMap = tasks.reduce((map, task) => {
-      map[task._id] = task;
-      return map;
-    }, {});
-    
-    // Update orderedTasks with the latest task data while preserving order
-    const updatedOrderedTasks = orderedTasks.map(task => {
-      if (taskMap[task._id]) {
-        // Preserve the position but update the task data
-        return { ...taskMap[task._id] };
-      }
-      return task;
-    });
-    
-    // Add any new tasks that aren't in orderedTasks yet
-    const orderedTaskIds = new Set(updatedOrderedTasks.map(task => task._id));
-    const newTasks = tasks.filter(task => !orderedTaskIds.has(task._id));
-    
-    if (newTasks.length > 0 || JSON.stringify(updatedOrderedTasks) !== JSON.stringify(orderedTasks)) {
-      setOrderedTasks([...updatedOrderedTasks, ...newTasks]);
-    }
-  }, [tasks]);
-
-  // Use orderedTasks instead of tasks in rendering
-  // In grouped mode, group orderedTasks by groupKey
-  let renderGroupedTasks = groupedTasks;
-  if (shouldGroup && orderLoaded) {
-    renderGroupedTasks = {};
-    for (const t of orderedTasks) {
-      const gk = getGroupKey(t);
-      if (!renderGroupedTasks[gk]) renderGroupedTasks[gk] = [];
-      renderGroupedTasks[gk].push(t);
-    }
-  }
-
-  // Prevent rendering table until orderLoaded is true in grouped mode
-  if (shouldGroup && !orderLoaded) {
+  if (error) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <div className="text-red-500 text-center">
+          <p className="text-lg font-semibold">Error loading tasks</p>
+          <p className="text-sm">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <>
-      <div className="pt-4 bg-gray-50 min-h-screen">
-        {/* Responsive table wrapper */}
-        <div className="overflow-x-auto w-full" ref={tableRef}>
-          <table className={`min-w-full divide-y divide-gray-200 ${isResizing ? 'select-none' : ''}`}> 
-            {/* Only render thead at the top if not grouping */}
-            {!shouldGroup && (
-              <thead className="border-b border-gray-200">
-                <tr>
-                  {enableBulkSelection && (
-                    <th className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none whitespace-nowrap border-r border-gray-200" style={{width: '48px', minWidth: '48px'}} title="Select All">
-                      <input
-                        type="checkbox"
-                        checked={isAllSelected}
-                        onChange={(e) => onSelectAll && onSelectAll(e.target.checked)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                    </th>
-                  )}
-                  <th className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none whitespace-nowrap border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>No</th>
-                  {getOrderedVisibleColumns().map((colId, idx, arr) => {
-                    const col = ALL_COLUMNS.find(c => c.id === colId);
-                    if (!col) return null;
-                    const isLast = idx === arr.length - 1;
-                    return (
-                      <th
-                        key={colId}
-                        className={`px-2 py-1 text-left text-sm font-normal bg-white tracking-wider relative select-none whitespace-nowrap ${!isLast ? 'border-r border-gray-200' : ''}`}
-                        style={{
-                          width: (columnWidths[colId] || 150) + 'px',
-                          minWidth: (columnWidths[colId] || 150) + 'px',
-                          background: dragOverColumn === colId ? '#f0f6ff' : 'white',
-                          boxShadow: dragOverColumn === colId ? 'inset 2px 0 0 0 #60a5fa' : undefined,
-                          borderBottom: '1px solid #e5e7eb',
-                          position: 'relative',
-                        }}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, colId)}
-                        onDragOver={(e) => handleDragOver(e, colId)}
-                        onDragLeave={handleDragLeave}
-                        onDrop={(e) => handleDrop(e, colId)}
-                      >
-                        <span style={{fontWeight: 500}} className="whitespace-nowrap overflow-hidden text-ellipsis block">{col.label}</span>
-                        {!isLast && (
-                          <span
-                            onMouseDown={e => handleResizeStart(e, colId)}
-                            style={{
-                              position: 'absolute',
-                              right: 0,
-                              top: 0,
-                              height: '100%',
-                              width: 8,
-                              cursor: 'col-resize',
-                              zIndex: 10,
-                              userSelect: 'none',
-                              background: 'transparent',
-                              pointerEvents: 'auto',
-                              display: 'block',
-                            }}
-                            onClick={e => e.stopPropagation()}
-                            title="Resize column"
-                            tabIndex={-1}
-                          ></span>
-                        )}
-                      </th>
-                    );
-                  })}
-                  {(viewType === 'assigned' || viewType === 'admin') && (
-                    <th key="actions" className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none">Actions</th>
-                  )}
-                </tr>
-              </thead>
-            )}
-            <tbody>
-              {shouldGroup ? (
-                (() => {
-                  // For grouped view, we need to count tasks across all groups and limit to loadedTasksCount
-                  let totalTasksShown = 0;
-                  return Object.entries(renderGroupedTasks).map(([group, groupTasks]) => {
-                    // Only show groups and tasks if we haven't exceeded the limit
-                    const tasksToShow = groupTasks.slice(0, Math.max(0, loadedTasksCount - totalTasksShown));
-                    const shouldShowGroup = totalTasksShown < loadedTasksCount && tasksToShow.length > 0;
-                    totalTasksShown += tasksToShow.length;
-                    
-                    if (!shouldShowGroup) return null;
-                    
-                    return (
-                      <React.Fragment key={group}>
-                    <tr 
-                      key={group + '-header'} 
-                      className={`group-header ${dragOverGroup === group && draggedGroup ? 'bg-blue-100' : ''} cursor-grab`}
-                      draggable={true}
-                      onDragStart={(e) => {
-                        setDraggedGroup(group);
-                        e.dataTransfer.setData('text/plain', group);
-                        e.dataTransfer.effectAllowed = 'move';
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        if (draggedGroup && draggedGroup !== group) {
-                          setDragOverGroup(group);
-                        }
-                      }}
-                      onDragLeave={() => {
-                        if (dragOverGroup === group) {
-                          setDragOverGroup(null);
-                        }
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        if (draggedGroup && draggedGroup !== group) {
-                          handleGroupDrop(draggedGroup, group);
-                        }
-                        setDraggedGroup(null);
-                        setDragOverGroup(null);
-                      }}
-                      onDragEnd={() => {
-                        setDraggedGroup(null);
-                        setDragOverGroup(null);
-                      }}
-                    >
-                      <td colSpan={getOrderedVisibleColumns().length + ((viewType === 'assigned' || viewType === 'admin') ? 2 : 1) + (enableBulkSelection ? 1 : 0)} 
-                          className={`bg-gray-100 text-gray-800 font-semibold px-4 py-2 border-t border-b border-gray-300 ${draggedGroup === group ? 'opacity-50' : ''}`}>
-                        <div className="flex items-center">
-                          <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-                          </svg>
-                          {group}
-                        </div>
-                      </td>
-                    </tr>
-                    <tr key={group + '-columns'} className="border-b border-gray-200">
-                      {enableBulkSelection && (
-                        <th className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none whitespace-nowrap border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>
-                          {/* Empty header for group - no select all */}
-                        </th>
-                      )}
-                      <th className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none whitespace-nowrap border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>No</th>
-                      {getOrderedVisibleColumns().map((colId, idx, arr) => {
-                        const col = ALL_COLUMNS.find(c => c.id === colId);
-                        if (!col) return null;
-                        const isLast = idx === arr.length - 1;
-                        return (
-                          <th
-                            key={colId}
-                            className={`px-2 py-1 text-left text-sm font-normal bg-white tracking-wider relative select-none whitespace-nowrap ${!isLast ? 'border-r border-gray-200' : ''}`}
-                            style={{
-                              width: (columnWidths[colId] || 150) + 'px',
-                              minWidth: (columnWidths[colId] || 150) + 'px',
-                              background: dragOverColumn === colId ? '#f0f6ff' : 'white',
-                              boxShadow: dragOverColumn === colId ? 'inset 2px 0 0 0 #60a5fa' : undefined,
-                              borderBottom: '1px solid #e5e7eb',
-                              position: 'relative',
-                            }}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, colId)}
-                            onDragOver={(e) => handleDragOver(e, colId)}
-                            onDragLeave={handleDragLeave}
-                            onDrop={(e) => handleDrop(e, colId)}
-                          >
-                            <span style={{fontWeight: 500}} className="whitespace-nowrap overflow-hidden text-ellipsis block">{col.label}</span>
-                            {!isLast && (
-                              <span
-                                onMouseDown={e => handleResizeStart(e, colId)}
-                                style={{
-                                  position: 'absolute',
-                                  right: 0,
-                                  top: 0,
-                                  height: '100%',
-                                  width: 8,
-                                  cursor: 'col-resize',
-                                  zIndex: 10,
-                                  userSelect: 'none',
-                                  background: 'transparent',
-                                  pointerEvents: 'auto',
-                                  display: 'block',
-                                }}
-                                onClick={e => e.stopPropagation()}
-                                title="Resize column"
-                                tabIndex={-1}
-                              ></span>
-                            )}
-                          </th>
-                        );
-                      })}
-                      {(viewType === 'assigned' || viewType === 'admin') && (
-                        <th key="actions" className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none">Actions</th>
-                      )}
-                    </tr>
-                    {tasksToShow.map((task, idx) => (
-                      <tr
-                        key={task._id}
-                        className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''}`}
-                        draggable
-                        onDragStart={e => handleRowDragStart(e, task._id)}
-                        onDragOver={e => handleRowDragOver(e, task._id)}
-                        onDrop={e => handleRowDrop(e, task._id)}
-                        onDragEnd={handleRowDragEnd}
-                        style={{ opacity: draggedTaskId === task._id ? 0.5 : 1 }}
-                      >
-                        {enableBulkSelection && (
-                          <td className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>
-                            <input
-                              type="checkbox"
-                              checked={selectedTasks.includes(task._id)}
-                              onChange={(e) => onTaskSelect && onTaskSelect(task._id, e.target.checked)}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                              onClick={(e) => e.stopPropagation()}
-                              title={selectedTasks.includes(task._id) ? "Deselect task" : "Select task"}
-                            />
-                          </td>
-                        )}
-                        <td
-                          className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-pointer hover:bg-gray-100"
-                          style={{width: '48px', minWidth: '48px', textAlign: 'right'}}
-                          title="Left click to edit, right click for delete option"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleNoColumnLeftClick(task);
-                          }}
-                          onContextMenu={(e) => {
-                            e.stopPropagation();
-                            handleNoColumnRightClick(e, task);
-                          }}
-                        >
-                          {idx + 1}
-                        </td>
-                        {getOrderedVisibleColumns().map((colId, idx2, arr) => {
-                          const col = ALL_COLUMNS.find(c => c.id === colId);
-                          if (!col) return null;
-                          const isLast = idx2 === arr.length - 1;
-                          
-                          switch (colId) {
-                            case 'title':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{verticalAlign: 'middle', width: (columnWidths[colId] || 256) + 'px', minWidth: (columnWidths[colId] || 256) + 'px', maxWidth: (columnWidths[colId] || 256) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.title}</span></div></td>;
-                            
-                            case 'description':
-                              return (
-                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white border-0 ${!isLast ? 'border-r border-gray-200' : ''}`} style={{verticalAlign: 'middle', width: (columnWidths[colId] || 180) + 'px', minWidth: (columnWidths[colId] || 180) + 'px', maxWidth: (columnWidths[colId] || 180) + 'px', background: 'white', overflow: 'hidden'}}>
-                                  {editingDescriptionTaskId === task._id ? (
-                                    <input
-                                      type="text"
-                                      value={editingDescriptionValue}
-                                      autoFocus
-                                      onChange={e => setEditingDescriptionValue(e.target.value)}
-                                      onBlur={() => handleDescriptionEditSave(task)}
-                                      onKeyDown={e => {
-                                        if (e.key === 'Enter') {
-                                          handleDescriptionEditSave(task);
-                                        }
-                                      }}
-                                      className="no-border-input w-full bg-white px-1 py-1 rounded"
-                                      style={{fontSize: 'inherit', height: '28px'}}
-                                    />
-                                  ) : (
-                                    <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                                      <span
-                                        className="cursor-pointer block"
-                                        onClick={() => {
-                                          setEditingDescriptionTaskId(task._id);
-                                          setEditingDescriptionValue(task.description || '');
-                                        }}
-                                        title="Click to edit"
-                                        style={{ minHeight: '14px', color: !task.description ? '#aaa' : undefined, fontSize: 'inherit' }}
-                                      >
-                                        {task.description && task.description.trim() !== '' ? task.description : <span style={{fontStyle: 'italic', fontSize: 'inherit'}}></span>}
-                                      </span>
-                                    </div>
-                                  )}
-                                </td>
-                              );
-                            
-                            case 'clientName':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span className="text-sm font-medium text-gray-900">{task.clientName}</span></div></td>;
-                            
-                            case 'clientGroup':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span className="text-sm text-gray-500">{task.clientGroup}</span></div></td>;
-                            
-                            case 'workType':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex gap-1">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></div></td>;
-                            
-                            case 'billed':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? 'Yes' : 'No'}</span></div></td>;
-                            
-                            case 'status':
-                              // Show colored status but disable interaction in 'Task Issued For Verification' and 'Task For Guidance' tabs in Received Tasks
-                              // Allow interaction in 'completed' tab
-                              if (
-                                viewType === 'received' &&
-                                (taskType === 'issuedVerification' || taskType === 'guidance')
-                              ) {
-                                return (
-                                  <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                                    style={{ width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden' }}>
-                                  <div className="overflow-x-auto whitespace-nowrap" style={{ width: '100%', maxWidth: '100%' }}>
-                                    <span 
-                                      className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getStatusColor(task.status) || ''}`}
-                                      style={getStatusStyles(task.status) || {}}
-                                    >
-                                      {currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
-                                    </span>
-                                  </div>
-                                </td>
-                              );
-                            }
-                            return (
-                              <td
-                                key={colId}
-                                className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                                style={{
-                                  width: (columnWidths[colId] || 120) + 'px',
-                                  minWidth: (columnWidths[colId] || 120) + 'px',
-                                  maxWidth: (columnWidths[colId] || 120) + 'px',
-                                  background: 'white',
-                                  overflow: 'visible',
-                                  cursor: viewType === 'received' ? 'pointer' : 'default',
-                                  position: 'relative',
-                                  zIndex: editingStatusTaskId === task._id ? 50 : 'auto',
-                                }}
-                                onClick={e => {
-                                  if (viewType === 'received') {
-                                    e.stopPropagation();
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    setDropdownPosition({
-                                      top: rect.bottom + window.scrollY,
-                                      left: rect.left + window.scrollX,
-                                    });
-                                    setEditingStatusTaskId(task._id);
-                                  }
-                                }}
-                              >
-                                <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-                                  <span
-                                    className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status) || ''}`}
-                                    style={{
-                                      display: 'inline-block',
-                                      whiteSpace: 'nowrap',
-                                      ...getStatusStyles(task.status),
-                                      overflowX: 'auto',
-                                      textOverflow: 'ellipsis',
-                                      maxWidth: '100%',
-                                      verticalAlign: 'middle',
-                                      scrollbarWidth: 'thin',
-                                      msOverflowStyle: 'auto',
-                                    }}
-                                    title={currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
-                                  >
-                                    {currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
-                                  </span>
-                                  {/* Show dropdown as portal if open */}
-                                  {editingStatusTaskId === task._id && viewType === 'received' && (
-                                    <SearchableStatusDropdown
-                                      task={task}
-                                      currentStatusOptions={
-                                        viewType === 'received' && taskType === 'execution'
-                                          ? currentStatusOptions.filter(opt => opt.value !== 'reject')
-                                          : currentStatusOptions
-                                      }
-                                      statusLoading={statusLoading}
-                                      getStatusColor={getStatusColor}
-                                      getStatusStyles={getStatusStyles}
-                                      onStatusChange={handleStatusChangeLocal}
-                                      onClose={() => setEditingStatusTaskId(null)}
-                                      position={dropdownPosition}
-                                    />
-                                  )}
-                                </div>
-                              </td>
-                            );
-                          
-                            case 'priority':
-                              // Only allow editing if not in guidance or issuedVerification tab
-                              const canEditPriority = viewType === 'received' && (taskType === 'execution' || taskType === 'receivedVerification');
-                              return (
-                                <td
-                                  key={colId}
-                                  className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                                  style={{
-                                    width: (columnWidths[colId] || 120) + 'px',
-                                    minWidth: (columnWidths[colId] || 120) + 'px',
-                                    maxWidth: (columnWidths[colId] || 120) + 'px',
-                                    background: 'white',
-                                    overflow: 'visible',
-                                    cursor: canEditPriority ? 'pointer' : 'default',
-                                    position: 'relative',
-                                    zIndex: editingPriorityTaskId === task._id ? 50 : 'auto',
-                                  }}
-                                  onClick={e => {
-                                    if (canEditPriority) {
-                                      e.stopPropagation();
-                                      const rect = e.currentTarget.getBoundingClientRect();
-                                      setDropdownPosition({
-                                        top: rect.bottom + window.scrollY,
-                                        left: rect.left + window.scrollX,
-                                      });
-                                      setEditingPriorityTaskId(task._id);
-                                    }
-                                  }}
-                                >
-                                  <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                                    <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getPriorityColor(task.priority)}`}>{PRIORITY_OPTIONS.find(opt => opt.value === task.priority)?.label || task.priority}</span>
-                                  </div>
-                                  {/* Show dropdown as portal if open and canEditPriority */}
-                                  {editingPriorityTaskId === task._id && canEditPriority && ReactDOM.createPortal(
-                                    <div
-                                      ref={priorityDropdownRef}
-                                      style={{
-                                        position: 'absolute',
-                                        top: dropdownPosition.top,
-                                        left: dropdownPosition.left,
-                                        minWidth: 160,
-                                        background: '#fff',
-                                        border: '1px solid #e5e7eb',
-                                        borderRadius: 8,
-                                        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                        padding: 8,
-                                        zIndex: 9999,
-                                      }}
-                                    >
-                                      {getCurrentPriorityOptions().map(opt => (
-                                        <div
-                                          key={opt.value}
-                                          style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                            padding: '5px 12px',
-                                            borderRadius: 6,
-                                            cursor: 'pointer',
-                                            background: task.priority === opt.value ? '#f3f4f6' : 'transparent',
-                                            marginBottom: 2,
-                                            transition: 'background 0.15s',
-                                            opacity: priorityLoading ? 0.6 : 1,
-                                          }}
-                                          onClick={e => {
-                                            e.stopPropagation();
-                                            if (!priorityLoading && task.priority !== opt.value) handlePriorityChange(task, opt.value);
-                                            setEditingPriorityTaskId(null);
-                                          }}
-                                          onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                          onMouseLeave={e => e.currentTarget.style.background = task.priority === opt.value ? '#f3f4f6' : 'transparent'}
-                                        >
-                                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(opt.value)}`}>{opt.label}</span>
-                                          {task.priority === opt.value && (
-                                            <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>,
-                                    document.body
-                                  )}
-                                </td>
-                              );            
-                              
-                            case 'verification':
-                              // Allow any user to edit verification in received tasks page
-                              const canEditVerification = viewType === 'received';
-                              return (
-                                <td
-                                  key={colId}
-                                  className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                                  style={{
-                                    width: (columnWidths[colId] || 130) + 'px',
-                                    minWidth: (columnWidths[colId] || 130) + 'px',
-                                    maxWidth: (columnWidths[colId] || 130) + 'px',
-                                    background: 'white',
-                                    overflow: 'visible',
-                                    cursor: canEditVerification ? 'pointer' : 'default',
-                                    position: 'relative',
-                                    zIndex: editingVerificationTaskId === task._id ? 50 : 'auto',
-                                  }}
-                                  onClick={e => {
-                                    if (canEditVerification) {
-                                      e.stopPropagation();
-                                      const rect = e.currentTarget.getBoundingClientRect();
-                                      setDropdownPosition({
-                                        top: rect.bottom + window.scrollY,
-                                        left: rect.left + window.scrollX,
-                                      });
-                                      setEditingVerificationTaskId(task._id);
-                                    }
-                                  }}
-                                >
-                                  <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getVerificationColor(task.verification || 'pending')}`}>
-                                      {VERIFICATION_OPTIONS.find(opt => opt.value === (task.verification || 'pending'))?.label || (task.verification || 'pending')}
-                                    </span>
-                                  </div>
-                                  {/* Show dropdown as portal if open and canEditVerification */}
-                                  {editingVerificationTaskId === task._id && canEditVerification && ReactDOM.createPortal(
-                                    <div
-                                      ref={verificationDropdownRef}
-                                      style={{
-                                        position: 'absolute',
-                                        top: dropdownPosition.top,
-                                        left: dropdownPosition.left,
-                                        minWidth: 160,
-                                        background: '#fff',
-                                        border: '1px solid #e5e7eb',
-                                        borderRadius: 8,
-                                        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                        padding: 8,
-                                        zIndex: 9999,
-                                      }}
-                                    >
-                                      {getVerificationOptions(task, currentUser).map(opt => (
-                                        <div
-                                          key={opt.value}
-                                          style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                            padding: '5px 12px',
-                                            borderRadius: 6,
-                                            cursor: 'pointer',
-                                            background: (task.verification || 'pending') === opt.value ? '#f3f4f6' : 'transparent',
-                                            marginBottom: 2,
-                                            transition: 'background 0.15s',
-                                            opacity: verificationLoading ? 0.6 : 1,
-                                          }}
-                                          onClick={e => {
-                                            e.stopPropagation();
-                                            if (!verificationLoading && (task.verification || 'pending') !== opt.value) {
-                                              handleVerificationChange(task, opt.value);
-                                            }
-                                            setEditingVerificationTaskId(null);
-                                          }}
-                                          onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                          onMouseLeave={e => e.currentTarget.style.background = (task.verification || 'pending') === opt.value ? '#f3f4f6' : 'transparent'}
-                                        >
-                                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getVerificationColor(opt.value)}`}>
-                                            {opt.label}
-                                          </span>
-                                          {(task.verification || 'pending') === opt.value && (
-                                            <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>,
-                                    document.body
-                                  )}
-                                </td>
-                              );            
-                              
-                            case 'selfVerification':
-                              const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
-                              
-                              return (
-                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                                  style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
-                                <div className="flex justify-center items-center">
-                                  <input
-                                    type="checkbox"
-                                    checked={!!task.selfVerification}
-                                    disabled={!!task.selfVerification || !canEditSelfVerification || isUpdating}
-                                    onChange={(!task.selfVerification && canEditSelfVerification) ? async (e) => {
-                                      const checked = e.target.checked;
-                                      setIsUpdating(true);
-                                      try {
-                                        const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}`, {
-                                          method: 'PUT',
-                                          headers: {
-                                            'Content-Type': 'application/json',
-                                            Authorization: `Bearer ${user.token}`,
-                                          },
-                                          body: JSON.stringify({ selfVerification: checked }),
-                                        });
-                                        if (!response.ok) throw new Error('Failed to update self verification');
-                                        const updatedTask = await response.json();
-                                        console.log('Updated task received:', updatedTask);
-                                        // Update task in state immediately
-                                        if (onTaskUpdate) {
-                                          onTaskUpdate(task._id, (prevTask) => ({
-                                            ...prevTask,
-                                            selfVerification: updatedTask.selfVerification
-                                          }));
-                                        }
-                                        // Also force refresh of tasks if refetchTasks is available
-                                        if (refetchTasks) {
-                                          setTimeout(() => refetchTasks(), 200);
-                                        }
-                                        
-                                        toast.success('Self Verification updated');
-                                      } catch (err) {
-                                        console.error('Error updating self verification:', err);
-                                        toast.error('Failed to update Self Verification');
-                                        // Revert checkbox state on error by forcing a re-render
-                                        if (refetchTasks) {
-                                          refetchTasks();
-                                        }
-                                      } finally {
-                                        setIsUpdating(false);
-                                      }
-                                    } : undefined}
-                                  />
-                                </div>
-                              </td>
-                            );
-                          
-                            case 'inwardEntryDate':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDateTime(task.inwardEntryDate)}</span></div></td>;
-                          
-                            case 'dueDate':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDate(task.dueDate)}</span></div></td>;
-                          
-                            case 'targetDate':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDate(task.targetDate)}</span></div></td>;
-                          
-                            case 'assignedBy':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedBy.photo?.url || defaultProfile} alt={task.assignedBy.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedBy.firstName} {task.assignedBy.lastName}</span></div></div></td>;
-                          
-                            case 'assignedTo':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedTo.photo?.url || defaultProfile} alt={task.assignedTo.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedTo.firstName} {task.assignedTo.lastName}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.assignedTo._id)}h</span></span></div></div></td>;
-                          
-                            case 'verificationAssignedTo':
-                            case 'secondVerificationAssignedTo':
-                            case 'thirdVerificationAssignedTo':
-                            case 'fourthVerificationAssignedTo':
-                            case 'fifthVerificationAssignedTo': {
-                              // Map column to index (0-based)
-                              const verifierFields = [
-                                'verificationAssignedTo',
-                                'secondVerificationAssignedTo',
-                                'thirdVerificationAssignedTo',
-                                'fourthVerificationAssignedTo',
-                                'fifthVerificationAssignedTo',
-                              ];
-                              const colIdx = verifierFields.indexOf(colId);
-                              const currVerifierField = verifierFields[colIdx];
-                              const prevVerifierField = verifierFields[colIdx - 1];
-
-                              // Show dropdown if:
-                              // 1. For first verifier: selfVerification must be true (for execution tab)
-                              // 2. For receivedVerification tab: if current user is the first verifier, allow dropdown
-                              // 3. Current user is the assigned verifier for this column (nth)
-                              // 4. OR, current user is the previous verifier and this column is unassigned (N+1th)
-                              let userIsThisVerifier = task[currVerifierField]?._id === currentUser?._id;
-                              let userIsPrevVerifier = colIdx > 0 && task[prevVerifierField]?._id === currentUser?._id && !task[currVerifierField];
-                              let canEditThisVerifier =
-                                viewType === 'received' &&
-                                (userIsThisVerifier || userIsPrevVerifier) &&
-                                taskType !== 'completed' &&
-                                taskType !== 'guidance' &&
-                                taskType !== 'issuedVerification';
-                              
-                              // For first verifier, require selfVerification (for execution tab)
-                              if (colId === 'verificationAssignedTo') {
-                                canEditThisVerifier =
-                                  (viewType === 'received' && taskType === 'execution' && !!task.selfVerification)
-                                  || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier)
-                                  || (viewType === 'received' && taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id);
-                              }
-                              
-                              // NEW: For issuedVerification tab, only allow editing the latest non-empty verifier
-                              if (taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id) {
-                                // Find the latest non-empty verifier
-                                let latestNonEmptyVerifierIndex = -1;
-                                for (let i = verifierFields.length - 1; i >= 0; i--) {
-                                  if (task[verifierFields[i]]) {
-                                    latestNonEmptyVerifierIndex = i;
-                                    break;
-                                  }
-                                }
-                                
-                                // Only allow editing the latest non-empty verifier
-                                if (latestNonEmptyVerifierIndex !== -1 && colIdx === latestNonEmptyVerifierIndex) {
-                                  canEditThisVerifier = true;
-                                } else if (latestNonEmptyVerifierIndex !== -1) {
-                                  canEditThisVerifier = false; // Don't allow editing other verifiers
-                                }
-                              }
-                              
-                              // NEW: For execution tab with verification accepted, allow next empty verifier assignment
-                              if (taskType === 'execution' && task.verification === 'accepted') {
-                                // Find the next empty verifier position
-                                let nextEmptyVerifierIndex = -1;
-                                for (let i = 0; i < verifierFields.length; i++) {
-                                  if (!task[verifierFields[i]]) {
-                                    nextEmptyVerifierIndex = i;
-                                    break;
-                                  }
-                                }
-                                
-                                // Only allow dropdown for the next empty verifier position
-                                if (colIdx === nextEmptyVerifierIndex && nextEmptyVerifierIndex !== -1) {
-                                  canEditThisVerifier = true;
-                                } else if (task.verification === 'accepted') {
-                                  canEditThisVerifier = false; // Don't allow editing other verifiers when verification is accepted
-                                }
-                              }
-                              
-                              // NEW: For receivedVerification tab, handle verification status logic
-                              if (taskType === 'receivedVerification') {
-                                // Always allow current verifier to reassign themselves
-                                if (userIsThisVerifier) {
-                                  canEditThisVerifier = true;
-                                }
-                                // For "next verification", allow assigning the next verifier in sequence
-                                else if (task.verification === 'next verification') {
-                                  // Find current verifier
-                                  let currentVerifierIndex = -1;
-                                  verifierFields.forEach((field, idx) => {
-                                    if (task[field]?._id === currentUser?._id) {
-                                      currentVerifierIndex = idx;
-                                    }
-                                  });
-                                  
-                                  // Only allow dropdown for the next verifier after current verifier
-                                  const nextVerifierIndex = currentVerifierIndex + 1;
-                                  if (colIdx === nextVerifierIndex && nextVerifierIndex < verifierFields.length) {
-                                    canEditThisVerifier = true;
-                                  } else {
-                                    canEditThisVerifier = false;
-                                  }
-                                }
-                                // For other verification statuses, don't allow next verifier assignment
-                                else if (!userIsThisVerifier) {
-                                  canEditThisVerifier = false;
-                                }
-                              }
-
-                              // Exclude assignedTo and all already assigned verifiers
-                              const assignedVerifierIds = getAssignedVerifierIds(task);
-                              const dropdownUsers = users.filter(
-                                (u) =>
-                                  u._id !== task.assignedTo?._id &&
-                                  !assignedVerifierIds.includes(u._id) &&
-                                  u._id !== currentUser?._id &&
-                                  (`${u.firstName} ${u.lastName}`.toLowerCase().includes(verifierSearch.toLowerCase()))
-                              );
-
-                              if (canEditThisVerifier) {
-                                return (
-                                  <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                                    style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden', cursor: 'pointer', position: 'relative', zIndex: editingVerifierTaskId === `${task._id}-${colId}` ? 50 : 'auto'}}
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      const rect = e.currentTarget.getBoundingClientRect();
-                                      setVerifierDropdownPosition({
-                                        top: rect.bottom + window.scrollY,
-                                        left: rect.left + window.scrollX,
-                                      });
-                                      setEditingVerifierTaskId(`${task._id}-${colId}`);
-                                      setVerifierSearch('');
-                                    }}
-                                  >
-                                    <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                                      <div className="flex items-center ">
-                                        {task[colId] ? (
-                                          <>
-                                            <img
-                                              src={task[colId].photo?.url || defaultProfile}
-                                              alt={`${task[colId].firstName} ${task[colId].lastName}`}
-                                              className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
-                                              onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
-                                            />
-                                            <span className="ml-2">
-                                              {task[colId].firstName} {task[colId].lastName}
-                                              <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                                                {getUserTaskHours(task._id, task[colId]._id)}h
-                                              </span>
-                                            </span>
-                                          </>
-                                        ) : (
-                                          <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
-                                        )}
-                                        <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" className="ml-1 text-gray-400"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-                                      </div>
-                                      {/* Dropdown for selecting verifier */}
-                                      {editingVerifierTaskId === `${task._id}-${colId}` && ReactDOM.createPortal(
-                                        <div
-                                          ref={verifierDropdownRef}
-                                          style={{
-                                            position: 'absolute',
-                                            top: verifierDropdownPosition.top,
-                                            left: verifierDropdownPosition.left,
-                                            minWidth: 200,
-                                            background: '#fff',
-                                            border: '1px solid #e5e7eb',
-                                            borderRadius: 8,
-                                            boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                            padding: 8,
-                                            zIndex: 9999,
-                                            maxHeight: 300,
-                                            overflowY: 'auto',
-                                          }}
-                                        >
-                                          {dropdownUsers.length === 0 ? (
-                                            <div className="text-gray-400 text-sm px-2 py-2">No users found</div>
-                                          ) : (
-                                            dropdownUsers.map(u => (
-                                              <div
-                                                key={u._id}
-                                                style={{
-                                                  display: 'flex',
-                                                  alignItems: 'center',
-                                                  gap: 8,
-                                                  padding: '6px 8px',
-                                                  borderRadius: 6,
-                                                  cursor: 'pointer',
-                                                  background: task[colId] && task[colId]._id === u._id ? '#f3f4f6' : 'transparent',
-                                                  marginBottom: 2,
-                                                  transition: 'background 0.15s',
-                                                  opacity: verifierLoading ? 0.6 : 1,
-                                                }}
-                                                onClick={async e => {
-                                                  e.stopPropagation();
-                                                  if (verifierLoading || (task[colId] && task[colId]._id === u._id)) return;
-                                                  setVerifierLoading(true);
-                                                  try {
-                                                    // Prepare the request body
-                                                    const requestBody = { [colId]: u._id };
-                                                    
-                                                    // If this is execution tab with verification accepted, also set verification to pending
-                                                    if (taskType === 'execution' && task.verification === 'accepted') {
-                                                      requestBody.verification = 'pending';
-                                                    }
-                                                    
-                                                    const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verifier`, {
-                                                      method: 'PATCH',
-                                                      headers: {
-                                                        'Content-Type': 'application/json',
-                                                        Authorization: `Bearer ${currentUser.token}`,
-                                                      },
-                                                      body: JSON.stringify(requestBody),
-                                                    });
-                                                    if (!response.ok) throw new Error('Failed to update verifier');
-                                                    const updatedTask = await response.json();
-                                                    if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
-                                                    toast.success(`${col.label} updated`);
-                                                    if (refetchTasks) refetchTasks();
-                                                  } catch (err) {
-                                                    toast.error(`Failed to update ${col.label.toLowerCase()}`);
-                                                  }
-                                                  setVerifierLoading(false);
-                                                  setEditingVerifierTaskId(null);
-                                                }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                                onMouseLeave={e => e.currentTarget.style.background = (task[colId] && task[colId]._id === u._id) ? '#f3f4f6' : 'transparent'}
-                                              >
-                                                <img src={u.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
-                                                <span style={{fontSize: '14px'}}>{u.firstName} {u.lastName}</span>
-                                                {task[colId] && task[colId]._id === u._id && (
-                                                  <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                                )}
-                                              </div>
-                                            ))
-                                          )}
-                                        </div>,
-                                        document.body
-                                      )}
-                                    </div>
-                                  </td>
-                                );
-                              }
-                              // Otherwise, just show the value
-                              return (
-                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                                  style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
-                                  <div className="overflow-x-auto whitespace-nowrap flex items-center" style={{width: '100%', maxWidth: '100%'}}>
-                                    {task[colId] ? (
-                                      <>
-                                        <img src={task[colId].photo?.url || defaultProfile} alt={`${task[colId].firstName} ${task[colId].lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
-                                        <span className="ml-2">
-                                          {task[colId].firstName} {task[colId].lastName}
-                                          <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                                            {getUserTaskHours(task._id, task[colId]._id)}h
-                                          </span>
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
-                                    )}
-                                  </div>
-                                </td>
-                              );
-                            }
-                            case 'guides':
-                              const guideChipsClass = viewType === 'received' ? 'pr-6' : 'pr-0';
-                              const guideChipsMaxWidth = viewType === 'received' ? 'calc(100% - 28px)' : '100%';
-                              return (
-                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                                  style={{width: (columnWidths[colId] || 200) + 'px', minWidth: (columnWidths[colId] || 200) + 'px', maxWidth: (columnWidths[colId] || 200) + 'px', background: 'white', overflow: 'hidden'}}>
-                                <div className="flex items-center relative" style={{width: '100%', maxWidth: '100%'}}>
-                                  {/* Scrollable chips */}
-                                  <div className={`flex items-center gap-1 overflow-x-auto whitespace-nowrap ${guideChipsClass}`} style={{maxWidth: guideChipsMaxWidth}}>
-                                    {Array.isArray(task.guides) && task.guides.length > 0 ? (
-                                      task.guides.map(u => (
-                                        <span key={u._id} className="flex items-center bg-blue-100 text-blue-800 rounded-full px-2 py-0.5 text-xs font-medium mr-1">
-                                          <img src={u.photo?.url || defaultProfile} alt={u.firstName} className="w-5 h-5 rounded-full object-cover mr-1" style={{minWidth: 20, minHeight: 20}} onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} />
-                                          {u.firstName} {u.lastName}
-                                          {viewType === 'received' && (
-                                            <button
-                                              className="ml-1 text-red-500 hover:text-red-700 focus:outline-none"
-                                              style={{fontSize: '12px'}}
-                                              onClick={async (e) => {
-                                                e.stopPropagation();
-                                                const newGuides = task.guides.filter(g => g._id !== u._id).map(g => g._id);
-                                                try {
-                                                  const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/guides`, {
-                                                    method: 'PUT',
-                                                    headers: {
-                                                      'Content-Type': 'application/json',
-                                                      Authorization: `Bearer ${currentUser.token}`,
-                                                    },
-                                                    body: JSON.stringify({ guides: newGuides }),
-                                                  });
-                                                  if (!response.ok) throw new Error('Failed to update guides');
-                                                  const updatedTask = await response.json();
-                                                  if (onTaskUpdate) onTaskUpdate(task._id, (prevTask) => ({ ...prevTask, guides: updatedTask.guides }));
-                                                  toast.success('Guide removed');
-                                                } catch (err) {
-                                                  toast.error('Failed to update guides');
-                                                }
-                                              }}
-                                              title="Remove guide"
-                                            >×</button>
-                                          )}
-                                        </span>
-                                      ))
-                                    ) : (
-                                      <span className="italic text-gray-400">No guide</span>
-                                    )}
-                                  </div>
-                                  {/* Fixed dropdown icon at end, only in received viewType */}
-                                  {viewType === 'received' && (
-                                    <button
-                                      className="absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-white rounded-full border border-gray-200 hover:bg-blue-100 hover:border-blue-400 transition-colors cursor-pointer z-10"
-                                      style={{boxShadow: '0 1px 4px rgba(0,0,0,0.04)'}}
-                                      onClick={e => {
-                                        e.stopPropagation();
-                                        const rect = e.currentTarget.getBoundingClientRect();
-                                        setDropdownPosition({
-                                          top: rect.bottom + window.scrollY,
-                                          left: rect.left + window.scrollX,
-                                        });
-                                        setOpenGuideDropdownTaskId(task._id);
-                                      }}
-                                      title="Add/Remove Guides"
-                                    >
-                                      <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" className="text-gray-500 group-hover:text-blue-600 transition-colors"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-                                    </button>
-                                  )}
-                                  {/* Dropdown for selecting guides */}
-                                  {viewType === 'received' && openGuideDropdownTaskId === task._id && ReactDOM.createPortal(
-                                    <div
-                                      ref={guideDropdownRef}
-                                      style={{
-                                        position: 'absolute',
-                                        top: dropdownPosition.top,
-                                        left: dropdownPosition.left,
-                                        minWidth: 220,
-                                        background: '#fff',
-                                        border: '1px solid #e5e7eb',
-                                        borderRadius: 8,
-                                        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                        padding: 8,
-                                        zIndex: 9999,
-                                        maxHeight: 300,
-                                        overflowY: 'auto',
-                                      }}
-                                    >
-                                      {users.filter(u => !task.guides?.some(g => g._id === u._id)).length === 0 ? (
-                                        <div className="text-gray-400 text-sm px-2 py-2">No users available</div>
-                                      ) : (
-                                        users.filter(u => !task.guides?.some(g => g._id === u._id)).map(u => (
-                                          <div
-                                            key={u._id}
-                                            style={{
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              gap: 8,
-                                              padding: '6px 8px',
-                                              borderRadius: 6,
-                                              cursor: 'pointer',
-                                              background: 'transparent',
-                                              marginBottom: 2,
-                                              transition: 'background 0.15s',
-                                            }}
-                                            onClick={async e => {
-                                              e.stopPropagation();
-                                              const newGuides = [...(task.guides?.map(g => g._id) || []), u._id];
-                                              try {
-                                                const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/guides`, {
-                                                  method: 'PUT',
-                                                  headers: {
-                                                    'Content-Type': 'application/json',
-                                                    Authorization: `Bearer ${currentUser.token}`,
-                                                  },
-                                                  body: JSON.stringify({ guides: newGuides }),
-                                                });
-                                                if (!response.ok) throw new Error('Failed to update guides');
-                                                const updatedTask = await response.json();
-                                                if (onTaskUpdate) onTaskUpdate(task._id, (prevTask) => ({ ...prevTask, guides: updatedTask.guides }));
-                                                toast.success('Guide added');
-                                              } catch (err) {
-                                                toast.error('Failed to update guides');
-                                              }
-                                            }}
-                                          >
-                                            <img src={u.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
-                                            <span style={{fontSize: '14px'}}>{u.firstName} {u.lastName}</span>
-                                          </div>
-                                        ))
-                                      )}
-                                    </div>,
-                                    document.body
-                                  )}
-                                </div>
-                              </td>
-                            );
-                          
-                            case 'files':
-                              return (
-                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
-                                  <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                                    <div className="flex items-center">
-                                      {task.files && task.files.length > 0 ? (
-                                        <div className="flex items-center space-x-2">
-                                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.files.length}</span>
-                                          <button onClick={() => handleTaskClick(task)} className="text-blue-600 hover:text-blue-800 text-sm">View</button>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center">
-                                          <span className="text-gray-400 text-sm italic">No files</span>
-                                          <button onClick={() => handleTaskClick(task)} className="ml-2 text-blue-600 hover:text-blue-800 text-sm">Upload</button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
-                              );
-                            
-                            case 'comments':
-                              return (
-                                <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
-                                  <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                                    <div className="flex items-center gap-2">
-                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.comments ? task.comments.length : 0} </span>
-                                      <button onClick={() => { setSelectedTask(task); setShowComments(true); }} className="text-blue-600 hover:text-blue-800 text-sm">View</button>
-                                    </div>
-                                  </div>
-                                </td>
-                              );
-                            
-                            default:
-                              // Check if this is a custom column
-                              if (colId.startsWith('custom_')) {
-                                const customColumnName = colId.replace('custom_', '');
-                                const columnDef = customColumns.find(col => col.name === customColumnName);
-                                const customValue = task.customFields?.[customColumnName];
-                                
-                                if (columnDef) {
-                                  return (
-                                    <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} 
-                                        style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
-                                      <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                                        {columnDef.type === 'checkbox' ? (
-                                          <input 
-                                            type="checkbox" 
-                                            checked={customValue || false}
-                                            onChange={async (e) => {
-                                              const newValue = e.target.checked;
-                                              const prevValue = customValue;
-                                              // Optimistically update local state
-                                              if (onTaskUpdate) {
-                                                onTaskUpdate(task._id, (prevTask) => ({
-                                                  ...prevTask,
-                                                  customFields: {
-                                                    ...prevTask.customFields,
-                                                    [customColumnName]: newValue
-                                                  }
-                                                }));
-                                              }
-                                              // Save to MongoDB
-                                              try {
-                                                const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/custom-fields`, {
-                                                  method: 'PATCH',
-                                                  headers: {
-                                                    'Content-Type': 'application/json',
-                                                    Authorization: `Bearer ${user.token}`,
-                                                  },
-                                                  body: JSON.stringify({
-                                                    customFields: {
-                                                      ...task.customFields,
-                                                      [customColumnName]: newValue
-                                                    }
-                                                  })
-                                                });
-                                                if (!response.ok) {
-                                                  // Revert local state if failed
-                                                  if (onTaskUpdate) {
-                                                    onTaskUpdate(task._id, (prevTask) => ({
-                                                      ...prevTask,
-                                                      customFields: {
-                                                        ...prevTask.customFields,
-                                                        [customColumnName]: prevValue
-                                                      }
-                                                    }));
-                                                  }
-                                                  toast.error('Failed to save changes');
-                                                }
-                                              } catch (error) {
-                                                // Revert local state if error
-                                                if (onTaskUpdate) {
-                                                  onTaskUpdate(task._id, (prevTask) => ({
-                                                    ...prevTask,
-                                                    customFields: {
-                                                      ...prevTask.customFields,
-                                                      [customColumnName]: prevValue
-                                                    }
-                                                  }));
-                                                }
-                                                toast.error('Failed to save changes');
-                                              }
-                                            }}
-                                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                          />
-                                        ) : columnDef.type === 'tags' ? (
-                                          // Tags dropdown (similar to priority)
-                                          <div 
-                                            style={{ 
-                                              cursor: 'pointer',
-                                              position: 'relative',
-                                              zIndex: (editingCustomTagsTaskId === task._id && editingCustomTagsColumnName === customColumnName) ? 50 : 'auto',
-                                            }}
-                                            onClick={e => {
-                                              e.stopPropagation();
-                                              const rect = e.currentTarget.getBoundingClientRect();
-                                              setDropdownPosition({
-                                                top: rect.bottom + window.scrollY,
-                                                left: rect.left + window.scrollX,
-                                              });
-                                              setEditingCustomTagsTaskId(task._id);
-                                              setEditingCustomTagsColumnName(customColumnName);
-                                            }}
-                                          >
-                                            <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                              {customValue || columnDef.defaultValue || 'Select...'}
-                                            </span>
-                                            
-                                            {/* Show dropdown as portal if open */}
-                                            {editingCustomTagsTaskId === task._id && editingCustomTagsColumnName === customColumnName && ReactDOM.createPortal(
-                                              <div
-                                                ref={priorityDropdownRef}
-                                                style={{
-                                                  position: 'absolute',
-                                                  top: dropdownPosition.top,
-                                                  left: dropdownPosition.left,
-                                                  minWidth: 160,
-                                                  background: '#fff',
-                                                  border: '1px solid #e5e7eb',
-                                                  borderRadius: 8,
-                                                  boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                                  padding: 8,
-                                                  zIndex: 9999,
-                                                }}
-                                              >
-                                                {columnDef.options && columnDef.options.map(option => (
-                                                  <div
-                                                    key={option}
-                                                    style={{
-                                                      display: 'flex',
-                                                      alignItems: 'center',
-                                                      gap: 8,
-                                                      padding: '5px 12px',
-                                                      borderRadius: 6,
-                                                      cursor: 'pointer',
-                                                      background: customValue === option ? '#f3f4f6' : 'transparent',
-                                                      marginBottom: 2,
-                                                      transition: 'background 0.15s',
-                                                    }}
-                                                    onClick={e => {
-                                                      e.stopPropagation();
-                                                      if (customValue !== option) {
-                                                        handleCustomTagsChange(task, customColumnName, option);
-                                                      }
-                                                      setEditingCustomTagsTaskId(null);
-                                                      setEditingCustomTagsColumnName('');
-                                                    }}
-                                                    onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                                    onMouseLeave={e => e.currentTarget.style.background = customValue === option ? '#f3f4f6' : 'transparent'}
-                                                  >
-                                                    <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                                      {option}
-                                                    </span>
-                                                    {customValue === option && (
-                                                      <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                      </svg>
-                                                    )}
-                                                  </div>
-                                                ))}
-                                              </div>,
-                                              document.body
-                                            )}
-                                          </div>
-                                        ) : (
-                                          // Text field with click-to-edit (similar to description)
-                                          <>
-                                            {editingCustomTextTaskId === task._id && editingCustomTextColumnName === customColumnName ? (
-                                              <input
-                                                type="text"
-                                                className="w-full text-sm border-none outline-none bg-white p-1"
-                                                value={editingCustomTextValue}
-                                                style={{ height: '28px' }}
-                                                onChange={e => setEditingCustomTextValue(e.target.value)}
-                                                onBlur={() => handleCustomTextEditSave(task, customColumnName)}
-                                                onKeyDown={(e) => {
-                                                  if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    handleCustomTextEditSave(task, customColumnName);
-                                                  } else if (e.key === 'Escape') {
-                                                    setEditingCustomTextTaskId(null);
-                                                    setEditingCustomTextColumnName('');
-                                                    setEditingCustomTextValue('');
-                                                  }
-                                                }}
-                                                autoFocus
-                                              />
-                                            ) : (
-                                              <div
-                                                className="cursor-pointer min-h-[28px] p-1 flex items-center"
-                                                onClick={() => {
-                                                  setEditingCustomTextTaskId(task._id);
-                                                  setEditingCustomTextColumnName(customColumnName);
-                                                  setEditingCustomTextValue(customValue || columnDef.defaultValue || '');
-                                                }}
-                                              >
-                                                {customValue || columnDef.defaultValue || 'Click to edit...'}
-                                              </div>
-                                            )}
-                                          </>
-                                        )}
-                                      </div>
-                                    </td>
-                                  );
-                                }
-                              }
-                              
-                              // Default column handling
-                              let cellValue = task[colId];
-                              if ([
-                                'thirdVerificationAssignedTo',
-                                'fourthVerificationAssignedTo',
-                                'fifthVerificationAssignedTo'
-                              ].includes(colId)) {
-                                cellValue = cellValue ? (cellValue.firstName ? `${cellValue.firstName} ${cellValue.lastName}` : cellValue) : 'NA';
-                              }
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{cellValue}</span></div></td>;
-                          }
-                        })}
-                        {(viewType === 'assigned' || viewType === 'admin') && (
-                          <td key="actions" className="px-2 py-1 text-sm font-normal align-middle bg-white">
-                            {(!shouldDisableActions || !shouldDisableActions(task)) && (
-                              <div className="flex items-center gap-0">
-                                {/* Role-based action buttons */}
-                                {['Team Head', 'Admin', 'Senior'].includes(currentUser?.role) && (
-                                  <button
-                                    onClick={() => onEditTask && onEditTask(task)}
-                                    className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                                    title="Edit Task"
-                                  >
-                                    Edit
-                                  </button>
-                                )}
-                                {['Team Head', 'Admin'].includes(currentUser?.role) && (
-                                  <button
-                                    onClick={() => handleDeleteTask(task)}
-                                    className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                                    title="Delete Task"
-                                  >
-                                    Delete
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </React.Fragment>
-                    );
-                  }).filter(Boolean);
-                })()
-              ) : (
-                orderedTasks.slice(0, loadedTasksCount).map((task, idx) => (
-                  <tr
-                    key={task._id}
-                    className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''}`}
-                    draggable
-                    onDragStart={e => handleRowDragStart(e, task._id)}
-                    onDragOver={e => handleRowDragOver(e, task._id)}
-                    onDrop={e => handleRowDrop(e, task._id)}
-                    onDragEnd={handleRowDragEnd}
-                    style={{ opacity: draggedTaskId === task._id ? 0.5 : 1 }}
-                  >
-                    {enableBulkSelection && (
-                      <td className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200" style={{width: '48px', minWidth: '48px'}}>
+    <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
+      {/* Tabs at the very top */}
+      <TabBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onTabClick={setActiveTabId}
+        onAddTab={addTab}
+        onCloseTab={closeTab}
+        onRenameTab={renameTab}
+        onReorderTabs={reorderTabs}
+      />
+      {/* Restore original summary cards/widgets here */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+          <div className="flex items-center">
+            <ClockIcon className="h-6 w-6 sm:h-8 sm:w-8 text-red-500 mr-2 sm:mr-4" />
+            <div>
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-800">Yet To Start</h3>
+              <p className="text-xl sm:text-3xl font-bold text-red-600">{yetToStartCount}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+          <div className="flex items-center">
+            <ExclamationCircleIcon className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-500 mr-2 sm:mr-4" />
+            <div>
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-800">Today's Tasks</h3>
+              <p className="text-xl sm:text-3xl font-bold text-yellow-600">{todayCount}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+          <div className="flex items-center">
+            <ChartBarIcon className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500 mr-2 sm:mr-4" />
+            <div>
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-800">Total Tasks</h3>
+              <p className="text-xl sm:text-3xl font-bold text-blue-600">{totalCount}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+          <div className="flex items-center">
+            <ExclamationCircleIcon className="h-6 w-6 sm:h-8 sm:w-8 text-red-600 mr-2 sm:mr-4" />
+            <div>
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-800">Urgent Tasks</h3>
+              <p className="text-xl sm:text-3xl font-bold text-red-600">{urgentCount}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* Table and per-tab filters/grouping below summary cards */}
+      {/* Filters and Sorting */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 mb-4 w-full bg-white rounded-lg shadow-sm p-3">
+        {/* Mobile layout: group buttons in rows, desktop unchanged */}
+        <div className="flex flex-col w-full gap-2 sm:hidden">
+          {/* Row 1: Filter + Search */}
+          <div className="flex w-full gap-2">
+            <div className="relative flex-1" ref={filterPopupRef}>
+              <button
+                className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 text-sm w-full"
+                onClick={openFilterPopup}
+              >
+                <span>Filter</span>
+                {activeTabObj.filters.length > 0 && (
+                  <span className="bg-blue-100 text-blue-800 text-xs font-semibold ml-2 px-2.5 py-0.5 rounded-full">
+                    {activeTabObj.filters.length}
+                  </span>
+                )}
+              </button>
+              <FilterPopup
+                isOpen={isFilterPopupOpen}
+                onClose={() => setIsFilterPopupOpen(false)}
+                filters={filterDraft}
+                setFilters={filters => {
+                  setFilterDraft(filters);
+                  if (filters.length < filterDraft.length) {
+                    updateActiveTab({ filters });
+                  } else if (filters.length > 0 && filters.every(f => f.saved)) {
+                    updateActiveTab({ filters });
+                  }
+                }}
+                users={users}
+                clientNames={clientNames}
+                clientGroups={clientGroups}
+                workTypes={workTypes}
+                priorities={priorities}
+              />
+            </div>
+            <input
+              type="text"
+              placeholder="Search tasks..."
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+              value={activeTabObj.searchTerm}
+              onChange={e => updateActiveTab({ searchTerm: e.target.value })}
+            />
+          </div>
+          {/* Row 2: Columns + Group By */}
+          <div className="flex w-full gap-2">
+            <div className="relative flex-1">
+              <button
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 w-full transition-colors"
+                onClick={() => setShowColumnDropdown(v => !v)}
+                aria-label="Show/Hide Columns"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                Columns
+              </button>
+              {showColumnDropdown && (
+                <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56">
+                  <div className="font-semibold text-gray-700 mb-2 text-sm">Show/Hide Columns</div>
+                  <div className="max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                    {extendedColumns.map(col => (
+                      <label key={col.id} className="flex items-center space-x-2 mb-1 cursor-pointer hover:bg-blue-50 rounded px-2 py-1 transition-colors">
                         <input
                           type="checkbox"
-                          checked={selectedTasks.includes(task._id)}
-                          onChange={(e) => onTaskSelect && onTaskSelect(task._id, e.target.checked)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          onClick={(e) => e.stopPropagation()}
-                          title={selectedTasks.includes(task._id) ? "Deselect task" : "Select task"}
+                          checked={activeTabObj.visibleColumns.includes(col.id)}
+                          onChange={() => toggleColumnVisibility(col.id)}
+                          className="accent-blue-500"
                         />
-                      </td>
-                    )}
-                    <td
-                      className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-pointer hover:bg-gray-100"
-                      style={{width: '48px', minWidth: '48px', textAlign: 'right'}}
-                      title="Left click to edit, right click for delete option"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleNoColumnLeftClick(task);
-                      }}
-                      onContextMenu={(e) => {
-                        e.stopPropagation();
-                        handleNoColumnRightClick(e, task);
-                      }}
-                    >
-                      {idx + 1}
-                    </td>
-                    {getOrderedVisibleColumns().map((colId, idx2, arr) => {
-                      const col = ALL_COLUMNS.find(c => c.id === colId);
-                      if (!col) return null;
-                      const isLast = idx2 === arr.length - 1;
-                      
-                      switch (colId) {
-                        case 'title':
-                          return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{verticalAlign: 'middle', width: (columnWidths[colId] || 256) + 'px', minWidth: (columnWidths[colId] || 256) + 'px', maxWidth: (columnWidths[colId] || 256) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.title}</span></div></td>;
-                      
-                        case 'description':
-                          return (
-                            <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white border-0 ${!isLast ? 'border-r border-gray-200' : ''}`} style={{verticalAlign: 'middle', width: (columnWidths[colId] || 180) + 'px', minWidth: (columnWidths[colId] || 180) + 'px', maxWidth: (columnWidths[colId] || 180) + 'px', background: 'white', overflow: 'hidden'}}>
-                              {editingDescriptionTaskId === task._id ? (
-                                <input
-                                  type="text"
-                                  value={editingDescriptionValue}
-                                  autoFocus
-                                  onChange={e => setEditingDescriptionValue(e.target.value)}
-                                  onBlur={() => handleDescriptionEditSave(task)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                      handleDescriptionEditSave(task);
-                                    }
-                                  }}
-                                  className="no-border-input w-full bg-white px-1 py-1 rounded"
-                                  style={{fontSize: 'inherit', height: '28px'}}
-                                />
-                              ) : (
-                                <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                                  <span
-                                    className="cursor-pointer block"
-                                    onClick={() => {
-                                      setEditingDescriptionTaskId(task._id);
-                                      setEditingDescriptionValue(task.description || '');
-                                    }}
-                                    title="Click to edit"
-                                    style={{ minHeight: '14px', color: !task.description ? '#aaa' : undefined, fontSize: 'inherit' }}
-                                  >
-                                    {task.description && task.description.trim() !== '' ? task.description : <span style={{fontStyle: 'italic', fontSize: 'inherit'}}></span>}
-                                  </span>
-                                </div>
-                              )}
-                            </td>
-                          );
-                      
-                      case 'clientName':
-                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span className="text-sm font-medium text-gray-900">{task.clientName}</span></div></td>;
-                      
-                      case 'clientGroup':
-                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span className="text-sm text-gray-500">{task.clientGroup}</span></div></td>;
-                      
-                      case 'workType':
-                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex gap-1">{task.workType && task.workType.map((type, index) => (<span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">{type}</span>))}</div></div></td>;
-                      
-                      case 'billed':
-                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? 'Yes' : 'No'}</span></div></td>;
-                      
-                      case 'status':
-                        // Show colored status but disable interaction in 'Task Issued For Verification' and 'Task For Guidance' tabs in Received Tasks
-                        // Allow interaction in 'completed' tab
-                        if (
-                          viewType === 'received' &&
-                          (taskType === 'issuedVerification' || taskType === 'guidance')
-                        ) {
-                          return (
-                            <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                              style={{ width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden' }}>
-                              <div className="overflow-x-auto whitespace-nowrap" style={{ width: '100%', maxWidth: '100%' }}>
-                                <span 
-                                  className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getStatusColor(task.status) || ''}`}
-                                  style={getStatusStyles(task.status) || {}}
-                                >
-                                  {currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
-                                </span>
-              </div>
-                            </td>
-                          );
-                        }
-                        return (
-                          <td
-                            key={colId}
-                            className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                            style={{
-                              width: (columnWidths[colId] || 120) + 'px',
-                              minWidth: (columnWidths[colId] || 120) + 'px',
-                              maxWidth: (columnWidths[colId] || 120) + 'px',
-                              background: 'white',
-                              overflow: 'visible',
-                              cursor: viewType === 'received' ? 'pointer' : 'default',
-                              position: 'relative',
-                              zIndex: editingStatusTaskId === task._id ? 50 : 'auto',
-                            }}
-                            onClick={e => {
-                              if (viewType === 'received') {
-                                e.stopPropagation();
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                setDropdownPosition({
-                                  top: rect.bottom + window.scrollY,
-                                  left: rect.left + window.scrollX,
-                                });
-                                setEditingStatusTaskId(task._id);
-                              }
-                            }}
-                          >
-                            <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-                              <span
-                                className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status) || ''}`}
-                                style={{
-                                  display: 'inline-block',
-                                  whiteSpace: 'nowrap',
-                                  overflowX: 'auto',
-                                  ...getStatusStyles(task.status),
-                                  textOverflow: 'ellipsis',
-                                  maxWidth: '100%',
-                                  verticalAlign: 'middle',
-                                  scrollbarWidth: 'thin',
-                                  msOverflowStyle: 'auto',
-                                }}
-                                title={currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
-                              >
-                                {currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
-                              </span>
-                              {/* Show dropdown as portal if open */}
-                              {editingStatusTaskId === task._id && viewType === 'received' && (
-                                <SearchableStatusDropdown
-                                  task={task}
-                                  currentStatusOptions={
-                                    viewType === 'received' && taskType === 'execution'
-                                      ? currentStatusOptions.filter(opt => opt.value !== 'reject')
-                                      : currentStatusOptions
-                                  }
-                                  statusLoading={statusLoading}
-                                  getStatusColor={getStatusColor}
-                                  getStatusStyles={getStatusStyles}
-                                  onStatusChange={handleStatusChangeLocal}
-                                  onClose={() => setEditingStatusTaskId(null)}
-                                  position={dropdownPosition}
-                                />
-                              )}
-                            </div>
-                          </td>
-                        );
-                      
-                      case 'priority':
-                        // Only allow editing if not in guidance or issuedVerification tab
-                        const canEditPriority = viewType === 'received' && (taskType === 'execution' || taskType === 'receivedVerification');
-                        return (
-                          <td
-                            key={colId}
-                            className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                            style={{
-                              width: (columnWidths[colId] || 120) + 'px',
-                              minWidth: (columnWidths[colId] || 120) + 'px',
-                              maxWidth: (columnWidths[colId] || 120) + 'px',
-                              background: 'white',
-                              overflow: 'visible',
-                              cursor: canEditPriority ? 'pointer' : 'default',
-                              position: 'relative',
-                              zIndex: editingPriorityTaskId === task._id ? 50 : 'auto',
-                            }}
-                            onClick={e => {
-                              if (canEditPriority) {
-                                e.stopPropagation();
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                setDropdownPosition({
-                                  top: rect.bottom + window.scrollY,
-                                  left: rect.left + window.scrollX,
-                                });
-                                setEditingPriorityTaskId(task._id);
-                              }
-                            }}
-                          >
-                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                              <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getPriorityColor(task.priority)}`}>{PRIORITY_OPTIONS.find(opt => opt.value === task.priority)?.label || task.priority}</span>
-                            </div>
-                            {/* Show dropdown as portal if open and canEditPriority */}
-                            {editingPriorityTaskId === task._id && canEditPriority && ReactDOM.createPortal(
-                              <div
-                                ref={priorityDropdownRef}
-                                style={{
-                                  position: 'absolute',
-                                  top: dropdownPosition.top,
-                                  left: dropdownPosition.left,
-                                  minWidth: 160,
-                                  background: '#fff',
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: 8,
-                                  boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                  padding: 8,
-                                  zIndex: 9999,
-                                }}
-                              >
-                                {getCurrentPriorityOptions().map(opt => (
-                                  <div
-                                    key={opt.value}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 8,
-                                      padding: '5px 12px',
-                                      borderRadius: 6,
-                                      cursor: 'pointer',
-                                      background: task.priority === opt.value ? '#f3f4f6' : 'transparent',
-                                      marginBottom: 2,
-                                      transition: 'background 0.15s',
-                                      opacity: priorityLoading ? 0.6 : 1,
-                                    }}
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      if (!priorityLoading && task.priority !== opt.value) handlePriorityChange(task, opt.value);
-                                      setEditingPriorityTaskId(null);
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                    onMouseLeave={e => e.currentTarget.style.background = task.priority === opt.value ? '#f3f4f6' : 'transparent'}
-                                  >
-                                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(opt.value)}`}>{opt.label}</span>
-                                    {task.priority === opt.value && (
-                                      <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>,
-                              document.body
-                            )}
-                          </td>
-                        );
-                      
-                      case 'verification':
-                        // Allow any user to edit verification in received tasks page
-                        const canEditVerification = viewType === 'received';
-                        return (
-                          <td
-                            key={colId}
-                            className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                            style={{
-                              width: (columnWidths[colId] || 130) + 'px',
-                              minWidth: (columnWidths[colId] || 130) + 'px',
-                              maxWidth: (columnWidths[colId] || 130) + 'px',
-                              background: 'white',
-                              overflow: 'visible',
-                              cursor: canEditVerification ? 'pointer' : 'default',
-                              position: 'relative',
-                              zIndex: editingVerificationTaskId === task._id ? 50 : 'auto',
-                            }}
-                            onClick={e => {
-                              if (canEditVerification) {
-                                e.stopPropagation();
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                setDropdownPosition({
-                                  top: rect.bottom + window.scrollY,
-                                  left: rect.left + window.scrollX,
-                                });
-                                setEditingVerificationTaskId(task._id);
-                              }
-                            }}
-                          >
-                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getVerificationColor(task.verification || 'pending')}`}>
-                                {VERIFICATION_OPTIONS.find(opt => opt.value === (task.verification || 'pending'))?.label || (task.verification || 'pending')}
-                              </span>
-                            </div>
-                            {/* Show dropdown as portal if open and canEditVerification */}
-                            {editingVerificationTaskId === task._id && canEditVerification && ReactDOM.createPortal(
-                              <div
-                                ref={verificationDropdownRef}
-                                style={{
-                                  position: 'absolute',
-                                  top: dropdownPosition.top,
-                                  left: dropdownPosition.left,
-                                  minWidth: 160,
-                                  background: '#fff',
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: 8,
-                                  boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                  padding: 8,
-                                  zIndex: 9999,
-                                }}
-                              >
-                                {getVerificationOptions(task, currentUser).map(opt => (
-                                  <div
-                                    key={opt.value}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 8,
-                                      padding: '5px 12px',
-                                      borderRadius: 6,
-                                      cursor: 'pointer',
-                                      background: (task.verification || 'pending') === opt.value ? '#f3f4f6' : 'transparent',
-                                      marginBottom: 2,
-                                      transition: 'background 0.15s',
-                                      opacity: verificationLoading ? 0.6 : 1,
-                                    }}
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      if (!verificationLoading && (task.verification || 'pending') !== opt.value) {
-                                        handleVerificationChange(task, opt.value);
-                                      }
-                                      setEditingVerificationTaskId(null);
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                    onMouseLeave={e => e.currentTarget.style.background = (task.verification || 'pending') === opt.value ? '#f3f4f6' : 'transparent'}
-                                  >
-                                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getVerificationColor(opt.value)}`}>
-                                      {opt.label}
-                                    </span>
-                                    {(task.verification || 'pending') === opt.value && (
-                                      <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                      </svg>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>,
-                              document.body
-                            )}
-                          </td>
-                        );
-                      
-                      case 'selfVerification':
-                        const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
-                        
-                        return (
-                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                            style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
-                            <div className="flex justify-center items-center">
-                              <input
-                                type="checkbox"
-                                checked={!!task.selfVerification}
-                                disabled={!!task.selfVerification || !canEditSelfVerification || isUpdating2}
-                                onChange={(!task.selfVerification && canEditSelfVerification) ? async (e) => {
-                                  const checked = e.target.checked;
-                                  setIsUpdating2(true);
-                                  try {
-                                    const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}`, {
-                                      method: 'PUT',
-                                      headers: {
-                                        'Content-Type': 'application/json',
-                                        Authorization: `Bearer ${user.token}`,
-                                      },
-                                      body: JSON.stringify({ selfVerification: checked }),
-                                    });
-                                    if (!response.ok) throw new Error('Failed to update self verification');
-                                    const updatedTask = await response.json();
-                                    console.log('Updated task received:', updatedTask);
-                                    // Update task in state immediately
-                                    if (onTaskUpdate) {
-                                      onTaskUpdate(task._id, (prevTask) => ({
-                                        ...prevTask,
-                                        selfVerification: updatedTask.selfVerification
-                                      }));
-                                    }
-                                    // Also force refresh of tasks if refetchTasks is available
-                                    if (refetchTasks) {
-                                      setTimeout(() => refetchTasks(), 200);
-                                    }
-                                    
-                                    toast.success('Self Verification updated');
-                                  } catch (err) {
-                                    console.error('Error updating self verification:', err);
-                                    toast.error('Failed to update Self Verification');
-                                    // Revert checkbox state on error by forcing a re-render
-                                    if (refetchTasks) {
-                                      refetchTasks();
-                                    }
-                                  } finally {
-                                    setIsUpdating2(false);
-                                  }
-                                } : undefined}
-                              />
-                            </div>
-                          </td>
-                        );
-                      
-                      case 'inwardEntryDate':
-                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDateTime(task.inwardEntryDate)}</span></div></td>;
-                      
-                      case 'dueDate':
-                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDate(task.dueDate)}</span></div></td>;
-                      
-                      case 'targetDate':
-                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDate(task.targetDate)}</span></div></td>;
-                      
-                      case 'assignedBy':
-                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedBy.photo?.url || defaultProfile} alt={task.assignedBy.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedBy.firstName} {task.assignedBy.lastName}</span></div></div></td>;
-                      
-                      case 'assignedTo':
-                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedTo.photo?.url || defaultProfile} alt={task.assignedTo.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedTo.firstName} {task.assignedTo.lastName}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.assignedTo._id)}h</span></span></div></div></td>;
-                      
-                      case 'verificationAssignedTo':
-                      case 'secondVerificationAssignedTo':
-                      case 'thirdVerificationAssignedTo':
-                      case 'fourthVerificationAssignedTo':
-                      case 'fifthVerificationAssignedTo': {
-                        // Map column to index (0-based)
-                        const verifierFields = [
-                          'verificationAssignedTo',
-                          'secondVerificationAssignedTo',
-                          'thirdVerificationAssignedTo',
-                          'fourthVerificationAssignedTo',
-                          'fifthVerificationAssignedTo',
-                        ];
-                        const colIdx = verifierFields.indexOf(colId);
-                        const currVerifierField = verifierFields[colIdx];
-                        const prevVerifierField = verifierFields[colIdx - 1];
-
-                        // Show dropdown if:
-                        // 1. For first verifier: selfVerification must be true (for execution tab)
-                        // 2. For receivedVerification tab: if current user is the first verifier, allow dropdown
-                        // 3. Current user is the assigned verifier for this column (nth)
-                        // 4. OR, current user is the previous verifier and this column is unassigned (N+1th)
-                        let userIsThisVerifier = task[currVerifierField]?._id === currentUser?._id;
-                        let userIsPrevVerifier = colIdx > 0 && task[prevVerifierField]?._id === currentUser?._id && !task[currVerifierField];
-                        let canEditThisVerifier =
-                          viewType === 'received' &&
-                          (userIsThisVerifier || userIsPrevVerifier) &&
-                          taskType !== 'completed' &&
-                          taskType !== 'guidance' &&
-                          taskType !== 'issuedVerification';
-                        
-                        // For first verifier, require selfVerification (for execution tab)
-                        if (colId === 'verificationAssignedTo') {
-                          canEditThisVerifier =
-                            (viewType === 'received' && taskType === 'execution' && !!task.selfVerification)
-                            || (viewType === 'received' && taskType === 'receivedVerification' && userIsThisVerifier)
-                            || (viewType === 'received' && taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id);
-                        }
-                        
-                        // NEW: For issuedVerification tab, only allow editing the latest non-empty verifier
-                        if (taskType === 'issuedVerification' && task.assignedBy && task.assignedBy._id === currentUser?._id) {
-                          // Find the latest non-empty verifier
-                          let latestNonEmptyVerifierIndex = -1;
-                          for (let i = verifierFields.length - 1; i >= 0; i--) {
-                            if (task[verifierFields[i]]) {
-                              latestNonEmptyVerifierIndex = i;
-                              break;
-                            }
-                          }
-                          
-                          // Only allow editing the latest non-empty verifier
-                          if (latestNonEmptyVerifierIndex !== -1 && colIdx === latestNonEmptyVerifierIndex) {
-                            canEditThisVerifier = true;
-                          } else if (latestNonEmptyVerifierIndex !== -1) {
-                            canEditThisVerifier = false; // Don't allow editing other verifiers
-                          }
-                        }
-                        
-                        // NEW: For execution tab with verification accepted, allow next empty verifier assignment
-                        if (taskType === 'execution' && task.verification === 'accepted') {
-                          // Find the next empty verifier position
-                          let nextEmptyVerifierIndex = -1;
-                          for (let i = 0; i < verifierFields.length; i++) {
-                            if (!task[verifierFields[i]]) {
-                              nextEmptyVerifierIndex = i;
-                              break;
-                            }
-                          }
-                          
-                          // Only allow dropdown for the next empty verifier position
-                          if (colIdx === nextEmptyVerifierIndex && nextEmptyVerifierIndex !== -1) {
-                            canEditThisVerifier = true;
-                          } else if (task.verification === 'accepted') {
-                            canEditThisVerifier = false; // Don't allow editing other verifiers when verification is accepted
-                          }
-                        }
-                        
-                        // NEW: For receivedVerification tab, handle verification status logic
-                        if (taskType === 'receivedVerification') {
-                          // Always allow current verifier to reassign themselves
-                          if (userIsThisVerifier) {
-                            canEditThisVerifier = true;
-                          }
-                          // For "next verification", allow assigning the next verifier in sequence
-                          else if (task.verification === 'next verification') {
-                            // Find current verifier
-                            let currentVerifierIndex = -1;
-                            verifierFields.forEach((field, idx) => {
-                              if (task[field]?._id === currentUser?._id) {
-                                currentVerifierIndex = idx;
-                              }
-                            });
-                            
-                            // Only allow dropdown for the next verifier after current verifier
-                            const nextVerifierIndex = currentVerifierIndex + 1;
-                            if (colIdx === nextVerifierIndex && nextVerifierIndex < verifierFields.length) {
-                              canEditThisVerifier = true;
-                            } else {
-                              canEditThisVerifier = false;
-                            }
-                          }
-                          // For other verification statuses, don't allow next verifier assignment
-                          else if (!userIsThisVerifier) {
-                            canEditThisVerifier = false;
-                          }
-                        }
-
-                        // Exclude assignedTo and all already assigned verifiers
-                        const assignedVerifierIds = getAssignedVerifierIds(task);
-                        const dropdownUsers = users.filter(
-                          (u) =>
-                            u._id !== task.assignedTo?._id &&
-                            !assignedVerifierIds.includes(u._id) &&
-                            u._id !== currentUser?._id &&
-                            (`${u.firstName} ${u.lastName}`.toLowerCase().includes(verifierSearch.toLowerCase()))
-                        );
-
-                        if (canEditThisVerifier) {
-                          return (
-                            <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                              style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden', cursor: 'pointer', position: 'relative', zIndex: editingVerifierTaskId === `${task._id}-${colId}` ? 50 : 'auto'}}
-                              onClick={e => {
-                                e.stopPropagation();
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                setVerifierDropdownPosition({
-                                  top: rect.bottom + window.scrollY,
-                                  left: rect.left + window.scrollX,
-                                });
-                                setEditingVerifierTaskId(`${task._id}-${colId}`);
-                                setVerifierSearch('');
-                              }}
-                            >
-                              <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                                <div className="flex items-center ">
-                                  {task[colId] ? (
-                                    <>
-                                      <img
-                                        src={task[colId].photo?.url || defaultProfile}
-                                        alt={`${task[colId].firstName} ${task[colId].lastName}`}
-                                        className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
-                                        onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
-                                      />
-                                      <span className="ml-2">
-                                        {task[colId].firstName} {task[colId].lastName}
-                                        <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                                          {getUserTaskHours(task._id, task[colId]._id)}h
-                                        </span>
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
-                                  )}
-                                  <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" className="ml-1 text-gray-400"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-                                </div>
-                                {/* Dropdown for selecting verifier */}
-                                {editingVerifierTaskId === `${task._id}-${colId}` && ReactDOM.createPortal(
-                                  <div
-                                    ref={verifierDropdownRef}
-                                    style={{
-                                      position: 'absolute',
-                                      top: verifierDropdownPosition.top,
-                                      left: verifierDropdownPosition.left,
-                                      minWidth: 200,
-                                      background: '#fff',
-                                      border: '1px solid #e5e7eb',
-                                      borderRadius: 8,
-                                      boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                      padding: 8,
-                                      zIndex: 9999,
-                                      maxHeight: 300,
-                                      overflowY: 'auto',
-                                    }}
-                                  >
-                                    {dropdownUsers.length === 0 ? (
-                                      <div className="text-gray-400 text-sm px-2 py-2">No users found</div>
-                                    ) : (
-                                      dropdownUsers.map(u => (
-                                        <div
-                                          key={u._id}
-                                          style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                            padding: '6px 8px',
-                                            borderRadius: 6,
-                                            cursor: 'pointer',
-                                            background: task[colId] && task[colId]._id === u._id ? '#f3f4f6' : 'transparent',
-                                            marginBottom: 2,
-                                            transition: 'background 0.15s',
-                                            opacity: verifierLoading ? 0.6 : 1,
-                                          }}
-                                          onClick={async e => {
-                                            e.stopPropagation();
-                                            if (verifierLoading || (task[colId] && task[colId]._id === u._id)) return;
-                                            setVerifierLoading(true);
-                                            try {
-                                              // Prepare the request body
-                                              const requestBody = { [colId]: u._id };
-                                              
-                                              // If this is execution tab with verification accepted, also set verification to pending
-                                              if (taskType === 'execution' && task.verification === 'accepted') {
-                                                requestBody.verification = 'pending';
-                                              }
-                                              
-                                              const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verifier`, {
-                                                method: 'PATCH',
-                                                headers: {
-                                                  'Content-Type': 'application/json',
-                                                  Authorization: `Bearer ${currentUser.token}`,
-                                                },
-                                                body: JSON.stringify(requestBody),
-                                              });
-                                              if (!response.ok) throw new Error('Failed to update verifier');
-                                              const updatedTask = await response.json();
-                                              if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
-                                              toast.success(`${col.label} updated`);
-                                              if (refetchTasks) refetchTasks();
-                                            } catch (err) {
-                                              toast.error(`Failed to update ${col.label.toLowerCase()}`);
-                                            }
-                                            setVerifierLoading(false);
-                                            setEditingVerifierTaskId(null);
-                                          }}
-                                          onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                          onMouseLeave={e => e.currentTarget.style.background = (task[colId] && task[colId]._id === u._id) ? '#f3f4f6' : 'transparent'}
-                                        >
-                                          <img src={u.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
-                                          <span style={{fontSize: '14px'}}>{u.firstName} {u.lastName}</span>
-                                          {task[colId] && task[colId]._id === u._id && (
-                                            <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                          )}
-                                        </div>
-                                      ))
-                                    )}
-                                  </div>,
-                                  document.body
-                                )}
-                              </div>
-                            </td>
-                          );
-                        }
-                        // Otherwise, just show the value
-                        return (
-                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                            style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
-                            <div className="overflow-x-auto whitespace-nowrap flex items-center" style={{width: '100%', maxWidth: '100%'}}>
-                              {task[colId] ? (
-                                <>
-                                  <img src={task[colId].photo?.url || defaultProfile} alt={`${task[colId].firstName} ${task[colId].lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
-                                  <span className="ml-2">
-                                    {task[colId].firstName} {task[colId].lastName}
-                                    <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                                      {getUserTaskHours(task._id, task[colId]._id)}h
-                                    </span>
-                                  </span>
-                                </>
-                              ) : (
-                                <span style={{fontStyle: 'italic', fontSize: 'inherit'}}>NA</span>
-                              )}
-                            </div>
-                          </td>
-                        );
-                      }
-                      case 'guides':
-                        const guideChipsClass = viewType === 'received' ? 'pr-6' : 'pr-0';
-                        const guideChipsMaxWidth = viewType === 'received' ? 'calc(100% - 28px)' : '100%';
-                        return (
-                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
-                            style={{width: (columnWidths[colId] || 200) + 'px', minWidth: (columnWidths[colId] || 200) + 'px', maxWidth: (columnWidths[colId] || 200) + 'px', background: 'white', overflow: 'hidden'}}>
-                          <div className="flex items-center relative" style={{width: '100%', maxWidth: '100%'}}>
-                            {/* Scrollable chips */}
-                            <div className={`flex items-center gap-1 overflow-x-auto whitespace-nowrap ${guideChipsClass}`} style={{maxWidth: guideChipsMaxWidth}}>
-                              {Array.isArray(task.guides) && task.guides.length > 0 ? (
-                                task.guides.map(u => (
-                                  <span key={u._id} className="flex items-center bg-blue-100 text-blue-800 rounded-full px-2 py-0.5 text-xs font-medium mr-1">
-                                    <img src={u.photo?.url || defaultProfile} alt={u.firstName} className="w-5 h-5 rounded-full object-cover mr-1" style={{minWidth: 20, minHeight: 20}} onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} />
-                                    {u.firstName} {u.lastName}
-                                    {viewType === 'received' && (
-                                      <button
-                                        className="ml-1 text-red-500 hover:text-red-700 focus:outline-none"
-                                        style={{fontSize: '12px'}}
-                                        onClick={async (e) => {
-                                          e.stopPropagation();
-                                          const newGuides = task.guides.filter(g => g._id !== u._id).map(g => g._id);
-                                          try {
-                                            const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/guides`, {
-                                              method: 'PUT',
-                                              headers: {
-                                                'Content-Type': 'application/json',
-                                                Authorization: `Bearer ${currentUser.token}`,
-                                              },
-                                              body: JSON.stringify({ guides: newGuides }),
-                                            });
-                                            if (!response.ok) throw new Error('Failed to update guides');
-                                            const updatedTask = await response.json();
-                                            if (onTaskUpdate) onTaskUpdate(task._id, (prevTask) => ({ ...prevTask, guides: updatedTask.guides }));
-                                            toast.success('Guide removed');
-                                          } catch (err) {
-                                            toast.error('Failed to update guides');
-                                          }
-                                        }}
-                                        title="Remove guide"
-                                      >×</button>
-                                    )}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="italic text-gray-400">No guide</span>
-                              )}
-                            </div>
-                            {/* Fixed dropdown icon at end, only in received viewType */}
-                            {viewType === 'received' && (
-                              <button
-                                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-white rounded-full border border-gray-200 hover:bg-blue-100 hover:border-blue-400 transition-colors cursor-pointer z-10"
-                                style={{boxShadow: '0 1px 4px rgba(0,0,0,0.04)'}}
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  setDropdownPosition({
-                                    top: rect.bottom + window.scrollY,
-                                    left: rect.left + window.scrollX,
-                                  });
-                                  setOpenGuideDropdownTaskId(task._id);
-                                }}
-                                title="Add/Remove Guides"
-                              >
-                                <svg width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" className="text-gray-500 group-hover:text-blue-600 transition-colors"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-                              </button>
-                            )}
-                            {/* Dropdown for selecting guides */}
-                            {viewType === 'received' && openGuideDropdownTaskId === task._id && ReactDOM.createPortal(
-                              <div
-                                ref={guideDropdownRef}
-                                style={{
-                                  position: 'absolute',
-                                  top: dropdownPosition.top,
-                                  left: dropdownPosition.left,
-                                  minWidth: 220,
-                                  background: '#fff',
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: 8,
-                                  boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                  padding: 8,
-                                  zIndex: 9999,
-                                  maxHeight: 300,
-                                  overflowY: 'auto',
-                                }}
-                              >
-                                {users.filter(u => !task.guides?.some(g => g._id === u._id)).length === 0 ? (
-                                  <div className="text-gray-400 text-sm px-2 py-2">No users available</div>
-                                ) : (
-                                  users.filter(u => !task.guides?.some(g => g._id === u._id)).map(u => (
-                                    <div
-                                      key={u._id}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 8,
-                                        padding: '6px 8px',
-                                        borderRadius: 6,
-                                        cursor: 'pointer',
-                                        background: 'transparent',
-                                        marginBottom: 2,
-                                        transition: 'background 0.15s',
-                                      }}
-                                      onClick={async e => {
-                                        e.stopPropagation();
-                                        const newGuides = [...(task.guides?.map(g => g._id) || []), u._id];
-                                        try {
-                                          const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/guides`, {
-                                            method: 'PUT',
-                                            headers: {
-                                              'Content-Type': 'application/json',
-                                              Authorization: `Bearer ${currentUser.token}`,
-                                            },
-                                            body: JSON.stringify({ guides: newGuides }),
-                                          });
-                                          if (!response.ok) throw new Error('Failed to update guides');
-                                          const updatedTask = await response.json();
-                                          if (onTaskUpdate) onTaskUpdate(task._id, (prevTask) => ({ ...prevTask, guides: updatedTask.guides }));
-                                          toast.success('Guide added');
-                                        } catch (err) {
-                                          toast.error('Failed to update guides');
-                                        }
-                                      }}
-                                    >
-                                      <img src={u.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
-                                      <span style={{fontSize: '14px'}}>{u.firstName} {u.lastName}</span>
-                                    </div>
-                                  ))
-                                )}
-                              </div>,
-                              document.body
-                            )}
-                          </div>
-                        </td>
-                      );
-                    
-                      case 'files':
-                        return (
-                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
-                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                              <div className="flex items-center">
-                                {task.files && task.files.length > 0 ? (
-                                  <div className="flex items-center space-x-2">
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.files.length}</span>
-                                    <button onClick={() => handleTaskClick(task)} className="text-blue-600 hover:text-blue-800 text-sm">View</button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center">
-                                    <span className="text-gray-400 text-sm italic">No files</span>
-                                    <button onClick={() => handleTaskClick(task)} className="ml-2 text-blue-600 hover:text-blue-800 text-sm">Upload</button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                        );
-                      
-                      case 'comments':
-                        return (
-                          <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}>
-                            <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{task.comments ? task.comments.length : 0} </span>
-                                <button onClick={() => { setSelectedTask(task); setShowComments(true); }} className="text-blue-600 hover:text-blue-800 text-sm">View</button>
-                              </div>
-                            </div>
-                          </td>
-                        );
-                      
-                      default:
-                        // Check if this is a custom column
-                        if (colId.startsWith('custom_')) {
-                          const customColumnName = colId.replace('custom_', '');
-                          const columnDef = customColumns.find(col => col.name === customColumnName);
-                          const customValue = task.customFields?.[customColumnName];
-                          
-                          if (columnDef) {
-                            return (
-                              <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} 
-                                  style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}>
-                                <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                                  {columnDef.type === 'checkbox' ? (
-                                    <input 
-                                      type="checkbox" 
-                                      checked={customValue || false}
-                                      onChange={async (e) => {
-                                        // Handle checkbox change
-                                        const newValue = e.target.checked;
-                                        if (onTaskUpdate) {
-                                          // Update local state immediately
-                                          onTaskUpdate(task._id, (prevTask) => ({
-                                            ...prevTask,
-                                            customFields: {
-                                              ...prevTask.customFields,
-                                              [customColumnName]: newValue
-                                            }
-                                          }));
-                                          
-                                          // Update backend
-                                          try {
-                                            const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/custom-fields`, {
-                                              method: 'PATCH',
-                                              headers: {
-                                                'Content-Type': 'application/json',
-                                                Authorization: `Bearer ${user.token}`,
-                                              },
-                                              body: JSON.stringify({
-                                                customFields: { [customColumnName]: newValue }
-                                              }),
-                                            });
-                                            if (!response.ok) {
-                                              throw new Error('Failed to update custom field');
-                                            }
-                                          } catch (error) {
-                                            console.error('Error updating custom field:', error);
-                                            // Revert the change on error
-                                            onTaskUpdate(task._id, (prevTask) => ({
-                                              ...prevTask,
-                                              customFields: {
-                                                ...prevTask.customFields,
-                                                [customColumnName]: !newValue
-                                              }
-                                            }));
-                                          }
-                                        }
-                                      }}
-                                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                    />
-                                  ) : columnDef.type === 'tags' ? (
-                                    // Tags dropdown (similar to priority)
-                                    <div 
-                                      style={{ 
-                                        cursor: 'pointer',
-                                        position: 'relative',
-                                        zIndex: (editingCustomTagsTaskId === task._id && editingCustomTagsColumnName === customColumnName) ? 50 : 'auto',
-                                      }}
-                                      onClick={e => {
-                                        e.stopPropagation();
-                                        const rect = e.currentTarget.getBoundingClientRect();
-                                        setDropdownPosition({
-                                          top: rect.bottom + window.scrollY,
-                                          left: rect.left + window.scrollX,
-                                        });
-                                        setEditingCustomTagsTaskId(task._id);
-                                        setEditingCustomTagsColumnName(customColumnName);
-                                      }}
-                                    >
-                                      <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                        {customValue || columnDef.defaultValue || 'Select...'}
-                                      </span>
-                                      
-                                      {/* Show dropdown as portal if open */}
-                                      {editingCustomTagsTaskId === task._id && editingCustomTagsColumnName === customColumnName && ReactDOM.createPortal(
-                                        <div
-                                          ref={priorityDropdownRef}
-                                          style={{
-                                            position: 'absolute',
-                                            top: dropdownPosition.top,
-                                            left: dropdownPosition.left,
-                                            minWidth: 160,
-                                            background: '#fff',
-                                            border: '1px solid #e5e7eb',
-                                            borderRadius: 8,
-                                            boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                            padding: 8,
-                                            zIndex: 9999,
-                                          }}
-                                        >
-                                          {columnDef.options && columnDef.options.map(option => (
-                                            <div
-                                              key={option}
-                                              style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 8,
-                                                padding: '5px 12px',
-                                                borderRadius: 6,
-                                                cursor: 'pointer',
-                                                background: customValue === option ? '#f3f4f6' : 'transparent',
-                                                marginBottom: 2,
-                                                transition: 'background 0.15s',
-                                              }}
-                                              onClick={e => {
-                                                e.stopPropagation();
-                                                if (customValue !== option) {
-                                                  handleCustomTagsChange(task, customColumnName, option);
-                                                }
-                                                setEditingCustomTagsTaskId(null);
-                                                setEditingCustomTagsColumnName('');
-                                              }}
-                                              onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-                                              onMouseLeave={e => e.currentTarget.style.background = customValue === option ? '#f3f4f6' : 'transparent'}
-                                            >
-                                              <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                                {option}
-                                              </span>
-                                              {customValue === option && (
-                                                <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                </svg>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>,
-                                        document.body
-                                      )}
-                                    </div>
-                                  ) : (
-                                    // Text field with click-to-edit (similar to description)
-                                    <>
-                                      {editingCustomTextTaskId === task._id && editingCustomTextColumnName === customColumnName ? (
-                                        <input
-                                          type="text"
-                                          className="w-full text-sm border-none outline-none bg-white p-1"
-                                          value={editingCustomTextValue}
-                                          style={{ height: '28px' }}
-                                          onChange={e => setEditingCustomTextValue(e.target.value)}
-                                          onBlur={() => handleCustomTextEditSave(task, customColumnName)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                              e.preventDefault();
-                                              handleCustomTextEditSave(task, customColumnName);
-                                            } else if (e.key === 'Escape') {
-                                              setEditingCustomTextTaskId(null);
-                                              setEditingCustomTextColumnName('');
-                                              setEditingCustomTextValue('');
-                                            }
-                                          }}
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        <div
-                                          className="cursor-pointer min-h-[28px] p-1 flex items-center"
-                                          onClick={() => {
-                                            setEditingCustomTextTaskId(task._id);
-                                            setEditingCustomTextColumnName(customColumnName);
-                                            setEditingCustomTextValue(customValue || columnDef.defaultValue || '');
-                                          }}
-                                        >
-                                          {customValue || columnDef.defaultValue || 'Click to edit...'}
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                            );
-                          }
-                        }
-                        
-                        // Default column handling
-                        let cellValue = task[colId];
-                        if ([
-                          'thirdVerificationAssignedTo',
-                          'fourthVerificationAssignedTo',
-                          'fifthVerificationAssignedTo'
-                        ].includes(colId)) {
-                          cellValue = cellValue ? (cellValue.firstName ? `${cellValue.firstName} ${cellValue.lastName}` : cellValue) : 'NA';
-                        }
-                        return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{cellValue}</span></div></td>;
-                    }
-                  })}
-                  {(viewType === 'assigned' || viewType === 'admin') && (
-                    <td key="actions" className="px-2 py-1 text-sm font-normal align-middle bg-white">
-                      {(!shouldDisableActions || !shouldDisableActions(task)) && (
-                        <div className="flex items-center gap-0">
-                          {/* Role-based action buttons */}
-                          {['Team Head', 'Admin', 'Senior'].includes(currentUser?.role) && (
-                            <button
-                              onClick={() => onEditTask && onEditTask(task)}
-                              className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                              title="Edit Task"
-                            >
-                              Edit
-                            </button>
-                          )}
-                          {['Team Head', 'Admin'].includes(currentUser?.role) && (
-                            <button
-                              onClick={() => handleDeleteTask(task)}
-                              className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                              title="Delete Task"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              )))}
-            </tbody>
-          </table>
-        </div>
-
-
-        {/* Invisible trigger for auto-loading more tasks - moved above the Load More button for earlier triggering */}
-        <div 
-          ref={loadMoreTriggerRef} 
-          className="w-full"
-          style={{ height: '0px', marginTop: '0px', marginBottom: '0px' }}
-        ></div>
-
-        {/* Load More Button */}
-        {(() => {
-          const totalTasks = shouldGroup 
-            ? Object.values(groupedTasks || {}).reduce((sum, tasks) => sum + tasks.length, 0)
-            : orderedTasks.length;
-          
-          return shouldShowLoadMore(totalTasks) && (
-            <div className="flex justify-center">
-              
+                        <span className="text-gray-800 text-sm">{col.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          );
-        })()}
-
-        {/* File Upload and Comments Modal */}
-        {selectedTask && (showFileUpload || showComments) && (
-          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">
-                  {showFileUpload ? 'Task Files' : 'Task Comments'}
-                </h2>
-                <button
-                  onClick={() => {
-                    setSelectedTask(null);
-                    setShowFileUpload(false);
-                    setShowComments(false);
-                  }}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="space-y-6">
-                {showFileUpload ? (
-                  <>
-                    <FileUpload
-                      taskId={selectedTask._id}
-                      onFileUploaded={handleFileUploaded}
-                      onFileDeleted={handleFileDeleted}
-                    />
-                    {selectedTask.files && selectedTask.files.length > 0 && (
-                      <div className="mt-4">
-                        <FileList
-                          taskId={selectedTask._id}
-                          files={selectedTask.files}
-                          onFileDeleted={handleFileDeleted}
-                        />
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <TaskComments taskId={selectedTask._id} />
-                )}
-              </div>
+            <div className="relative flex-1 flex items-center">
+              <button
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 w-full transition-colors"
+                onClick={() => setShowGroupByDropdown(v => !v)}
+                type="button"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/></svg>
+                <span className="font-semibold">Group By</span>
+              </button>
+              {showGroupByDropdown && (
+                <div ref={groupByDropdownRef} className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44" style={{minWidth: '160px'}}>
+                  <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">Group By</div>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${!activeTabObj.sortBy || activeTabObj.sortBy === '' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: '' }); setShowGroupByDropdown(false); }}>None</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'createdAt' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'createdAt' }); setShowGroupByDropdown(false); }}>Assigned On</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'priority' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'priority' }); setShowGroupByDropdown(false); }}>Priority</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'status' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'status' }); setShowGroupByDropdown(false); }}>Stages</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientName' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientName' }); setShowGroupByDropdown(false); }}>Client Name</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientGroup' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientGroup' }); setShowGroupByDropdown(false); }}>Client Group</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'workType' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'workType' }); setShowGroupByDropdown(false); }}>Work Type</button>
+                  <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'billed' }); setShowGroupByDropdown(false); }}>Internal Works</button>
+                </div>
+              )}
             </div>
           </div>
-        )}
-
-        {/* Verification Remarks Modal */}
-        <VerificationRemarksModal
-          isOpen={showRemarksModal}
-          onClose={closeRemarksModal}
-          onSubmit={handleVerificationWithRemarks}
-          task={remarksModalTask}
-          verificationType={remarksModalType}
-          loading={remarksModalLoading}
-        />
-        
-        {/* Delete Dropdown for No Column */}
-        {showDeleteDropdown && (
-          <div
-            ref={deleteDropdownRef}
-            className="fixed bg-white border border-gray-200 rounded-md shadow-lg z-50"
-            style={{
-              top: deleteDropdownPosition.y,
-              left: deleteDropdownPosition.x,
-              minWidth: '120px'
-            }}
-          >
+          {/* Row 3: Download + Select */}
+          <div className="flex w-full gap-2">
             <button
-              onClick={() => {
-                // Find task in orderedTasks first, then in original tasks array
-                const task = orderedTasks.find(t => t._id === showDeleteDropdown) || 
-                           tasks.find(t => t._id === showDeleteDropdown);
-                if (task) handleDeleteFromDropdown(task);
-              }}
-              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 hover:text-red-800 transition-colors"
+              onClick={handlePDFButtonClick}
+              className="flex-1 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 text-sm"
             >
-              Delete Task
+              Download
+            </button>
+            <button
+              onClick={toggleBulkSelection}
+              className={`flex-1 flex items-center justify-center w-auto px-4 h-9 rounded-lg focus:outline-none focus:ring-2 shadow-sm transition-colors ${
+                showCheckboxes 
+                  ? 'bg-orange-600 hover:bg-orange-700 text-white focus:ring-orange-500' 
+                  : 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500'
+              }`}
+              title={showCheckboxes ? "Hide Selection Mode" : "Enable Selection Mode"}
+              type="button"
+            >
+              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {showCheckboxes ? 'Exit Selection' : 'Select'}
             </button>
           </div>
-        )}
-
-        {/* Custom Delete Confirmation Modal */}
-        {deleteConfirmTask && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-xs mx-2">
-              <div className="text-lg font-semibold text-gray-800 mb-4 text-center">Are you sure you want to delete this task?</div>
-              <div className="flex justify-center gap-4 mt-4">
-                <button
-                  onClick={handleConfirmDelete}
-                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors font-semibold"
-                >
-                  Confirm
-                </button>
-                <button
-                  onClick={handleCancelDelete}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
+          {/* Row 4: Automation + Plus */}
+          <div className="flex w-full gap-2">
+            <button
+              onClick={() => setShowAutomationsModal(true)}
+              className="flex-1 flex items-center justify-center cursor-pointer w-28 h-9 rounded-lg bg-purple-600 hover:bg-purple-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm mr-2"
+              title="Automation"
+              type="button"
+            >
+              Automation
+            </button>
+            <button
+              onClick={() => setCreateModalOpen(true)}
+              className="flex-1 flex items-center justify-center w-8 h-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+              title="Create Task"
+              type="button"
+            >
+              <PlusIcon className="h-6 w-8" />
+            </button>
+          </div>
+        </div>
+        {/* Desktop layout: unchanged */}
+        <div className="hidden sm:flex flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full">
+          {/* ...existing code... (all original button layout for desktop) */}
+          <div className="relative" ref={filterPopupRef}>
+            <button
+              className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 text-sm"
+              onClick={openFilterPopup}
+            >
+              <span>Filter</span>
+              {activeTabObj.filters.length > 0 && (
+                <span className="bg-blue-100 text-blue-800 text-xs font-semibold ml-2 px-2.5 py-0.5 rounded-full">
+                  {activeTabObj.filters.length}
+                </span>
+              )}
+            </button>
+            <FilterPopup
+              isOpen={isFilterPopupOpen}
+              onClose={() => setIsFilterPopupOpen(false)}
+              filters={filterDraft}
+              setFilters={filters => {
+                setFilterDraft(filters);
+                if (filters.length < filterDraft.length) {
+                  updateActiveTab({ filters });
+                } else if (filters.length > 0 && filters.every(f => f.saved)) {
+                  updateActiveTab({ filters });
+                }
+              }}
+              users={users}
+              clientNames={clientNames}
+              clientGroups={clientGroups}
+              workTypes={workTypes}
+              priorities={priorities}
+            />
+          </div>
+          <input
+            type="text"
+            placeholder="Search tasks..."
+            className="min-w-[300px] max-w-[420px] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+            value={activeTabObj.searchTerm}
+            onChange={e => updateActiveTab({ searchTerm: e.target.value })}
+          />
+          <div className="relative">
+            <button
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
+              onClick={() => setShowColumnDropdown(v => !v)}
+              aria-label="Show/Hide Columns"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+              Columns
+            </button>
+            {showColumnDropdown && (
+              <div ref={columnsDropdownRef} className="absolute right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 mt-2 w-56">
+                <div className="font-semibold text-gray-700 mb-2 text-sm">Show/Hide Columns</div>
+                <div className="max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                  {extendedColumns.map(col => (
+                    <label key={col.id} className="flex items-center space-x-2 mb-1 cursor-pointer hover:bg-blue-50 rounded px-2 py-1 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={activeTabObj.visibleColumns.includes(col.id)}
+                        onChange={() => toggleColumnVisibility(col.id)}
+                        className="accent-blue-500"
+                      />
+                      <span className="text-gray-800 text-sm">{col.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
+            )}
+          </div>
+          <div className="relative flex items-center gap-2">
+            <button
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
+              onClick={() => setShowGroupByDropdown(v => !v)}
+              type="button"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/></svg>
+              <span className="font-semibold">Group By</span>
+            </button>
+            {showGroupByDropdown && (
+              <div ref={groupByDropdownRef} className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44" style={{minWidth: '160px'}}>
+                <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">Group By</div>
+                <button className={`block w-full text-left px-4 py-2 rounded ${!activeTabObj.sortBy || activeTabObj.sortBy === '' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: '' }); setShowGroupByDropdown(false); }}>None</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'createdAt' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'createdAt' }); setShowGroupByDropdown(false); }}>Assigned On</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'priority' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'priority' }); setShowGroupByDropdown(false); }}>Priority</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'status' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'status' }); setShowGroupByDropdown(false); }}>Stages</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientName' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientName' }); setShowGroupByDropdown(false); }}>Client Name</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientGroup' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientGroup' }); setShowGroupByDropdown(false); }}>Client Group</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'workType' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'workType' }); setShowGroupByDropdown(false); }}>Work Type</button>
+                <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'billed' }); setShowGroupByDropdown(false); }}>Internal Works</button>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={handlePDFButtonClick}
+            className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 text-sm"
+          >
+            Download
+          </button>
+          <button
+            onClick={toggleBulkSelection}
+            className={`ml-0 flex items-center justify-center w-auto px-4 h-9 rounded-lg focus:outline-none focus:ring-2 shadow-sm transition-colors ${
+              showCheckboxes 
+                ? 'bg-orange-600 hover:bg-orange-700 text-white focus:ring-orange-500' 
+                : 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500'
+            }`}
+            title={showCheckboxes ? "Hide Selection Mode" : "Enable Selection Mode"}
+            type="button"
+          >
+            <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {showCheckboxes ? 'Exit Selection' : 'Select'}
+          </button>
+          <button
+            onClick={() => setShowAutomationsModal(true)}
+            className="ml-0 flex items-center justify-center cursor-pointer w-28 h-9 rounded-lg bg-purple-600 hover:bg-purple-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm mr-2"
+            title="Automation"
+            type="button"
+          >
+            Automation
+          </button>
+          <button
+            onClick={() => setCreateModalOpen(true)}
+            className="ml-0 flex items-center justify-center w-8 h-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+            title="Create Task"
+            type="button"
+          >
+            <PlusIcon className="h-6 w-8" />
+          </button>
+        </div>
+      </div>
+
+      {/* Bulk Actions Bar */}
+      {showBulkActions && showCheckboxes && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg px-4 py-3 mb-4 flex items-center justify-between shadow-sm animate-fade-in">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
+                <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <span className="text-blue-800 font-medium">
+                {selectedTasks.length} task{selectedTasks.length > 1 ? 's' : ''} selected
+              </span>
+            </div>
+            <div className="flex items-center space-x-2 text-sm text-blue-600">
+              <span>•</span>
+              <button
+                onClick={() => {
+                  setSelectedTasks([]);
+                  setIsAllSelected(false);
+                  setShowBulkActions(false);
+                }}
+                className="text-blue-600 hover:text-blue-800 font-medium transition-colors hover:underline"
+              >
+                Clear Selection
+              </button>
             </div>
           </div>
-        )}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowDeleteConfirmation(true)}
+              className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all hover:shadow-md"
+            >
+              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete Selected ({selectedTasks.length})
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Responsive table wrapper */}
+      <div className="overflow-x-auto w-full" ref={tableRef}>
+        <AdvancedTaskTable
+          tasks={getFilteredAndSortedTasks(tasks, isFilterPopupOpen ? filterDraft : activeTabObj.filters)}
+          viewType="admin"
+          taskType={null}
+          onTaskUpdate={(taskId, updater) => {
+            setTasks(prevTasks => prevTasks.map(task =>
+              task._id === taskId ? updater(task) : task
+            ));
+          }}
+          onTaskDelete={() => {}}
+          onStatusChange={() => {}}
+          shouldDisableActions={() => false}
+          shouldDisableFileActions={() => true}
+          taskHours={taskHours}
+          storageKeyPrefix="admindashboard"
+          visibleColumns={activeTabObj.visibleColumns}
+          setVisibleColumns={cols => updateActiveTab({ visibleColumns: cols })}
+          columnWidths={activeTabObj.columnWidths}
+          setColumnWidths={widths => updateActiveTab({ columnWidths: widths })}
+          columnOrder={activeTabObj.columnOrder}
+          setColumnOrder={order => updateActiveTab({ columnOrder: order })}
+          onEditTask={handleEditTask}
+          users={users}
+          currentUser={user}
+          refetchTasks={fetchTasks}
+          sortBy={activeTabObj.sortBy}
+          filters={isFilterPopupOpen ? filterDraft : activeTabObj.filters}
+          tabKey="adminDashboard"
+          tabId={activeTabObj.id}
+          allColumns={extendedColumns}
+          // Bulk selection props
+          enableBulkSelection={showCheckboxes}
+          selectedTasks={selectedTasks}
+          onTaskSelect={handleTaskSelect}
+          isAllSelected={isAllSelected}
+          onSelectAll={handleSelectAll}
+        />
       </div>
-    </>
+      {/* Edit Task Modal */}
+  {/* Edit modal is now managed inside AdvancedTaskTable to prevent unnecessary unmounting of tasks */}
+      {/* Create Task Modal */}
+      {createModalOpen && (
+        <CreateTask
+          users={users}
+          mode="create"
+          initialData={null}
+          isOpen={createModalOpen}
+          onClose={() => setCreateModalOpen(false)}
+          onSubmit={handleTaskSubmit}
+        />
+      )}
+      {/* Automations Modal */}
+      {showAutomationsModal && (
+        <AutomationsModal
+          isOpen={showAutomationsModal}
+          onClose={() => { 
+            setShowAutomationsModal(false); 
+            setSelectedAutomation(null); 
+            setTemplateSearchTerm('');
+          }}
+          onSelectAutomation={auto => { 
+            setSelectedAutomation(auto); 
+            setShowAutomationsModal(false); 
+            setTemplateSearchTerm('');
+          }}
+          user={user}
+          API_BASE_URL={API_BASE_URL}
+        />
+      )}
+
+      {/* Automation's Tasks Modal */}
+      {selectedAutomation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl min-h-[320px] flex flex-col">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">{selectedAutomation.name}</h2>
+                <div className="text-xs text-gray-500 mt-1">{selectedAutomation.description}</div>
+                <div className="flex items-center mt-2">
+                  <div className="text-xs px-2 py-1 bg-blue-100 text-blue-700 font-medium rounded-full">
+                    Day: {selectedAutomation.dayOfMonth}
+                  </div>
+                  {Array.isArray(selectedAutomation.taskTemplate) && (
+                    <div className="text-xs px-2 py-1 bg-green-100 text-green-700 font-medium rounded-full ml-2">
+                      {selectedAutomation.taskTemplate.length} {selectedAutomation.taskTemplate.length === 1 ? 'template' : 'templates'}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => {
+                setSelectedAutomation(null);
+                setTemplateSearchTerm('');
+              }} className="text-gray-400 hover:text-gray-700 text-xl">×</button>
+            </div>
+            <div className="flex-1 mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-md font-semibold text-gray-800">Task Templates</h3>
+                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                  {Array.isArray(selectedAutomation.taskTemplate) ? selectedAutomation.taskTemplate.length : 0} templates
+                </span>
+              </div>
+              
+              {/* Search bar for templates */}
+              {Array.isArray(selectedAutomation.taskTemplate) && selectedAutomation.taskTemplate.length > 0 && (
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    placeholder="Search templates..."
+                    value={templateSearchTerm}
+                    onChange={(e) => setTemplateSearchTerm(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              )}
+              
+              {Array.isArray(selectedAutomation.taskTemplate) && selectedAutomation.taskTemplate.length > 0 ? (
+                (() => {
+                  // Filter out templates with verificationStatus 'pending' first
+                  const filteredTemplates = selectedAutomation.taskTemplate
+                    .filter(template => template.verificationStatus !== 'pending')
+                    .filter(template =>
+                      !templateSearchTerm ||
+                      (template.title && template.title.toLowerCase().includes(templateSearchTerm.toLowerCase()))
+                    );
+                  return filteredTemplates.length > 0 ? (
+                    <ul className="space-y-2 mt-2 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar" style={{ maxHeight: "420px" }}>
+                      {filteredTemplates.map((template, idx) => (
+                    <li key={idx} className="py-3 px-4 flex items-center justify-between bg-yellow-50 border-l-4 border-yellow-400 rounded-md hover:bg-yellow-100 transition-colors shadow-sm">
+                      <div className="flex-1">
+                        <span className="font-medium text-gray-800">{template.title || 'Scheduled Task'}</span>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Created on {new Date().toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          className="text-blue-500 hover:text-blue-700 text-xs bg-white hover:bg-blue-50 border border-blue-200 px-3 py-1 rounded-md transition-colors flex items-center"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Find the original index in the full template array
+                            const originalIndex = selectedAutomation.taskTemplate.findIndex(t => 
+                              t.title === template.title && 
+                              t.clientName === template.clientName &&
+                              t.clientGroup === template.clientGroup
+                            );
+                            handleEditTemplate(template, originalIndex);
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </button>
+                        <button 
+                          className="text-red-500 hover:text-red-700 text-xs bg-white hover:bg-red-50 border border-red-200 px-3 py-1 rounded-md transition-colors flex items-center"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Are you sure you want to delete this template: ${template.title}?`)) {
+                              try {
+                                // Create a new array without this template
+                                const updatedTemplates = selectedAutomation.taskTemplate.filter((_, i) => i !== idx);
+                              
+                              // Update the automation with the new templates array
+                              const response = await fetch(`${API_BASE_URL}/api/automations/${selectedAutomation._id}`, {
+                                method: 'PUT',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  Authorization: `Bearer ${user.token}`,
+                                },
+                                body: JSON.stringify({ taskTemplate: updatedTemplates }),
+                              });
+                              
+                              if (!response.ok) {
+                                throw new Error('Failed to delete template');
+                              }
+                              
+                              // Update local state
+                              const updatedAutomation = await response.json();
+                              setSelectedAutomation(updatedAutomation);
+                              toast.success('Task template deleted successfully');
+                            } catch (error) {
+                              toast.error(error.message || 'Failed to delete template');
+                              console.error('Error deleting template:', error);
+                            }
+                          }
+                        }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                  ) : (
+                    <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-100 shadow-sm">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19l-7-7 7-7m5 14l7-7-7-7" />
+                      </svg>
+                      <p className="text-sm text-gray-500 font-medium">No templates found matching "{templateSearchTerm}"</p>
+                      <p className="text-xs text-gray-400 mt-2">Try adjusting your search term.</p>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-100 shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <p className="text-sm text-gray-500 font-medium">No task templates in this automation yet.</p>
+                  <p className="text-xs text-gray-400 mt-2">Add a template using the button below.</p>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setShowAddAutomationTask(true)}
+              className="bg-blue-600 text-white rounded-md py-2.5 font-semibold hover:bg-blue-700 transition w-full flex items-center justify-center shadow-sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Add New Task Template
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add Task to Automation Modal */}
+      {showAddAutomationTask && selectedAutomation && (
+        <AutomationTask
+          users={users}
+          mode="create"
+          initialData={null}
+          isOpen={showAddAutomationTask}
+          onClose={() => setShowAddAutomationTask(false)}
+          automationId={selectedAutomation._id}
+          onSubmit={(taskTemplate) => {
+            // After adding a template, fetch the updated automation with all templates
+            (async () => {
+              try {
+                // Fetch the updated automation
+                const res = await fetch(`${API_BASE_URL}/api/automations/${selectedAutomation._id}`, {
+                  headers: { Authorization: `Bearer ${user.token}` },
+                });
+                const updatedAutomation = await res.json();
+                if (updatedAutomation && updatedAutomation._id) {
+                  setSelectedAutomation(updatedAutomation);
+                }
+                
+                // Also update task list if needed
+                const tasksRes = await fetch(`${API_BASE_URL}/api/automations/${selectedAutomation._id}/tasks`, {
+                  headers: { Authorization: `Bearer ${user.token}` },
+                });
+                const tasksData = await tasksRes.json();
+                setAutomationTasks(Array.isArray(tasksData) ? tasksData : []);
+              } catch (error) {
+                console.error("Error fetching updated automation:", error);
+              }
+            })();
+            setShowAddAutomationTask(false);
+          }}
+        />
+      )}
+      {/* PDF Column Selector Modal */}
+      <EnhancedPDFColumnSelector
+        isOpen={showPDFColumnSelector}
+        onClose={() => setShowPDFColumnSelector(false)}
+        onDownload={handleDownloadPDF}
+        availableColumns={[
+          ...ALL_COLUMNS,
+          ...customColumns.map(col => ({
+            id: `custom_${col.name}`,
+            label: col.label,
+            defaultWidth: 150,
+            isCustom: true,
+            customColumn: col
+          }))
+        ]}
+      />
+
+      {/* File Upload and Comments Modal */}
+      {selectedTask && (showFileUpload || showComments) && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">
+                {showFileUpload ? 'Task Files' : 'Task Comments'}
+              </h2>
+              <button
+                onClick={() => {
+                  setSelectedTask(null);
+                  setShowFileUpload(false);
+                  setShowComments(false);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-6">
+              {showFileUpload ? (
+                <>
+                  <FileUpload
+                    taskId={selectedTask._id}
+                    onFileUploaded={handleFileUploaded}
+                    onFileDeleted={handleFileDeleted}
+                  />
+                  {selectedTask.files && selectedTask.files.length > 0 && (
+                    <div className="mt-4">
+                      <FileList
+                        taskId={selectedTask._id}
+                        files={selectedTask.files}
+                        onFileDeleted={handleFileDeleted}
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <TaskComments taskId={selectedTask._id} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Template Modal */}
+      {editTemplateModalOpen && (
+        <AutomationTask
+          users={users}
+          mode="edit"
+          initialData={editingTemplate}
+          isOpen={editTemplateModalOpen}
+          onClose={() => {
+            setEditTemplateModalOpen(false);
+            setEditingTemplate(null);
+            setEditingTemplateIndex(null);
+          }}
+          onSubmit={handleTemplateSubmit}
+          automationId={selectedAutomation?._id}
+          isEditingTemplate={true}
+        />
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showDeleteConfirmation && (
+        <div className="fixed inset-0 bg-gray-50/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+            <div className="flex items-center mb-4">
+              <div className="flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mr-4">
+                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Delete Tasks</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+            <div className="mb-6">
+              <p className="text-gray-700">
+                Are you sure you want to delete <span className="font-semibold text-red-600">{selectedTasks.length}</span> selected task{selectedTasks.length > 1 ? 's' : ''}?
+              </p>
+            </div>
+            <div className="flex space-x-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirmation(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+              >
+                Delete {selectedTasks.length} Task{selectedTasks.length > 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
-export default AdvancedTaskTable; 
+export default AdminDashboard;

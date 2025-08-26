@@ -130,9 +130,9 @@ const AdvancedTaskTable = ({
     handleDeleteTask, handleNoColumnLeftClick, handleNoColumnRightClick,
     handleDeleteFromDropdown, handleConfirmDelete, handleCancelDelete, closeDeleteDropdown,
     groupTasksBy, handleRowDragStart, handleRowDragOver, handleRowDrop, handleRowDragEnd,
-    handleGroupDrop, saveOrder, getAssignedVerifierIds, getGroupKey, loadMoreTasks,
+    handleGroupDrop, saveOrder, saveGroupOrder, getAssignedVerifierIds, getGroupKey, loadMoreTasks,
     shouldShowLoadMore, groupField, shouldGroup, groupedTasks, renderGroupedTasks, user,
-    isGroupedModeLoading
+    groupOrder, groupOrderLoaded, isGroupedModeLoading
   } = logic;
   
 
