@@ -168,6 +168,11 @@ const ReceivedTasks = () => {
   const renameTab = (id, newTitle) => {
     setTabs(tabs.map(tab => tab.id === id ? { ...tab, title: newTitle } : tab));
   };
+
+  const reorderTabs = (newTabsOrder) => {
+    setTabs(newTabsOrder);
+  };
+
   const updateActiveTab = (patch) => {
     setTabs(tabs.map(tab => {
       if (tab.id !== activeTabId) return tab;
@@ -904,6 +909,7 @@ const ReceivedTasks = () => {
         onAddTab={addTab}
         onCloseTab={closeTab}
         onRenameTab={renameTab}
+        onReorderTabs={reorderTabs}
       />
       <div className="mb-6">
         {/* Replace nav tabs with a select for activeTab in the current tab */}

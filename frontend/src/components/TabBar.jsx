@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import './TabBar.css';
 
-const TabBar = ({ tabs, activeTabId, onTabClick, onAddTab, onCloseTab, onRenameTab }) => {
+const TabBar = ({ tabs, activeTabId, onTabClick, onAddTab, onCloseTab, onRenameTab, onReorderTabs }) => {
   const [editingTabId, setEditingTabId] = useState(null);
   const [editValue, setEditValue] = useState('');
+  const [draggedTab, setDraggedTab] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
 
   const handleDoubleClick = (tab) => {
     setEditingTabId(tab.id);
@@ -29,6 +31,61 @@ const TabBar = ({ tabs, activeTabId, onTabClick, onAddTab, onCloseTab, onRenameT
     }
   };
 
+  // Drag and Drop handlers
+  const handleDragStart = (e, tab, index) => {
+    setDraggedTab({ tab, index });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', e.target.outerHTML);
+    
+    // Add visual feedback
+    e.target.style.opacity = '0.5';
+  };
+
+  const handleDragEnd = (e) => {
+    e.target.style.opacity = '1';
+    setDraggedTab(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    if (draggedTab && draggedTab.index !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e, dropIndex) => {
+    e.preventDefault();
+    
+    if (!draggedTab || draggedTab.index === dropIndex) {
+      setDragOverIndex(null);
+      return;
+    }
+
+    const newTabs = [...tabs];
+    const draggedTabData = newTabs[draggedTab.index];
+    
+    // Remove the dragged tab from its original position
+    newTabs.splice(draggedTab.index, 1);
+    
+    // Insert the dragged tab at the new position
+    newTabs.splice(dropIndex, 0, draggedTabData);
+    
+    // Call the reorder callback if provided
+    if (onReorderTabs) {
+      onReorderTabs(newTabs);
+    }
+    
+    setDraggedTab(null);
+    setDragOverIndex(null);
+  };
+
   return (
     <div style={{ 
       display: 'flex', 
@@ -44,9 +101,15 @@ const TabBar = ({ tabs, activeTabId, onTabClick, onAddTab, onCloseTab, onRenameT
     }}
     className="hide-scrollbar" // Add a class for custom scrollbar CSS
     >
-      {tabs.map((tab) => (
+      {tabs.map((tab, index) => (
           <div
             key={tab.id}
+            draggable={!editingTabId} // Don't allow drag during editing
+            onDragStart={(e) => handleDragStart(e, tab, index)}
+            onDragEnd={handleDragEnd}
+            onDragOver={(e) => handleDragOver(e, index)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, index)}
             style={{
               padding: '8px 12px',
               marginRight: 1,
@@ -57,7 +120,7 @@ const TabBar = ({ tabs, activeTabId, onTabClick, onAddTab, onCloseTab, onRenameT
               borderBottom: tab.id === activeTabId ? '2px solid #3b82f6' : '1px solid #cbd5e0',
               borderRadius: '4px 4px 0 0',
               position: 'relative',
-              cursor: 'pointer',
+              cursor: editingTabId ? 'default' : (draggedTab ? 'move' : 'pointer'),
               minWidth: 90,
               maxWidth: 'none',
               height: '36px',
@@ -65,10 +128,14 @@ const TabBar = ({ tabs, activeTabId, onTabClick, onAddTab, onCloseTab, onRenameT
               alignItems: 'center',
               justifyContent: 'flex-start',
               flexShrink: 0,
-              transition: 'all 0.2s ease',
-              boxShadow: tab.id === activeTabId ? '0 2px 4px rgba(0,0,0,0.05)' : 'none'
+              transition: draggedTab ? 'none' : 'all 0.2s ease',
+              boxShadow: tab.id === activeTabId ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+              // Add visual feedback for drag over
+              transform: dragOverIndex === index && draggedTab && draggedTab.index !== index ? 'translateX(10px)' : 'translateX(0)',
+              borderLeftColor: dragOverIndex === index && draggedTab && draggedTab.index !== index ? '#3b82f6' : '#cbd5e0',
+              borderLeftWidth: dragOverIndex === index && draggedTab && draggedTab.index !== index ? '3px' : '1px',
             }}
-            onClick={() => onTabClick(tab.id)}
+            onClick={() => !editingTabId && onTabClick(tab.id)}
           >
             {editingTabId === tab.id ? (
               <input
@@ -97,7 +164,8 @@ const TabBar = ({ tabs, activeTabId, onTabClick, onAddTab, onCloseTab, onRenameT
                   fontSize: 14,
                   whiteSpace: 'nowrap',
                   marginRight: 8,
-                  color: tab.id === activeTabId ? '#1e40af' : '#475569'
+                  color: tab.id === activeTabId ? '#1e40af' : '#475569',
+                  pointerEvents: editingTabId ? 'none' : 'auto'
                 }}
                 title={tab.title}
               >

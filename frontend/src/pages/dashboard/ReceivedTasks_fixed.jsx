@@ -149,6 +149,10 @@ const ReceivedTasks = () => {
   const renameTab = (id, newTitle) => {
     setTabs(tabs.map(tab => tab.id === id ? { ...tab, title: newTitle } : tab));
   };
+
+  const reorderTabs = (newTabsOrder) => {
+    setTabs(newTabsOrder);
+  };
   
   const updateActiveTab = (patch) => {
     setTabs(tabs.map(tab => {
@@ -609,6 +613,7 @@ const ReceivedTasks = () => {
         onAddTab={addTab}
         onCloseTab={closeTab}
         onRenameTab={renameTab}
+        onReorderTabs={reorderTabs}
         taskCounts={taskCounts}
         customColumns={extendedColumns}
         visibleColumns={activeTabObj.visibleColumns}

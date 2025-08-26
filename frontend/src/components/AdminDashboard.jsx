@@ -19,7 +19,7 @@ import FileList from './FileList';
 import TaskComments from './TaskComments';
 import defaultProfile from '../assets/avatar.jpg';
 import FilterPopup from './FilterPopup';
-import PDFColumnSelector from './PDFColumnSelector';
+import EnhancedPDFColumnSelector from './EnhancedPDFColumnSelector';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { API_BASE_URL, fetchTabState, saveTabState } from '../apiConfig';
@@ -284,6 +284,10 @@ const AdminDashboard = () => {
   };
   const renameTab = (id, newTitle) => {
     setTabs(tabs.map(tab => tab.id === id ? { ...tab, title: newTitle } : tab));
+  };
+
+  const reorderTabs = (newTabsOrder) => {
+    setTabs(newTabsOrder);
   };
 
   // Fetch tabs and activeTabId from backend on mount
@@ -949,25 +953,39 @@ const AdminDashboard = () => {
   const filteredAndSortedTasks = getFilteredAndSortedTasks(tasks);
 
   // PDF export handler
-  const handleDownloadPDF = (selectedColumns) => {
+  const handleDownloadPDF = (selectedColumns, fontSize = 10, fontFamily = 'tahoma') => {
     const filteredTasks = getFilteredAndSortedTasks(tasks);
-    
-    // Get the selected column definitions
-    const selectedColumnDefs = ALL_COLUMNS.filter(col => selectedColumns.includes(col.id));
-    
-    // Create PDF
-    const doc = new jsPDF();
-    
-    // Set up table headers
-    const headers = selectedColumnDefs.map(col => col.label);
-    
-    // Prepare data for PDF
+    // Get the selected column definitions (including custom columns)
+    const allAvailableColumns = [
+      ...ALL_COLUMNS.map(col => {
+        // Adjust widths for PDF export
+        if (col.id === 'title') return { ...col, defaultWidth: 200 };
+        if (col.id === 'description' || col.id === 'status') return { ...col, defaultWidth: 140 };
+        return col;
+      }),
+      ...customColumns.map(col => ({
+        id: `custom_${col.name}`,
+        label: col.label,
+        defaultWidth: 150,
+        isCustom: true,
+        customColumn: col
+      }))
+    ];
+  // Ensure columns are in the order selected by the user
+  const selectedColumnDefs = selectedColumns.map(colId => allAvailableColumns.find(col => col.id === colId)).filter(Boolean);
+    // Add No column at the start
+    const headers = ['No', ...selectedColumnDefs.map(col => col.label)];
+  // Use normal portrait A4, but keep reduced margins for wider table
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    // Set font family if available in jsPDF
+    try {
+      doc.setFont(fontFamily);
+    } catch (e) {
+      doc.setFont('helvetica'); // fallback
+    }
     const tableData = [];
-    
-    // Process tasks based on grouping - use active tab's sort field as grouping
-    const groupBy = activeTabObj.sortBy; 
+    const groupBy = activeTabObj.sortBy;
     if (groupBy && groupBy !== '') {
-      // Group the tasks by the selected field
       const groupedTasks = {};
       filteredTasks.forEach(task => {
         let groupKey;
@@ -979,9 +997,7 @@ const AdminDashboard = () => {
             groupKey = task.clientGroup || 'Unassigned';
             break;
           case 'workType':
-            groupKey = Array.isArray(task.workType) 
-              ? (task.workType[0] || 'Unspecified') 
-              : (task.workType || 'Unspecified');
+            groupKey = Array.isArray(task.workType) ? (task.workType[0] || 'Unspecified') : (task.workType || 'Unspecified');
             break;
           case 'billed':
             groupKey = task.billed ? 'Yes' : 'No';
@@ -989,201 +1005,112 @@ const AdminDashboard = () => {
           default:
             groupKey = task[groupBy] || 'Unassigned';
         }
-        
-        if (!groupedTasks[groupKey]) {
-          groupedTasks[groupKey] = [];
-        }
+        if (!groupedTasks[groupKey]) groupedTasks[groupKey] = [];
         groupedTasks[groupKey].push(task);
       });
-      
-      // Process each group
       Object.entries(groupedTasks).forEach(([groupKey, groupTasks], groupIndex) => {
-        // Add a group header
-        if (groupIndex > 0) {
-          tableData.push(Array(headers.length).fill('')); // Empty row between groups
-        }
-        
-        // Create a group header row
+        if (groupIndex > 0) tableData.push(Array(headers.length).fill(''));
         tableData.push([{
           content: `${groupBy.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}: ${groupKey}`,
           colSpan: headers.length,
           styles: { fillColor: [220, 220, 220], fontStyle: 'bold', halign: 'left' }
         }]);
-        
-        // Add each task as a row
-        groupTasks.forEach(task => {
-          const row = [];
+        groupTasks.forEach((task, idx) => {
+          const row = [idx + 1];
           selectedColumnDefs.forEach(col => {
             let value = '';
-            
-            // Extract value based on column type
-            switch (col.id) {
-              case 'title':
-                value = task.title || '';
-                break;
-              case 'description':
-                value = task.description || '';
-                break;
-              case 'clientName':
-                value = task.clientName || '';
-                break;
-              case 'clientGroup':
-                value = task.clientGroup || '';
-                break;
-              case 'workType':
-                value = Array.isArray(task.workType) ? task.workType.join(', ') : (task.workType || '');
-                break;
-              case 'billed':
-                value = task.billed ? 'Yes' : 'No';
-                break;
-              case 'status':
-                value = task.status || '';
-                break;
-              case 'priority':
-                value = task.priority || '';
-                break;
-              case 'selfVerification':
-                value = task.selfVerification ? '✓' : '✗';
-                break;
-              case 'inwardEntryDate':
-                value = task.inwardEntryDate ? formatDateTime(task.inwardEntryDate) : '';
-                break;
-              case 'dueDate':
-                value = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '';
-                break;
-              case 'targetDate':
-                value = task.targetDate ? new Date(task.targetDate).toLocaleDateString() : '';
-                break;
-              case 'assignedBy':
-                value = task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : '';
-                break;
-              case 'assignedTo':
-                value = Array.isArray(task.assignedTo)
-                  ? task.assignedTo.map(u => `${u.firstName} ${u.lastName}`).join(', ')
-                  : (task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : '');
-                break;
-              case 'verificationAssignedTo':
-                value = task.verificationAssignedTo ? 
-                  `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : '';
-                break;
-              case 'secondVerificationAssignedTo':
-                value = task.secondVerificationAssignedTo ? 
-                  `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : '';
-                break;
-              case 'guides':
-                value = task.guides ? task.guides.map(g => g.name).join(', ') : '';
-                break;
-              case 'files':
-                value = task.files && task.files.length > 0 ? 
-                  task.files.map(f => f.originalName || f.originalname).join(', ') : '';
-                break;
-              case 'comments':
-                value = task.comments ? task.comments.length.toString() : '0';
-                break;
-              default:
-                value = '';
+            if (col.isCustom && col.id.startsWith('custom_')) {
+              // Custom column value
+              const customColumnName = col.id.replace('custom_', '');
+              const customValue = task.customFields?.[customColumnName];
+              if (col.customColumn?.type === 'checkbox') {
+                value = customValue ? 'Yes' : 'No';
+              } else if (col.customColumn?.type === 'tags') {
+                value = Array.isArray(customValue) ? customValue.join(', ') : (customValue || '');
+              } else {
+                value = customValue ?? '';
+              }
+            } else {
+              switch (col.id) {
+                case 'title': value = task.title || ''; break;
+                case 'description': value = task.description || ''; break;
+                case 'clientName': value = task.clientName || ''; break;
+                case 'clientGroup': value = task.clientGroup || ''; break;
+                case 'workType': value = Array.isArray(task.workType) ? task.workType.join(', ') : (task.workType || ''); break;
+                case 'billed': value = task.billed ? 'Yes' : 'No'; break;
+                case 'status': value = task.status || ''; break;
+                case 'priority': value = task.priority || ''; break;
+                case 'selfVerification': value = task.selfVerification ? '✓' : '✗'; break;
+                case 'inwardEntryDate': value = task.inwardEntryDate ? formatDateTime(task.inwardEntryDate) : ''; break;
+                case 'dueDate': value = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : ''; break;
+                case 'targetDate': value = task.targetDate ? new Date(task.targetDate).toLocaleDateString() : ''; break;
+                case 'assignedBy': value = task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : ''; break;
+                case 'assignedTo': value = Array.isArray(task.assignedTo) ? task.assignedTo.map(u => `${u.firstName} ${u.lastName}`).join(', ') : (task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : ''); break;
+                case 'verificationAssignedTo': value = task.verificationAssignedTo ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : ''; break;
+                case 'secondVerificationAssignedTo': value = task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : ''; break;
+                case 'guides': value = task.guides ? task.guides.map(g => g.name).join(', ') : ''; break;
+                case 'files': value = task.files && task.files.length > 0 ? task.files.map(f => f.originalName || f.originalname).join(', ') : ''; break;
+                case 'comments': value = task.comments ? task.comments.length.toString() : '0'; break;
+                default: value = '';
+              }
             }
-            
             row.push(value);
           });
-          
           tableData.push(row);
         });
       });
     } else {
-      // No grouping, just add all tasks as rows
-      filteredTasks.forEach(task => {
-        const row = [];
+      filteredTasks.forEach((task, idx) => {
+        const row = [idx + 1];
         selectedColumnDefs.forEach(col => {
           let value = '';
-          
-          // Extract value based on column type
           switch (col.id) {
-            case 'title':
-              value = task.title || '';
-              break;
-            case 'description':
-              value = task.description || '';
-              break;
-            case 'clientName':
-              value = task.clientName || '';
-              break;
-            case 'clientGroup':
-              value = task.clientGroup || '';
-              break;
-            case 'workType':
-              value = Array.isArray(task.workType) ? task.workType.join(', ') : (task.workType || '');
-              break;
-            case 'billed':
-              value = task.billed ? 'Yes' : 'No';
-              break;
-            case 'status':
-              value = task.status || '';
-              break;
-            case 'priority':
-              value = task.priority || '';
-              break;
-            case 'selfVerification':
-              value = task.selfVerification ? '✓' : '✗';
-              break;
-            case 'inwardEntryDate':
-              value = task.inwardEntryDate ? formatDateTime(task.inwardEntryDate) : '';
-              break;
-            case 'dueDate':
-              value = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '';
-              break;
-            case 'targetDate':
-              value = task.targetDate ? new Date(task.targetDate).toLocaleDateString() : '';
-              break;
-            case 'assignedBy':
-              value = task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : '';
-              break;
-            case 'assignedTo':
-              value = Array.isArray(task.assignedTo)
-                ? task.assignedTo.map(u => `${u.firstName} ${u.lastName}`).join(', ')
-                : (task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : '');
-              break;
-            case 'verificationAssignedTo':
-              value = task.verificationAssignedTo ? 
-                `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : '';
-              break;
-            case 'secondVerificationAssignedTo':
-              value = task.secondVerificationAssignedTo ? 
-                `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : '';
-              break;
-            case 'guides':
-              value = task.guides ? task.guides.map(g => g.name).join(', ') : '';
-              break;
-            case 'files':
-              value = task.files && task.files.length > 0 ? 
-                task.files.map(f => f.originalName || f.originalname).join(', ') : '';
-              break;
-            case 'comments':
-              value = task.comments ? task.comments.length.toString() : '0';
-              break;
-            default:
-              value = '';
+            case 'title': value = task.title || ''; break;
+            case 'description': value = task.description || ''; break;
+            case 'clientName': value = task.clientName || ''; break;
+            case 'clientGroup': value = task.clientGroup || ''; break;
+            case 'workType': value = Array.isArray(task.workType) ? task.workType.join(', ') : (task.workType || ''); break;
+            case 'billed': value = task.billed ? 'Yes' : 'No'; break;
+            case '': value = task.status || ''; break;
+            case 'priority': value = task.priority || ''; break;
+            case 'selfVerification': value = task.selfVerification ? '✓' : '✗'; break;
+            case 'inwardEntryDate': value = task.inwardEntryDate ? formatDateTime(task.inwardEntryDate) : ''; break;
+            case 'dueDate': value = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : ''; break;
+            case 'targetDate': value = task.targetDate ? new Date(task.targetDate).toLocaleDateString() : ''; break;
+            case 'assignedBy': value = task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : ''; break;
+            case 'assignedTo': value = Array.isArray(task.assignedTo) ? task.assignedTo.map(u => `${u.firstName} ${u.lastName}`).join(', ') : (task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : ''); break;
+            case 'verificationAssignedTo': value = task.verificationAssignedTo ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : ''; break;
+            case 'secondVerificationAssignedTo': value = task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : ''; break;
+            case 'guides': value = task.guides ? task.guides.map(g => g.name).join(', ') : ''; break;
+            case 'files': value = task.files && task.files.length > 0 ? task.files.map(f => f.originalName || f.originalname).join(', ') : ''; break;
+            case 'comments': value = task.comments ? task.comments.length.toString() : '0'; break;
+            default: value = '';
           }
-          
           row.push(value);
         });
-        
         tableData.push(row);
       });
     }
-    
-    // Generate PDF with autotable
     doc.autoTable({
       head: [headers],
       body: tableData,
       theme: 'striped',
+      margin: { left: 24, right: 24, top: 40, bottom: 24 },
+      tableWidth: 'auto',
+      columnStyles: Object.fromEntries(selectedColumnDefs.map((col, idx) => [idx + 1, { cellWidth: col.defaultWidth || 120 }])),
       styles: {
-        fontSize: 8,
-        cellPadding: 2,
-        overflow: 'linebreak'
+        fontSize: fontSize,
+        font: fontFamily,
+        cellPadding: 4,
+        overflow: 'linebreak',
+      },
+      headStyles: {
+        fontSize: fontSize + 1,
+        font: fontFamily,
+        fillColor: [33, 111, 182],
+        textColor: 255,
       },
       didDrawPage: function (data) {
-        // Add page number
         doc.setFontSize(8);
         doc.text(
           `Page ${doc.internal.getNumberOfPages()}`,
@@ -1192,8 +1119,6 @@ const AdminDashboard = () => {
         );
       },
     });
-
-    // Save the PDF with a name based on active tab
     doc.save(`tasks_${activeTabObj?.activeTab || 'dashboard'}.pdf`);
   };
 
@@ -1283,6 +1208,7 @@ const AdminDashboard = () => {
         onAddTab={addTab}
         onCloseTab={closeTab}
         onRenameTab={renameTab}
+        onReorderTabs={reorderTabs}
       />
       {/* Restore original summary cards/widgets here */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -1682,16 +1608,7 @@ const AdminDashboard = () => {
         />
       </div>
       {/* Edit Task Modal */}
-      {editModalOpen && (
-        <CreateTask
-          users={users}
-          mode="edit"
-          initialData={editTask}
-          isOpen={editModalOpen}
-          onClose={() => setEditModalOpen(false)}
-          onSubmit={handleTaskSubmit}
-        />
-      )}
+  {/* Edit modal is now managed inside AdvancedTaskTable to prevent unnecessary unmounting of tasks */}
       {/* Create Task Modal */}
       {createModalOpen && (
         <CreateTask
@@ -1918,11 +1835,20 @@ const AdminDashboard = () => {
         />
       )}
       {/* PDF Column Selector Modal */}
-      <PDFColumnSelector
+      <EnhancedPDFColumnSelector
         isOpen={showPDFColumnSelector}
         onClose={() => setShowPDFColumnSelector(false)}
         onDownload={handleDownloadPDF}
-        availableColumns={ALL_COLUMNS}
+        availableColumns={[
+          ...ALL_COLUMNS,
+          ...customColumns.map(col => ({
+            id: `custom_${col.name}`,
+            label: col.label,
+            defaultWidth: 150,
+            isCustom: true,
+            customColumn: col
+          }))
+        ]}
       />
 
       {/* File Upload and Comments Modal */}

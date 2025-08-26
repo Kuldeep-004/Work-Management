@@ -172,6 +172,11 @@ const AssignedTasks = () => {
   const renameTab = (id, newTitle) => {
     setTabs(tabs.map(tab => tab.id === id ? { ...tab, title: newTitle } : tab));
   };
+
+  const reorderTabs = (newTabsOrder) => {
+    setTabs(newTabsOrder);
+  };
+
   const updateActiveTab = (patch) => {
     setTabs(tabs.map(tab => tab.id === activeTabId ? { ...tab, ...patch } : tab));
   };
@@ -650,6 +655,7 @@ const AssignedTasks = () => {
         onAddTab={addTab}
         onCloseTab={closeTab}
         onRenameTab={renameTab}
+        onReorderTabs={reorderTabs}
       />
       <div className="mb-6">
         <div className="border-b border-gray-200">

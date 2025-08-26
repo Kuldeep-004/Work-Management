@@ -121,7 +121,7 @@ const FilterPopup = ({
   };
 
   return (
-    <div className="absolute top-full mt-2 bg-white rounded-md shadow-lg border border-gray-200 z-50 p-4 left-0 right-0 mx-2 sm:mx-0 sm:w-[810px] sm:right-auto max-w-[calc(100vw-1rem)] overflow-visible">
+    <div className="absolute top-full mt-2 bg-white rounded-md shadow-lg border border-gray-200 z-50 p-4 left-0 right-0 mx-2 sm:mx-0 sm:w-[820px] sm:right-auto max-w-[calc(100vw-1rem)] overflow-visible">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-md font-semibold text-gray-800">Filters</h3>
         <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-200 flex-shrink-0">

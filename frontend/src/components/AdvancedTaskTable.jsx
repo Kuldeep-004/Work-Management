@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import CreateTask from './CreateTask';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import defaultProfile from '../assets/avatar.jpg';
@@ -34,7 +35,6 @@ const AdvancedTaskTable = ({
   users = [],
   currentUser = null,
   refetchTasks,
-  onEditTask,
   sortBy,
   tabKey = 'defaultTabKey',
   tabId,
@@ -47,6 +47,31 @@ const AdvancedTaskTable = ({
   isAllSelected = false,
   onSelectAll,
 }) => {
+  // Local state for edit modal
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editTask, setEditTask] = useState(null);
+
+  // Handler to open edit modal (used by No column and Edit button)
+  const handleEditTask = (task) => {
+    setEditTask(task);
+    setEditModalOpen(true);
+  };
+
+  // Handler for submitting the edit modal
+  const handleTaskSubmit = async (updatedOrCreated) => {
+    setEditModalOpen(false);
+    setEditTask(null);
+    // Optimistically update the task in the table
+    if (updatedOrCreated && updatedOrCreated._id) {
+      if (onTaskUpdate) {
+        onTaskUpdate(updatedOrCreated._id, () => updatedOrCreated);
+      }
+      // Optionally refetch just this task for consistency
+      if (refetchTasks) {
+        setTimeout(() => refetchTasks(), 200);
+      }
+    }
+  };
 
 
   const logic = useAdvancedTaskTableLogic({
@@ -54,9 +79,10 @@ const AdvancedTaskTable = ({
     onStatusChange, onVerificationStatusChange, shouldDisableActions,
     shouldDisableFileActions, taskHours, visibleColumns, setVisibleColumns,
     columnWidths, setColumnWidths, columnOrder, setColumnOrder,
-    storageKeyPrefix, users, currentUser, refetchTasks, onEditTask,
+    storageKeyPrefix, users, currentUser, refetchTasks,
     sortBy, tabKey, tabId, allColumns, highlightedTaskId,
-    enableBulkSelection, selectedTasks, onTaskSelect, isAllSelected, onSelectAll
+    enableBulkSelection, selectedTasks, onTaskSelect, isAllSelected, onSelectAll,
+    onEditTask: handleEditTask
   });
 
   // Destructure everything we need from logic
@@ -1381,7 +1407,7 @@ const AdvancedTaskTable = ({
                                 {/* Role-based action buttons */}
                                 {['Team Head', 'Admin', 'Senior'].includes(currentUser?.role) && (
                                   <button
-                                    onClick={() => onEditTask && onEditTask(task)}
+                                    onClick={() => handleEditTask(task)}
                                     className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
                                     title="Edit Task"
                                   >
@@ -1390,7 +1416,7 @@ const AdvancedTaskTable = ({
                                 )}
                                 {['Team Head', 'Admin'].includes(currentUser?.role) && (
                                   <button
-                                    onClick={() => handleDeleteTask(task)}
+                                    onClick={() => handleDeleteFromDropdown(task)}
                                     className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
                                     title="Delete Task"
                                   >
@@ -1435,10 +1461,10 @@ const AdvancedTaskTable = ({
                       className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-pointer hover:bg-gray-100"
                       style={{width: '48px', minWidth: '48px', textAlign: 'right'}}
                       title="Left click to edit, right click for delete option"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleNoColumnLeftClick(task);
-                      }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditTask(task);
+                          }}
                       onContextMenu={(e) => {
                         e.stopPropagation();
                         handleNoColumnRightClick(e, task);
@@ -1446,6 +1472,7 @@ const AdvancedTaskTable = ({
                     >
                       {idx + 1}
                     </td>
+                  {/* ...existing code... */}
                     {getOrderedVisibleColumns().map((colId, idx2, arr) => {
                       const col = ALL_COLUMNS.find(c => c.id === colId);
                       if (!col) return null;
@@ -2616,6 +2643,17 @@ const AdvancedTaskTable = ({
           </div>
         )}
       </div>
+      {/* Edit Task Modal (now local, not in parent) */}
+      {editModalOpen && (
+        <CreateTask
+          users={users}
+          mode="edit"
+          initialData={editTask}
+          isOpen={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          onSubmit={handleTaskSubmit}
+        />
+      )}
     </>
   );
 };
