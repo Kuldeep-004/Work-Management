@@ -240,7 +240,7 @@ router.get('/', protect, async (req, res) => {
       .populate('files.uploadedBy', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy createdAt updatedAt files comments billed selfVerification customFields')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy createdAt updatedAt files comments billed selfVerification customFields itrProgress')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -258,8 +258,8 @@ router.get('/all', protect, async (req, res) => {
       // and exclude tasks that are fully completed to avoid sending completed
       // tasks to the frontend (reduces payload / improves dashboard load).
       tasks = await Task.find({ verificationStatus: { $ne: 'pending' }, status: { $ne: 'completed' } })
-        .populate('assignedTo', 'firstName lastName photo group')
-        .populate('assignedBy', 'firstName lastName photo group')
+        .populate({ path: 'assignedTo', select: 'firstName lastName photo team' })
+        .populate({ path: 'assignedBy', select: 'firstName lastName photo team' })
         .populate('verificationAssignedTo', 'firstName lastName photo')
         .populate('secondVerificationAssignedTo', 'firstName lastName photo')
         .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
@@ -268,7 +268,7 @@ router.get('/all', protect, async (req, res) => {
         .populate('files.uploadedBy', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
         .populate('guides', 'firstName lastName photo')
-        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields')
+        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress')
         .sort({ createdAt: -1 });
     } else {
       return res.status(403).json({ message: 'You are not authorized to access all tasks' });
@@ -304,7 +304,7 @@ router.get('/for-verification', protect, async (req, res) => {
         .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
         .populate('originalAssignee', 'firstName lastName photo')
         .populate('comments.createdBy', 'firstName lastName photo')
-        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields')
+        .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields itrProgress')
         .sort({ createdAt: -1 });
       res.json(tasks);
       return;
@@ -320,8 +320,8 @@ router.get('/for-verification', protect, async (req, res) => {
       ],
       verificationStatus: { $nin: ['completed', 'rejected'] }
     })
-      .populate('assignedTo', 'firstName lastName photo')
-      .populate('assignedBy', 'firstName lastName photo')
+      .populate({ path: 'assignedTo', select: 'firstName lastName photo team' })
+      .populate({ path: 'assignedBy', select: 'firstName lastName photo team' })
       .populate('verificationAssignedTo', 'firstName lastName photo')
       .populate('secondVerificationAssignedTo', 'firstName lastName photo')
       .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
@@ -329,7 +329,7 @@ router.get('/for-verification', protect, async (req, res) => {
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('originalAssignee', 'firstName lastName photo')
       .populate('comments.createdBy', 'firstName lastName photo')
-      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields')
+      .select('title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields itrProgress')
       .sort({ createdAt: -1 });
     // Filter: if user is first verifier, exclude tasks with status 'first_verified'
     const filteredTasks = tasks.filter(task => {
@@ -568,7 +568,7 @@ router.get('/received', protect, async (req, res) => {
       .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields')
+      .select('title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -591,7 +591,7 @@ router.get('/received/guidance', protect, async (req, res) => {
       .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
       .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
       .populate('guides', 'firstName lastName photo')
-      .select('title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields')
+      .select('title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress')
       .sort({ createdAt: -1 });
     res.json(tasks);
   } catch (error) {
@@ -2125,6 +2125,59 @@ router.get('/analytics/data', protect, async (req, res) => {
     res.json(analyticsData);
   } catch (error) {
     console.error('Error fetching analytics data:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get ITR progress for a specific task
+router.get('/:id/itr-progress', protect, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    res.json({ itrProgress: task.itrProgress || {} });
+  } catch (error) {
+    console.error('Error fetching ITR progress:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Update ITR progress for a specific task
+router.put('/:id/itr-progress', protect, async (req, res) => {
+  try {
+    const { itrProgress } = req.body;
+    
+    const task = await Task.findByIdAndUpdate(
+      req.params.id,
+      { itrProgress },
+      { new: true, runValidators: true }
+    ).populate('assignedTo', 'firstName lastName email')
+     .populate('assignedBy', 'firstName lastName email')
+     .populate('verificationAssignedTo', 'firstName lastName email')
+     .populate('secondVerificationAssignedTo', 'firstName lastName email')
+     .populate('thirdVerificationAssignedTo', 'firstName lastName email')
+     .populate('fourthVerificationAssignedTo', 'firstName lastName email')
+     .populate('fifthVerificationAssignedTo', 'firstName lastName email')
+     .populate('guides', 'firstName lastName email');
+
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Log the activity
+    await ActivityLogger.logTaskActivity(
+      req.user._id,
+      'task_updated',
+      task._id,
+      `Updated ITR progress for task: ${task.title}`
+    );
+
+    res.json(task);
+  } catch (error) {
+    console.error('Error updating ITR progress:', error);
     res.status(500).json({ message: error.message });
   }
 });

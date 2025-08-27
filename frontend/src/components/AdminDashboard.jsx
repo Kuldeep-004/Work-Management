@@ -20,8 +20,10 @@ import TaskComments from './TaskComments';
 import defaultProfile from '../assets/avatar.jpg';
 import FilterPopup from './FilterPopup';
 import EnhancedPDFColumnSelector from './EnhancedPDFColumnSelector';
+import ITRColumnSelector from './ITRColumnSelector';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import { API_BASE_URL, fetchTabState, saveTabState } from '../apiConfig';
 import AdvancedTaskTable from './AdvancedTaskTable';
 import CreateTask from './CreateTask';
@@ -126,6 +128,7 @@ const AdminDashboard = () => {
   const groupByDropdownRef = useRef(null);
   const tableRef = useRef(null);
   const [showPDFColumnSelector, setShowPDFColumnSelector] = useState(false);
+  const [showITRColumnSelector, setShowITRColumnSelector] = useState(false);
   const [editingDescriptionTaskId, setEditingDescriptionTaskId] = useState(null);
   const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -1144,8 +1147,364 @@ const AdminDashboard = () => {
     doc.save(`tasks_${activeTabObj?.activeTab || 'dashboard'}.pdf`);
   };
 
+  // Excel export handler
+  const handleDownloadExcel = (selectedColumns, fontSize = 10, fontFamily = 'tahoma') => {
+    try {
+      const filteredTasks = getFilteredAndSortedTasks(tasks, activeTabObj.filters);
+      
+      // Prepare Excel data with selected columns
+      const excelData = filteredTasks.map(task => {
+        const row = {};
+        
+        selectedColumns.forEach(column => {
+          if (column.isCustom) {
+            const customValue = task.customFields && task.customFields[column.customColumn.name];
+            row[column.label] = customValue !== undefined ? customValue : '';
+          } else {
+            switch (column.id) {
+              case 'title':
+                row[column.label] = task.title || '';
+                break;
+              case 'description':
+                row[column.label] = task.description || '';
+                break;
+              case 'clientName':
+                row[column.label] = task.clientName || '';
+                break;
+              case 'clientGroup':
+                row[column.label] = task.clientGroup || '';
+                break;
+              case 'workType':
+                row[column.label] = Array.isArray(task.workType) ? task.workType.join(', ') : (task.workType || '');
+                break;
+              case 'billed':
+                row[column.label] = task.billed ? 'Yes' : 'No';
+                break;
+              case 'status':
+                row[column.label] = task.status || '';
+                break;
+              case 'priority':
+                row[column.label] = task.priority || '';
+                break;
+              case 'selfVerification':
+                row[column.label] = task.selfVerification ? 'Yes' : 'No';
+                break;
+              case 'inwardEntryDate':
+                row[column.label] = formatDate(task.inwardEntryDate);
+                break;
+              case 'dueDate':
+                row[column.label] = formatDate(task.dueDate);
+                break;
+              case 'targetDate':
+                row[column.label] = formatDate(task.targetDate);
+                break;
+              case 'assignedBy':
+                row[column.label] = task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : '';
+                break;
+              case 'assignedTo':
+                row[column.label] = task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : '';
+                break;
+              case 'verificationAssignedTo':
+                row[column.label] = task.verificationAssignedTo ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : '';
+                break;
+              case 'secondVerificationAssignedTo':
+                row[column.label] = task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : '';
+                break;
+              case 'thirdVerificationAssignedTo':
+                row[column.label] = task.thirdVerificationAssignedTo ? `${task.thirdVerificationAssignedTo.firstName} ${task.thirdVerificationAssignedTo.lastName}` : '';
+                break;
+              case 'fourthVerificationAssignedTo':
+                row[column.label] = task.fourthVerificationAssignedTo ? `${task.fourthVerificationAssignedTo.firstName} ${task.fourthVerificationAssignedTo.lastName}` : '';
+                break;
+              case 'fifthVerificationAssignedTo':
+                row[column.label] = task.fifthVerificationAssignedTo ? `${task.fifthVerificationAssignedTo.firstName} ${task.fifthVerificationAssignedTo.lastName}` : '';
+                break;
+              case 'guides':
+                if (task.guides && task.guides.length > 0) {
+                  row[column.label] = task.guides.map(guide => `${guide.firstName} ${guide.lastName}`).join(', ');
+                } else {
+                  row[column.label] = '';
+                }
+                break;
+              case 'files':
+                row[column.label] = task.files ? task.files.length : 0;
+                break;
+              case 'comments':
+                row[column.label] = task.comments ? task.comments.length : 0;
+                break;
+              default:
+                row[column.label] = '';
+            }
+          }
+        });
+        
+        return row;
+      });
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelData);
+
+      // Auto-size columns
+      const colWidths = selectedColumns.map(col => ({ wch: Math.max(col.label.length, 15) }));
+      ws['!cols'] = colWidths;
+
+      // Add the worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
+
+      // Save the file
+      XLSX.writeFile(wb, `tasks_${activeTabObj?.activeTab || 'dashboard'}.xlsx`);
+      
+      toast.success('Excel file downloaded successfully!');
+    } catch (error) {
+      console.error('Error generating Excel file:', error);
+      toast.error('Failed to generate Excel file');
+    }
+  };
+
   const handlePDFButtonClick = () => {
     setShowPDFColumnSelector(true);
+  };
+
+  // ITR download handlers
+  const handleITRDownload = (selectedColumns, format, fontSize = 12, fontFamily = 'helvetica') => {
+    if (format === 'pdf') {
+      handleITRDownloadPDF(selectedColumns, fontSize, fontFamily);
+    } else if (format === 'excel') {
+      handleITRDownloadExcel(selectedColumns, fontSize, fontFamily);
+    }
+  };
+
+  const handleITRDownloadPDF = (selectedColumns, fontSize = 12, fontFamily = 'helvetica') => {
+  // Use the same filtered and sorted tasks as the normal download popup (current tab)
+  const itrTasks = getFilteredAndSortedTasks(tasks, activeTabObj.filters);
+
+  const itrData = itrTasks.map((task, index) => {
+      // Get all team heads for the assignedTo user's team (supports multiple team heads per team)
+      const assignedUser = task.assignedTo;
+      let teamHeadNames = '';
+      if (assignedUser && assignedUser.team) {
+        // Find all users who are team heads in the same team (multiple heads supported)
+        const teamHeads = users.filter(user =>
+          user.team &&
+          (user.team._id === assignedUser.team._id || user.team === assignedUser.team._id) &&
+          user.role === 'Team Head'
+        );
+        teamHeadNames = teamHeads.map(th => `${th.firstName} ${th.lastName}`).join(', ');
+      }
+      
+      const firstVerifier = task.verificationAssignedTo 
+        ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`
+        : '';
+      
+      const secondVerifier = task.secondVerificationAssignedTo
+        ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`
+        : '';
+
+      // For PDF export, use 'T' for true fields instead of '✓'
+      return {
+        no: index + 1,
+        dataReceivedOn: formatDate(task.inwardEntryDate),
+        nameOfAssessee: task.clientName,
+        teamHead: teamHeadNames,
+        allotee: task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : '',
+        draftFinancialsAndComputationPreparation: task.itrProgress?.draftFinancialsAndComputationPreparation === true ? 'T' : (task.itrProgress?.draftFinancialsAndComputationPreparation === false ? '' : ''),
+        accountantVerification: task.itrProgress?.accountantVerification === true ? 'T' : (task.itrProgress?.accountantVerification === false ? '' : ''),
+        firstVerification: firstVerifier,
+        secondVerification: secondVerifier,
+        hariSirVerification: task.itrProgress?.hariSirVerification === true ? 'T' : (task.itrProgress?.hariSirVerification === false ? '' : ''),
+        issuedForPartnerProprietorVerification: task.itrProgress?.issuedForPartnerProprietorVerification === true ? 'T' : (task.itrProgress?.issuedForPartnerProprietorVerification === false ? '' : ''),
+        challanPreparation: task.itrProgress?.challanPreparation === true ? 'T' : (task.itrProgress?.challanPreparation === false ? '' : ''),
+        itrFiledOn: task.itrProgress?.itrFiledOn ? formatDate(task.itrProgress.itrFiledOn) : '',
+        billPreparation: task.itrProgress?.billPreparation === true ? 'T' : (task.itrProgress?.billPreparation === false ? '' : '')
+      };
+    });
+
+    // Generate PDF using the exact layout from image 2
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    
+    // Set font family if available in jsPDF
+    try {
+      doc.setFont(fontFamily);
+    } catch (e) {
+      // Fall back to default font if specified font is not available
+      doc.setFont('helvetica');
+    }
+    
+    // Get columns to display
+    const columnsToShow = selectedColumns.map(colId => {
+      switch(colId) {
+        case 'no': return { dataKey: 'no', header: 'No' };
+        case 'dataReceivedOn': return { dataKey: 'dataReceivedOn', header: 'Data Received on' };
+        case 'nameOfAssessee': return { dataKey: 'nameOfAssessee', header: 'Name of the Assessee' };
+        case 'teamHead': return { dataKey: 'teamHead', header: 'Team Head' };
+        case 'allotee': return { dataKey: 'allotee', header: 'Allotee' };
+        case 'draftFinancialsAndComputationPreparation': return { dataKey: 'draftFinancialsAndComputationPreparation', header: 'Draft Financials and Computation Preparation' };
+        case 'accountantVerification': return { dataKey: 'accountantVerification', header: 'Accountant Verification' };
+        case 'firstVerification': return { dataKey: 'firstVerification', header: '1st Verification' };
+        case 'secondVerification': return { dataKey: 'secondVerification', header: '2nd Verification' };
+        case 'hariSirVerification': return { dataKey: 'hariSirVerification', header: 'Hari sir Verification' };
+        case 'issuedForPartnerProprietorVerification': return { dataKey: 'issuedForPartnerProprietorVerification', header: 'Issued for Partner/Proprietor Verification' };
+        case 'challanPreparation': return { dataKey: 'challanPreparation', header: 'Challan Preparation' };
+        case 'itrFiledOn': return { dataKey: 'itrFiledOn', header: 'ITR Filed on' };
+        case 'billPreparation': return { dataKey: 'billPreparation', header: 'Bill preparation' };
+        default: return null;
+      }
+    }).filter(Boolean);
+
+    // Add title
+    doc.setFontSize(16);
+    doc.text('ITR Progress Report', 40, 40);
+
+    // Create table
+    autoTable(doc, {
+      columns: columnsToShow,
+      body: itrData,
+      startY: 70,
+      styles: {
+        fontSize: fontSize,
+        cellPadding: 3,
+        valign: 'middle',
+        halign: 'center',
+        font: fontFamily,
+      },
+      headStyles: {
+        fillColor: [66, 139, 202],
+        textColor: [255, 255, 255],
+        fontSize: fontSize,
+        fontStyle: 'bold',
+        font: fontFamily,
+      },
+      alternateRowStyles: {
+        fillColor: [245, 245, 245],
+      },
+      margin: { top: 60, left: 40, right: 40, bottom: 60 },
+      tableWidth: 'auto',
+      columnStyles: {
+        0: { cellWidth: 30 }, // No column
+      },
+    });
+
+    doc.save('ITR_Progress_Report.pdf');
+  };
+
+  const handleITRDownloadExcel = (selectedColumns, fontSize = 12, fontFamily = 'helvetica') => {
+  // Use the same filtered and sorted tasks as the normal download popup (current tab)
+  const itrTasks = getFilteredAndSortedTasks(tasks, activeTabObj.filters);
+
+  const itrData = itrTasks.map((task, index) => {
+      // Get team heads for the assignedTo user's team
+      const assignedUser = task.assignedTo;
+      let teamHeadNames = '';
+      if (assignedUser && assignedUser.team) {
+        const teamMembers = users.filter(user => 
+          user.team && user.team._id === assignedUser.team._id && user.role === 'Team Head'
+        );
+        teamHeadNames = teamMembers.map(th => `${th.firstName} ${th.lastName}`).join(', ');
+      }
+      const firstVerifier = task.verificationAssignedTo 
+        ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`
+        : '';
+      const secondVerifier = task.secondVerificationAssignedTo
+        ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`
+        : '';
+      const row = {};
+      selectedColumns.forEach(colId => {
+        // Use ✓ for true, ✗ for false, empty for null/undefined in status columns
+        const getStatusValue = (value) => {
+          if (value === true) return '✓';
+          if (value === false) return '';
+          return '';
+        };
+        
+        switch(colId) {
+          case 'no': row['S. No'] = index + 1; break;
+          case 'dataReceivedOn': row['Data Received on'] = formatDate(task.inwardEntryDate); break;
+          case 'nameOfAssessee': row['Name of the Assessee'] = task.clientName; break;
+          case 'teamHead': row['Team Head'] = teamHeadNames; break;
+          case 'allotee': row['Allotee'] = task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : ''; break;
+          case 'draftFinancialsAndComputationPreparation': row['Draft Financials and Computation Preparation'] = getStatusValue(task.itrProgress?.draftFinancialsAndComputationPreparation); break;
+          case 'accountantVerification': row['Accountant Verification'] = getStatusValue(task.itrProgress?.accountantVerification); break;
+          case 'firstVerification': row['1st Verification'] = firstVerifier; break;
+          case 'secondVerification': row['2nd Verification'] = secondVerifier; break;
+          case 'hariSirVerification': row['Hari sir Verification'] = getStatusValue(task.itrProgress?.hariSirVerification); break;
+          case 'issuedForPartnerProprietorVerification': row['Issued for Partner/Proprietor Verification'] = getStatusValue(task.itrProgress?.issuedForPartnerProprietorVerification); break;
+          case 'challanPreparation': row['Challan Preparation'] = getStatusValue(task.itrProgress?.challanPreparation); break;
+          case 'itrFiledOn': row['ITR Filed on'] = task.itrProgress?.itrFiledOn ? formatDate(task.itrProgress.itrFiledOn) : ''; break;
+          case 'billPreparation': row['Bill preparation'] = getStatusValue(task.itrProgress?.billPreparation); break;
+          default: break;
+        }
+      });
+      return row;
+    });
+
+  // Create workbook and worksheet
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(itrData, { origin: 'A5' });
+
+  // Set column widths: 'Name of the Assessee' wide, others smaller
+  const colNames = Object.keys(itrData[0] || {});
+  ws['!cols'] = colNames.map(name => name === 'Name of the Assessee' ? { wch: 35 } : { wch: 15 });
+  ws['!rows'] = Array(itrData.length + 6).fill({ hpt: 40 });
+
+  // Add bold, dark title row above the table
+  const title = 'STAUTS OF INDIVIDUAL INCOME TAX RETURNS FILING FOR AY 2025-26';
+  ws['A3'] = { t: 's', v: title, s: { font: { bold: true, sz: 18, color: { rgb: '000000' } }, alignment: { horizontal: 'center', vertical: 'center' } } };
+  if (!ws['!merges']) ws['!merges'] = [];
+  ws['!merges'].push({ s: { r: 2, c: 0 }, e: { r: 2, c: colNames.length - 1 } });
+
+  // Style header row (row 5) - bold, dark, thick border
+  for (let c = 0; c < colNames.length; c++) {
+    const cell = ws[String.fromCharCode(65 + c) + '5'];
+    if (cell) {
+      cell.s = {
+        font: { bold: true, sz: 13, color: { rgb: '000000' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'medium', color: { rgb: '000000' } },
+          bottom: { style: 'medium', color: { rgb: '000000' } },
+          left: { style: 'medium', color: { rgb: '000000' } },
+          right: { style: 'medium', color: { rgb: '000000' } }
+        }
+      };
+    }
+  }
+  // Style all data cells (rows 6+): thick border, center, bold for ✓/✗
+  for (let r = 6; r < itrData.length + 6; r++) {
+    for (let c = 0; c < colNames.length; c++) {
+      const cellAddr = String.fromCharCode(65 + c) + (r + 1);
+      const cell = ws[cellAddr];
+      if (cell) {
+        if (cell.v === '✓' || cell.v === '✗') {
+          cell.s = {
+            font: { bold: true, sz: 18, color: { rgb: cell.v === '✓' ? '008000' : 'FF0000' } },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: {
+              top: { style: 'medium', color: { rgb: '000000' } },
+              bottom: { style: 'medium', color: { rgb: '000000' } },
+              left: { style: 'medium', color: { rgb: '000000' } },
+              right: { style: 'medium', color: { rgb: '000000' } }
+            }
+          };
+        } else {
+          cell.s = {
+            font: { bold: false, sz: 12, color: { rgb: '000000' } },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: {
+              top: { style: 'medium', color: { rgb: '000000' } },
+              bottom: { style: 'medium', color: { rgb: '000000' } },
+              left: { style: 'medium', color: { rgb: '000000' } },
+              right: { style: 'medium', color: { rgb: '000000' } }
+            }
+          };
+        }
+      }
+    }
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws, 'ITR Progress');
+  XLSX.writeFile(wb, 'ITR_Progress_Report.xlsx');
+  toast.success('ITR Excel report generated successfully!');
   };
 
   // 7. Remove useEffects for per-user columnWidths/columnOrder/visibleColumns localStorage
@@ -1861,6 +2220,11 @@ const AdminDashboard = () => {
         isOpen={showPDFColumnSelector}
         onClose={() => setShowPDFColumnSelector(false)}
         onDownload={handleDownloadPDF}
+        onDownloadExcel={handleDownloadExcel}
+        onOpenITR={() => {
+          setShowPDFColumnSelector(false);
+          setShowITRColumnSelector(true);
+        }}
         availableColumns={[
           ...ALL_COLUMNS,
           ...customColumns.map(col => ({
@@ -1871,6 +2235,14 @@ const AdminDashboard = () => {
             customColumn: col
           }))
         ]}
+      />
+
+      {/* ITR Column Selector Modal */}
+      <ITRColumnSelector
+        isOpen={showITRColumnSelector}
+        onClose={() => setShowITRColumnSelector(false)}
+        onDownload={handleITRDownload}
+        tasks={getFilteredAndSortedTasks(tasks, activeTabObj.filters)}
       />
 
       {/* File Upload and Comments Modal */}

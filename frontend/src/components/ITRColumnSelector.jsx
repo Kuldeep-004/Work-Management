@@ -1,23 +1,38 @@
 import React, { useState } from 'react';
 
 /**
- * Enhanced PDFColumnSelector for AdminDashboard
- * - All columns start deselected
- * - As user selects, selected columns move to a draggable section at the top
- * - User can drag to reorder selected columns
- * - Only selected columns are draggable
- * - Supports both PDF and Excel downloads
- * - Includes ITR button to open ITR-specific popup
+ * ITRColumnSelector for ITR format downloads (PDF and Excel)
+ * Designed to look exactly like the main EnhancedPDFColumnSelector
  */
-const EnhancedPDFColumnSelector = ({ isOpen, onClose, onDownload, onDownloadExcel, onOpenITR, availableColumns }) => {
-  // All columns start deselected
-  const [selectedColumns, setSelectedColumns] = useState([]);
+const ITRColumnSelector = ({ isOpen, onClose, onDownload, tasks }) => {
+  // Define the ITR-specific columns based on the image
+  const ITR_COLUMNS = [
+    { id: 'no', label: 'No', defaultWidth: 50 },
+    { id: 'dataReceivedOn', label: 'Data Received on', defaultWidth: 120 },
+    { id: 'nameOfAssessee', label: 'Name of the Assessee', defaultWidth: 180 },
+    { id: 'teamHead', label: 'Team Head', defaultWidth: 120 },
+    { id: 'allotee', label: 'Allotee', defaultWidth: 120 },
+    { id: 'draftFinancialsAndComputationPreparation', label: 'Draft Financials and Computation Preparation', defaultWidth: 140 },
+    { id: 'accountantVerification', label: 'Accountant Verification', defaultWidth: 120 },
+    { id: 'firstVerification', label: '1st Verification', defaultWidth: 120 },
+    { id: 'secondVerification', label: '2nd Verification', defaultWidth: 120 },
+    { id: 'hariSirVerification', label: 'Hari sir Verification', defaultWidth: 120 },
+    { id: 'issuedForPartnerProprietorVerification', label: 'Issued for Partner/Proprietor Verification', defaultWidth: 160 },
+    { id: 'challanPreparation', label: 'Challan Preparation', defaultWidth: 120 },
+    { id: 'itrFiledOn', label: 'ITR Filed on', defaultWidth: 120 },
+    { id: 'billPreparation', label: 'Bill preparation', defaultWidth: 120 }
+  ];
+
+  // All columns selected by default
+  const [selectedColumns, setSelectedColumns] = useState(() => ITR_COLUMNS.map(col => col.id));
   const [draggedIdx, setDraggedIdx] = useState(null);
   const [fontSize, setFontSize] = useState(12);
   const [fontFamily, setFontFamily] = useState('tahoma');
 
-  // Move column to selected (top) when checked
+  // Move column to selected when checked
   const handleColumnToggle = (columnId) => {
+    if (columnId === 'no') return; // 'No' column is always selected and can't be unchecked
+    
     if (selectedColumns.includes(columnId)) {
       setSelectedColumns(selectedColumns.filter(id => id !== columnId));
     } else {
@@ -38,15 +53,15 @@ const EnhancedPDFColumnSelector = ({ isOpen, onClose, onDownload, onDownloadExce
   };
   const handleDragEnd = () => setDraggedIdx(null);
 
-  const handleSelectAll = () => setSelectedColumns(availableColumns.map(col => col.id));
-  const handleDeselectAll = () => setSelectedColumns([]);
+  const handleSelectAll = () => setSelectedColumns(ITR_COLUMNS.map(col => col.id));
+  const handleDeselectAll = () => setSelectedColumns(['no']); // Keep 'No' column always selected
 
-  const handleDownload = () => {
+  const handleDownloadPDF = () => {
     if (selectedColumns.length === 0) {
       alert('Please select at least one column');
       return;
     }
-    onDownload(selectedColumns, fontSize, fontFamily);
+    onDownload(selectedColumns, 'pdf');
     onClose();
   };
 
@@ -55,35 +70,29 @@ const EnhancedPDFColumnSelector = ({ isOpen, onClose, onDownload, onDownloadExce
       alert('Please select at least one column');
       return;
     }
-    const selectedColumnData = selectedColumns.map(id => availableColumns.find(col => col.id === id)).filter(Boolean);
-    onDownloadExcel(selectedColumnData, fontSize, fontFamily);
-    onClose();
-  };
-
-  const handleITRClick = () => {
-    onOpenITR();
+    onDownload(selectedColumns, 'excel');
     onClose();
   };
 
   if (!isOpen) return null;
 
-  // Split columns into selected (top, draggable) and unselected (bottom, not draggable)
-  const selectedDefs = selectedColumns.map(id => availableColumns.find(col => col.id === id)).filter(Boolean);
-  const unselectedDefs = availableColumns.filter(col => !selectedColumns.includes(col.id));
+  // Get selected and unselected columns for display
+  const selectedColumnDefs = selectedColumns.map(id => ITR_COLUMNS.find(col => col.id === id)).filter(Boolean);
+  const unselectedDefs = ITR_COLUMNS.filter(col => !selectedColumns.includes(col.id));
 
   return (
     <div className="fixed inset-0 backdrop-blur-sm bg-black/20 bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-800">Select Columns for PDF</h2>
+          <h2 className="text-xl font-semibold text-gray-800">Select Columns for ITR Report</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
         </div>
         <div className="flex gap-2 mb-3">
           <button onClick={handleSelectAll} className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600">Select All</button>
           <button onClick={handleDeselectAll} className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600">Deselect All</button>
         </div>
-        <p className="text-sm text-gray-600 mb-3">Selected: {selectedColumns.length} of {availableColumns.length} columns</p>
-        {/* Font options and ITR button at top */}
+        <p className="text-sm text-gray-600 mb-3">Selected: {selectedColumns.length} of {ITR_COLUMNS.length} columns</p>
+        {/* Font options at top */}
         <div className="flex gap-4 mb-4 items-end">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Font Size</label>
@@ -120,32 +129,26 @@ const EnhancedPDFColumnSelector = ({ isOpen, onClose, onDownload, onDownloadExce
               </span>
             </div>
           </div>
-          <div className="flex-1 flex justify-end">
-            <button
-              onClick={handleITRClick}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-            >
-              ITR Report
-            </button>
-          </div>
         </div>
         {/* Selected columns (draggable) */}
         <div className="mb-4">
           <div className="font-semibold text-gray-700 mb-1 text-sm">Selected Columns (Drag to reorder):</div>
           <div className="min-h-[40px] border border-blue-200 rounded p-2 bg-blue-50 flex flex-wrap gap-2">
-            {selectedDefs.length === 0 && <span className="text-gray-400 text-xs">No columns selected</span>}
-            {selectedDefs.map((col, idx) => (
+            {selectedColumnDefs.length === 0 && <span className="text-gray-400 text-xs">No columns selected</span>}
+            {selectedColumnDefs.map((col, idx) => (
               <div
                 key={col.id}
                 className={`flex items-center px-2 py-1 bg-blue-100 rounded shadow-sm cursor-move border border-blue-300 ${draggedIdx === idx ? 'opacity-60' : ''}`}
-                draggable
-                onDragStart={() => handleDragStart(idx)}
-                onDragOver={e => handleDragOver(e, idx)}
+                draggable={col.id !== 'no'}
+                onDragStart={() => col.id !== 'no' && handleDragStart(idx)}
+                onDragOver={e => col.id !== 'no' && handleDragOver(e, idx)}
                 onDragEnd={handleDragEnd}
                 onDrop={handleDragEnd}
                 title="Drag to reorder"
               >
-                <span className="mr-2 cursor-pointer" onClick={() => handleColumnToggle(col.id)}>✕</span>
+                {col.id !== 'no' && (
+                  <span className="mr-2 cursor-pointer" onClick={() => handleColumnToggle(col.id)}>✕</span>
+                )}
                 <span className="text-xs font-medium text-blue-900">{col.label}</span>
               </div>
             ))}
@@ -166,9 +169,6 @@ const EnhancedPDFColumnSelector = ({ isOpen, onClose, onDownload, onDownloadExce
             </label>
           ))}
         </div>
-        
-
-        
         <div className="flex justify-end gap-3 mt-6 px-6 pb-6">
           <button onClick={onClose} className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
           <button 
@@ -176,14 +176,14 @@ const EnhancedPDFColumnSelector = ({ isOpen, onClose, onDownload, onDownloadExce
             disabled={selectedColumns.length === 0} 
             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            Excel
+            Download Excel
           </button>
           <button 
-            onClick={handleDownload} 
+            onClick={handleDownloadPDF} 
             disabled={selectedColumns.length === 0} 
             className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            PDF
+            Download PDF
           </button>
         </div>
       </div>
@@ -191,4 +191,4 @@ const EnhancedPDFColumnSelector = ({ isOpen, onClose, onDownload, onDownloadExce
   );
 };
 
-export default EnhancedPDFColumnSelector;
+export default ITRColumnSelector;

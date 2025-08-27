@@ -10,6 +10,7 @@ import {
 import { API_BASE_URL } from '../../apiConfig';
 import generateTimesheetPdf from '../../utils/generateTimesheetPdf';
 
+
 const SubordinateTimesheets = () => {
   const { user, isAuthenticated } = useAuth();
   const [timesheets, setTimesheets] = useState([]);
@@ -26,6 +27,30 @@ const SubordinateTimesheets = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [selectedTimesheet, setSelectedTimesheet] = useState(null);
   const [showTimesheetDetail, setShowTimesheetDetail] = useState(false);
+  // Search bar state
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filtered subordinates for search
+  const filteredSubordinates = subordinates.filter(sub => {
+    if (!searchTerm) return true;
+    const name = `${sub.firstName || ''} ${sub.lastName || ''}`.toLowerCase();
+    return name.includes(searchTerm.toLowerCase());
+  });
+
+  // Filter timesheets by search term (if multiple subordinates)
+  const filteredTimesheets = timesheets.filter(ts => {
+    if (!searchTerm || subordinates.length <= 1) return true;
+    const name = `${ts.user?.firstName || ''} ${ts.user?.lastName || ''}`.toLowerCase();
+    return name.includes(searchTerm.toLowerCase());
+  });
+
+  // Group filtered timesheets by date
+  const filteredGroupedTimesheets = filteredTimesheets.reduce((acc, ts) => {
+    const date = new Date(ts.date).toDateString();
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(ts);
+    return acc;
+  }, {});
 
   const onDownloadPdf = () => {
     try {
@@ -303,9 +328,10 @@ const SubordinateTimesheets = () => {
         <p className="text-sm sm:text-base text-gray-600">{getHierarchyInfo()}</p>
       </div>
 
-      {/* Filters */}
+
+      {/* Filters + Search Bar */}
       <div className="bg-white rounded-lg shadow p-4 sm:p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <UserIcon className="w-4 h-4 inline mr-1" />
@@ -341,6 +367,23 @@ const SubordinateTimesheets = () => {
             />
           </div>
 
+          {/* Search bar: only show if more than 1 subordinate */}
+          {subordinates.length > 1 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <UserIcon className="w-4 h-4 inline mr-1" />
+                Search User
+              </label>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Type to search by name..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+          )}
+
           <div className="flex md:justify-end">
             <button
               type="button"
@@ -361,17 +404,17 @@ const SubordinateTimesheets = () => {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading timesheets...</p>
         </div>
-      ) : timesheets.length === 0 ? (
+      ) : filteredTimesheets.length === 0 ? (
         <div className="text-center py-8">
           <div className="bg-gray-50 rounded-lg p-8">
             <ClockIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No timesheets found</h3>
-            <p className="text-gray-600">Try adjusting your filters or date range.</p>
+            <p className="text-gray-600">Try adjusting your filters, date range, or search.</p>
           </div>
         </div>
       ) : (
         <div className="space-y-8">
-          {Object.entries(groupedTimesheets).map(([date, sheets]) => (
+          {Object.entries(filteredGroupedTimesheets).map(([date, sheets]) => (
             <div key={date} className="bg-white rounded-lg shadow overflow-hidden">
               <div className="p-4 bg-gray-50 border-b border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-800">{formatDate(date)}</h2>

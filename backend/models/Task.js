@@ -168,6 +168,35 @@ const taskSchema = new mongoose.Schema({
   customFields: {
     type: mongoose.Schema.Types.Mixed,
     default: {}
+  },
+  itrProgress: {
+    draftFinancialsAndComputationPreparation: {
+      type: Boolean,
+      default: false
+    },
+    accountantVerification: {
+      type: Boolean,
+      default: false
+    },
+    hariSirVerification: {
+      type: Boolean,
+      default: false
+    },
+    issuedForPartnerProprietorVerification: {
+      type: Boolean,
+      default: false
+    },
+    challanPreparation: {
+      type: Boolean,
+      default: false
+    },
+    itrFiledOn: {
+      type: Date
+    },
+    billPreparation: {
+      type: Boolean,
+      default: false
+    }
   }
 }, {
   timestamps: true

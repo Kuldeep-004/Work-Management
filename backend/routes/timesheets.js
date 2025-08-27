@@ -199,12 +199,12 @@ router.get('/date/:date', protect, async (req, res) => {
         $lt: nextDate
       }
     })
-      .populate('user', 'firstName lastName email role team')
+  .populate('user', 'firstName lastName email role team photo')
       .populate('entries.task', 'title description clientName clientGroup workType');
 
     if (!timesheet) {
       // Populate user manually for new/empty timesheet
-      const userDoc = await User.findById(req.user._id).select('firstName lastName email role team');
+  const userDoc = await User.findById(req.user._id).select('firstName lastName email role team photo');
       timesheet = {
         _id: undefined,
         user: userDoc,
@@ -416,7 +416,7 @@ router.get('/subordinates', protect, async (req, res) => {
         ...query,
         team: req.user.team,
         isEmailVerified: true
-      }).select('_id firstName lastName email role team');
+  }).select('_id firstName lastName email role team photo');
     } else if (isTimeSheetVerifier) {
       // TimeSheet Verifiers: show only their team members (excluding team head) + themselves
       if (req.user.team) {
@@ -425,14 +425,14 @@ router.get('/subordinates', protect, async (req, res) => {
           team: req.user.team,
           role: { $ne: 'Team Head' }, // Exclude team heads
           isEmailVerified: true
-        }).select('_id firstName lastName email role team');
+  }).select('_id firstName lastName email role team photo');
       } else {
         // If no team, show only themselves
         subordinates = [req.user];
       }
     } else if (req.user.role === 'Admin') {
       // Admins: all users except rejected
-      subordinates = await User.find(query).select('_id firstName lastName email role team');
+  subordinates = await User.find(query).select('_id firstName lastName email role team photo');
     }
     const subordinateIds = subordinates.map(sub => sub._id);
     // If specific user is requested, filter to that user only

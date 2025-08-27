@@ -6,6 +6,7 @@ import FileUpload from './FileUpload';
 import FileList from './FileList';
 import { API_BASE_URL } from '../apiConfig';
 import TaskStatusDropdown from './TaskStatusDropdown';
+import ITRProgressTable from './ITRProgressTable';
 
 // Accept new props for edit mode
 const CreateTask = ({
@@ -16,6 +17,7 @@ const CreateTask = ({
   onClose = () => {},
   onSubmit = null,
   showAcceptButton = false, // New prop to show Accept button for TaskVerification page
+  hideFileSection = false, // Only set to true from AdminDashboard edit
 }) => {
   const { user: loggedInUser, isAuthenticated } = useAuth();
   const [isWorkTypeModalOpen, setIsWorkTypeModalOpen] = useState(false);
@@ -1397,102 +1399,127 @@ const CreateTask = ({
                 </div>
               </div>
               {/* Enhanced File selection section */}
-              <div className="border-t pt-4 mt-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium">Attach Files (Optional)</h3>
-                  <div className="text-sm text-gray-500">
-                    Max {MAX_FILES} files, {MAX_FILE_SIZE / 1024 / 1024}MB per file, {MAX_TOTAL_SIZE / 1024 / 1024}MB total
+              {(mode !== 'edit' || (mode === 'edit' && !hideFileSection)) && (
+                <div className="border-t pt-4 mt-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium">Attach Files (Optional)</h3>
+                    <div className="text-sm text-gray-500">
+                      Max {MAX_FILES} files, {MAX_FILE_SIZE / 1024 / 1024}MB per file, {MAX_TOTAL_SIZE / 1024 / 1024}MB total
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-4">
-                    <label className="flex-1">
-                      <div className="relative border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-500 transition-colors">
-                        <input
-                          type="file"
-                          multiple
-                          onChange={handleFileSelect}
-                          ref={fileInputRef}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif"
-                        />
-                        <div className="text-center">
-                          <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                          <p className="mt-1 text-sm text-gray-600">
-                            Click to select files or drag and drop
-                          </p>
-                          <p className="mt-1 text-xs text-gray-500">
-                            PDF, Word, Excel, PowerPoint, Images, Text files
-                          </p>
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-4">
+                      <label className="flex-1">
+                        <div className="relative border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-500 transition-colors">
+                          <input
+                            type="file"
+                            multiple
+                            onChange={handleFileSelect}
+                            ref={fileInputRef}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif"
+                          />
+                          <div className="text-center">
+                            <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                              <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            <p className="mt-1 text-sm text-gray-600">
+                              Click to select files or drag and drop
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              PDF, Word, Excel, PowerPoint, Images, Text files
+                            </p>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+
+                    {selectedFiles.length > 0 && (
+                      <div className="mt-4 border rounded-lg divide-y">
+                        <div className="p-3 bg-gray-50 text-sm font-medium text-gray-700">
+                          Selected Files ({selectedFiles.length})
+                        </div>
+                        <ul className="divide-y">
+                          {selectedFiles.map((file, index) => (
+                            <li key={index} className="p-3 flex items-center justify-between hover:bg-gray-50">
+                              <div className="flex items-center space-x-3">
+                                <span className="text-gray-500">
+                                  {file.type.startsWith('image/') ? '🖼️' : 
+                                    file.type.includes('pdf') ? '📄' :
+                                    file.type.includes('word') ? '📝' :
+                                    file.type.includes('excel') || file.type.includes('spreadsheet') ? '📊' :
+                                    file.type.includes('powerpoint') || file.type.includes('presentation') ? '📑' :
+                                    '📎'}
+                                </span>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-700">{file.name}</p>
+                                  <p className="text-xs text-gray-500">
+                                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeSelectedFile(index)}
+                                className="text-red-500 hover:text-red-700 p-1"
+                                disabled={uploading}
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {uploading && (
+                      <div className="mt-4">
+                        <div className="text-sm text-gray-600 mb-2">Uploading files...</div>
+                        <div className="space-y-2">
+                          {selectedFiles.map((file, index) => (
+                            <div key={index} className="flex items-center space-x-2">
+                              <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    uploadProgress[index] === 'completed' ? 'bg-green-500' : 'bg-blue-500 animate-pulse'
+                                  }`}
+                                  style={{ width: uploadProgress[index] === 'completed' ? '100%' : '50%' }}
+                                />
+                              </div>
+                              <span className="text-xs text-gray-500">
+                                {uploadProgress[index] === 'completed' ? 'Done' : 'Uploading...'}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    </label>
+                    )}
                   </div>
-
-                  {selectedFiles.length > 0 && (
-                    <div className="mt-4 border rounded-lg divide-y">
-                      <div className="p-3 bg-gray-50 text-sm font-medium text-gray-700">
-                        Selected Files ({selectedFiles.length})
-                      </div>
-                      <ul className="divide-y">
-                        {selectedFiles.map((file, index) => (
-                          <li key={index} className="p-3 flex items-center justify-between hover:bg-gray-50">
-                            <div className="flex items-center space-x-3">
-                              <span className="text-gray-500">
-                                {file.type.startsWith('image/') ? '🖼️' : 
-                                 file.type.includes('pdf') ? '📄' :
-                                 file.type.includes('word') ? '📝' :
-                                 file.type.includes('excel') || file.type.includes('spreadsheet') ? '📊' :
-                                 file.type.includes('powerpoint') || file.type.includes('presentation') ? '📑' :
-                                 '📎'}
-                              </span>
-                              <div>
-                                <p className="text-sm font-medium text-gray-700">{file.name}</p>
-                                <p className="text-xs text-gray-500">
-                                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => removeSelectedFile(index)}
-                              className="text-red-500 hover:text-red-700 p-1"
-                              disabled={uploading}
-                            >
-                              ✕
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {uploading && (
-                    <div className="mt-4">
-                      <div className="text-sm text-gray-600 mb-2">Uploading files...</div>
-                      <div className="space-y-2">
-                        {selectedFiles.map((file, index) => (
-                          <div key={index} className="flex items-center space-x-2">
-                            <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${
-                                  uploadProgress[index] === 'completed' ? 'bg-green-500' : 'bg-blue-500 animate-pulse'
-                                }`}
-                                style={{ width: uploadProgress[index] === 'completed' ? '100%' : '50%' }}
-                              />
-                            </div>
-                            <span className="text-xs text-gray-500">
-                              {uploadProgress[index] === 'completed' ? 'Done' : 'Uploading...'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
-              </div>
+              )}
+
+              {/* ITR Progress Table - only show for tasks with ITR work type in edit mode */}
+              {mode === 'edit' && initialData && (
+                (() => {
+                  // Check if any work type contains 'itr' (case insensitive)
+                  const hasITRWorkType = Array.isArray(initialData.workType) && 
+                    initialData.workType.some(wt => {
+                      const workTypeName = typeof wt === 'string' ? wt : wt.name || '';
+                      return workTypeName.toLowerCase().includes('itr');
+                    });
+                  
+                  return hasITRWorkType ? (
+                    <ITRProgressTable 
+                      taskId={initialData._id}
+                      initialData={initialData}
+                      onUpdate={(updatedTask) => {
+                        // Optionally handle the updated task data
+                        console.log('ITR progress updated:', updatedTask);
+                      }}
+                    />
+                  ) : null;
+                })()
+              )}
 
               <div className="flex justify-end space-x-4 mt-6">
                 <button

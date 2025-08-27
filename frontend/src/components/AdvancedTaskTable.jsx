@@ -2652,6 +2652,7 @@ const AdvancedTaskTable = ({
           isOpen={editModalOpen}
           onClose={() => setEditModalOpen(false)}
           onSubmit={handleTaskSubmit}
+          hideFileSection={true}
         />
       )}
     </>
