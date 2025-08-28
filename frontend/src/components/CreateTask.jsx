@@ -1500,25 +1500,16 @@ const CreateTask = ({
 
               {/* ITR Progress Table - only show for tasks with ITR work type in edit mode */}
               {mode === 'edit' && initialData && (
-                (() => {
-                  // Check if any work type contains 'itr' (case insensitive)
-                  const hasITRWorkType = Array.isArray(initialData.workType) && 
-                    initialData.workType.some(wt => {
-                      const workTypeName = typeof wt === 'string' ? wt : wt.name || '';
-                      return workTypeName.toLowerCase().includes('itr');
-                    });
-                  
-                  return hasITRWorkType ? (
-                    <ITRProgressTable 
-                      taskId={initialData._id}
-                      initialData={initialData}
-                      onUpdate={(updatedTask) => {
-                        // Optionally handle the updated task data
-                        console.log('ITR progress updated:', updatedTask);
-                      }}
-                    />
-                  ) : null;
-                })()
+                (
+                  <ITRProgressTable 
+                    taskId={initialData._id}
+                    initialData={initialData}
+                    onUpdate={(updatedTask) => {
+                      // Optionally handle the updated task data
+                      console.log('ITR progress updated:', updatedTask);
+                    }}
+                  />
+                )
               )}
 
               <div className="flex justify-end space-x-4 mt-6">

@@ -176,14 +176,14 @@ const ITRColumnSelector = ({ isOpen, onClose, onDownload, tasks }) => {
             disabled={selectedColumns.length === 0} 
             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            Download Excel
+            Excel
           </button>
           <button 
             onClick={handleDownloadPDF} 
             disabled={selectedColumns.length === 0} 
             className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            Download PDF
+            PDF
           </button>
         </div>
       </div>

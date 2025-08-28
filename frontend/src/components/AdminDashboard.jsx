@@ -1280,17 +1280,23 @@ const AdminDashboard = () => {
   const itrTasks = getFilteredAndSortedTasks(tasks, activeTabObj.filters);
 
   const itrData = itrTasks.map((task, index) => {
-      // Get all team heads for the assignedTo user's team (supports multiple team heads per team)
+      // Get all team heads and admins for the assignedTo user's team (supports multiple)
       const assignedUser = task.assignedTo;
       let teamHeadNames = '';
       if (assignedUser && assignedUser.team) {
-        // Find all users who are team heads in the same team (multiple heads supported)
-        const teamHeads = users.filter(user =>
-          user.team &&
-          (user.team._id === assignedUser.team._id || user.team === assignedUser.team._id) &&
-          user.role === 'Team Head'
-        );
-        teamHeadNames = teamHeads.map(th => `${th.firstName} ${th.lastName}`).join(', ');
+        // Get the team ID - handle both populated object and ObjectId string
+        const assignedUserTeamId = typeof assignedUser.team === 'object' 
+          ? assignedUser.team._id 
+          : assignedUser.team;
+        // Find all users who are admins or team heads in the same team
+        const teamHeadsOrAdmins = users.filter(user => {
+          if (!user.team || (user.role !== 'Team Head' && user.role !== 'Admin')) return false;
+          const userTeamId = typeof user.team === 'object' 
+            ? user.team._id 
+            : user.team;
+          return userTeamId === assignedUserTeamId;
+        });
+        teamHeadNames = teamHeadsOrAdmins.map(th => `${th.firstName} ${th.lastName}`).join(', ');
       }
       
       const firstVerifier = task.verificationAssignedTo 
@@ -1393,13 +1399,22 @@ const AdminDashboard = () => {
   const itrTasks = getFilteredAndSortedTasks(tasks, activeTabObj.filters);
 
   const itrData = itrTasks.map((task, index) => {
-      // Get team heads for the assignedTo user's team
+      // Get team heads and admins for the assignedTo user's team
       const assignedUser = task.assignedTo;
       let teamHeadNames = '';
       if (assignedUser && assignedUser.team) {
-        const teamMembers = users.filter(user => 
-          user.team && user.team._id === assignedUser.team._id && user.role === 'Team Head'
-        );
+        // Get the team ID - handle both populated object and ObjectId string
+        const assignedUserTeamId = typeof assignedUser.team === 'object' 
+          ? assignedUser.team._id 
+          : assignedUser.team;
+        // Find all users who are admins or team heads in the same team
+        const teamMembers = users.filter(user => {
+          if (!user.team || (user.role !== 'Team Head' && user.role !== 'Admin')) return false;
+          const userTeamId = typeof user.team === 'object' 
+            ? user.team._id 
+            : user.team;
+          return userTeamId === assignedUserTeamId;
+        });
         teamHeadNames = teamMembers.map(th => `${th.firstName} ${th.lastName}`).join(', ');
       }
       const firstVerifier = task.verificationAssignedTo 
