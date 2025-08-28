@@ -1500,16 +1500,24 @@ const CreateTask = ({
 
               {/* ITR Progress Table - only show for tasks with ITR work type in edit mode */}
               {mode === 'edit' && initialData && (
-                (
-                  <ITRProgressTable 
-                    taskId={initialData._id}
-                    initialData={initialData}
-                    onUpdate={(updatedTask) => {
-                      // Optionally handle the updated task data
-                      console.log('ITR progress updated:', updatedTask);
-                    }}
-                  />
-                )
+                (() => {
+                  // Only show for tasks with work type 'Prep of Income Tax Returns ITR - Non Tax Audit'
+                  const hasRequiredWorkType = Array.isArray(initialData.workType) &&
+                    initialData.workType.some(wt => {
+                      const workTypeName = typeof wt === 'string' ? wt : wt.name || '';
+                      return workTypeName.trim().toLowerCase() === 'prep of income tax returns itr - non tax audit'.toLowerCase();
+                    });
+                  return hasRequiredWorkType ? (
+                    <ITRProgressTable 
+                      taskId={initialData._id}
+                      initialData={initialData}
+                      onUpdate={(updatedTask) => {
+                        // Optionally handle the updated task data
+                        console.log('ITR progress updated:', updatedTask);
+                      }}
+                    />
+                  ) : null;
+                })()
               )}
 
               <div className="flex justify-end space-x-4 mt-6">

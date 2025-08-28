@@ -178,6 +178,14 @@ const taskSchema = new mongoose.Schema({
       type: Boolean,
       default: false
     },
+    vivekSirVerification: {
+      type: Boolean,
+      default: false
+    },
+    girijaVerification: {
+      type: Boolean,
+      default: false
+    },
     hariSirVerification: {
       type: Boolean,
       default: false

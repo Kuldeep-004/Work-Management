@@ -8,6 +8,8 @@ const ITRProgressTable = ({ taskId, initialData = null, onUpdate = null }) => {
   const [progressData, setProgressData] = useState({
     draftFinancialsAndComputationPreparation: false,
     accountantVerification: false,
+    vivekSirVerification: false,
+    girijaVerification: false,
     hariSirVerification: false,
     issuedForPartnerProprietorVerification: false,
     challanPreparation: false,
@@ -105,6 +107,16 @@ const ITRProgressTable = ({ taskId, initialData = null, onUpdate = null }) => {
     {
       key: 'accountantVerification',
       label: ['Accountant', 'Verification'],
+      type: 'checkbox'
+    },
+    {
+      key: 'vivekSirVerification',
+      label: ['Vivek Sir', 'Verification'],
+      type: 'checkbox'
+    },
+    {
+      key: 'girijaVerification',
+      label: ['Girija Mam', 'Verification'],
       type: 'checkbox'
     },
     {

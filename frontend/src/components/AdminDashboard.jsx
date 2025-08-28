@@ -1316,6 +1316,8 @@ const AdminDashboard = () => {
         allotee: task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : '',
         draftFinancialsAndComputationPreparation: task.itrProgress?.draftFinancialsAndComputationPreparation === true ? 'T' : (task.itrProgress?.draftFinancialsAndComputationPreparation === false ? '' : ''),
         accountantVerification: task.itrProgress?.accountantVerification === true ? 'T' : (task.itrProgress?.accountantVerification === false ? '' : ''),
+        vivekSirVerification: task.itrProgress?.vivekSirVerification === true ? 'T' : (task.itrProgress?.vivekSirVerification === false ? '' : ''),
+        girijaVerification: task.itrProgress?.girijaVerification === true ? 'T' : (task.itrProgress?.girijaVerification === false ? '' : ''),
         firstVerification: firstVerifier,
         secondVerification: secondVerifier,
         hariSirVerification: task.itrProgress?.hariSirVerification === true ? 'T' : (task.itrProgress?.hariSirVerification === false ? '' : ''),
@@ -1440,6 +1442,8 @@ const AdminDashboard = () => {
           case 'allotee': row['Allotee'] = task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : ''; break;
           case 'draftFinancialsAndComputationPreparation': row['Draft Financials and Computation Preparation'] = getStatusValue(task.itrProgress?.draftFinancialsAndComputationPreparation); break;
           case 'accountantVerification': row['Accountant Verification'] = getStatusValue(task.itrProgress?.accountantVerification); break;
+          case 'vivekSirVerification': row['Vivek Sir Verification'] = getStatusValue(task.itrProgress?.vivekSirVerification); break;
+          case 'girijaVerification': row['Girija Mam Verification'] = getStatusValue(task.itrProgress?.girijaVerification); break;
           case 'firstVerification': row['1st Verification'] = firstVerifier; break;
           case 'secondVerification': row['2nd Verification'] = secondVerifier; break;
           case 'hariSirVerification': row['Hari sir Verification'] = getStatusValue(task.itrProgress?.hariSirVerification); break;

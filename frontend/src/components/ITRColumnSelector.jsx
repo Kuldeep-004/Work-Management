@@ -14,6 +14,8 @@ const ITRColumnSelector = ({ isOpen, onClose, onDownload, tasks }) => {
     { id: 'allotee', label: 'Allotee', defaultWidth: 120 },
     { id: 'draftFinancialsAndComputationPreparation', label: 'Draft Financials and Computation Preparation', defaultWidth: 140 },
     { id: 'accountantVerification', label: 'Accountant Verification', defaultWidth: 120 },
+    { id: 'vivekSirVerification', label: 'Vivek Sir Verification', defaultWidth: 120 },
+    { id: 'girijaVerification', label: 'Girija Mam Verification', defaultWidth: 120 },
     { id: 'firstVerification', label: '1st Verification', defaultWidth: 120 },
     { id: 'secondVerification', label: '2nd Verification', defaultWidth: 120 },
     { id: 'hariSirVerification', label: 'Hari sir Verification', defaultWidth: 120 },
