@@ -573,7 +573,7 @@ const AdminDashboard = () => {
       let result = null;
       for (let i = 0; i < filters.length; i++) {
         const filter = filters[i];
-        const { column, operator, value } = filter;
+        const { column, operator, value, logic } = filter;
         // Handle nested properties like assignedTo.firstName
         const getTaskValue = (task, column) => {
           const keys = column.split('.');
@@ -588,7 +588,9 @@ const AdminDashboard = () => {
         };
         const taskValue = getTaskValue(task, column);
         let filterResult;
-        if (taskValue === undefined || taskValue === null) {
+        if (operator === 'any_of' && Array.isArray(value)) {
+          filterResult = value.includes(String(taskValue)) || value.includes(taskValue?._id);
+        } else if (taskValue === undefined || taskValue === null) {
           if (operator === 'is_empty') filterResult = true;
           else if (operator === 'is_not_empty') filterResult = false;
           else filterResult = false;
@@ -627,9 +629,11 @@ const AdminDashboard = () => {
         if (i === 0) {
           result = filterResult;
         } else {
-          const logic = filter.logic || 'AND';
-          if (logic === 'AND') {
+          const logicType = logic || 'AND';
+          if (logicType === 'AND') {
             result = result && filterResult;
+          } else if (logicType === 'ANY_OF') {
+            result = result || filterResult;
           } else {
             result = result || filterResult;
           }
@@ -1349,6 +1353,8 @@ const AdminDashboard = () => {
         case 'allotee': return { dataKey: 'allotee', header: 'Allotee' };
         case 'draftFinancialsAndComputationPreparation': return { dataKey: 'draftFinancialsAndComputationPreparation', header: 'Draft Financials and Computation Preparation' };
         case 'accountantVerification': return { dataKey: 'accountantVerification', header: 'Accountant Verification' };
+        case 'vivekSirVerification': return { dataKey: 'vivekSirVerification', header: 'Vivek Sir Verification' };
+        case 'girijaVerification': return { dataKey: 'girijaVerification', header: 'Girija Mam Verification' };
         case 'firstVerification': return { dataKey: 'firstVerification', header: '1st Verification' };
         case 'secondVerification': return { dataKey: 'secondVerification', header: '2nd Verification' };
         case 'hariSirVerification': return { dataKey: 'hariSirVerification', header: 'Hari sir Verification' };
@@ -1685,6 +1691,7 @@ const AdminDashboard = () => {
                 clientGroups={clientGroups}
                 workTypes={workTypes}
                 priorities={priorities}
+                customColumns={customColumns}
               />
             </div>
             <input
@@ -1825,6 +1832,7 @@ const AdminDashboard = () => {
               clientGroups={clientGroups}
               workTypes={workTypes}
               priorities={priorities}
+              customColumns={customColumns}
             />
           </div>
           <input

@@ -617,7 +617,7 @@ const ReceivedTasks = () => {
       let result = null;
       for (let i = 0; i < activeTabObj.filters.length; i++) {
         const filter = activeTabObj.filters[i];
-        const { column, operator, value } = filter;
+        const { column, operator, value, logic } = filter;
         const getTaskValue = (task, column) => {
           const keys = column.split('.');
           let result = task;
@@ -631,7 +631,9 @@ const ReceivedTasks = () => {
         };
         const taskValue = getTaskValue(task, column);
         let filterResult;
-        if (taskValue === undefined || taskValue === null) {
+        if (operator === 'any_of' && Array.isArray(value)) {
+          filterResult = value.includes(String(taskValue)) || value.includes(taskValue?._id);
+        } else if (taskValue === undefined || taskValue === null) {
           if (operator === 'is_empty') filterResult = true;
           else if (operator === 'is_not_empty') filterResult = false;
           else filterResult = false;
@@ -670,9 +672,11 @@ const ReceivedTasks = () => {
         if (i === 0) {
           result = filterResult;
         } else {
-          const logic = filter.logic || 'AND';
-          if (logic === 'AND') {
+          const logicType = logic || 'AND';
+          if (logicType === 'AND') {
             result = result && filterResult;
+          } else if (logicType === 'ANY_OF') {
+            result = result || filterResult;
           } else {
             result = result || filterResult;
           }
@@ -962,6 +966,7 @@ const ReceivedTasks = () => {
               clientGroups={clientGroups}
               workTypes={workTypes}
               priorities={priorities}
+              customColumns={customColumns}
             />
           </div>
           <input

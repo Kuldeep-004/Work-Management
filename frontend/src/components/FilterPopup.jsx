@@ -10,11 +10,13 @@ const FilterPopup = ({
   clientNames,
   clientGroups,
   workTypes,
-  priorities = []
+  priorities = [],
+  customColumns = []
 }) => {
   if (!isOpen) return null;
 
-  const filterableColumns = [
+  // Base filterable columns
+  const baseFilterableColumns = [
     { value: 'title', label: 'Title' },
     { value: 'status', label: 'Status', options: ['yet_to_start', 'in_progress', 'completed'] },
     { value: 'priority', label: 'Priority', options: priorities.map(p => p.name) },
@@ -25,6 +27,20 @@ const FilterPopup = ({
     { value: 'workType', label: 'Work Type', options: workTypes },
   ];
 
+  // Add custom columns to filterable columns
+  const customFilterableColumns = customColumns
+    .filter(col => col.isActive) // Only include active custom columns
+    .map(col => ({
+      value: `customFields.${col.name}`, // Use dot notation to access custom fields
+      label: col.label,
+      type: col.type,
+      ...(col.type === 'tags' && col.options ? { options: col.options } : {}),
+      ...(col.type === 'checkbox' ? { options: [{ value: 'true', label: 'Yes' }, { value: 'false', label: 'No' }] } : {})
+    }));
+
+  // Combine base and custom columns
+  const filterableColumns = [...baseFilterableColumns, ...customFilterableColumns];
+
   const operators = [
     { value: 'is', label: 'Is' },
     { value: 'is_not', label: 'Is Not' },
@@ -32,6 +48,7 @@ const FilterPopup = ({
     { value: 'does_not_contain', label: 'Does Not Contain' },
     { value: 'is_empty', label: 'Is Empty' },
     { value: 'is_not_empty', label: 'Is Not Empty' },
+    { value: 'any_of', label: 'Any of' },
   ];
 
   // Local state for editing filters, but only commit to parent on Save
@@ -64,9 +81,18 @@ const FilterPopup = ({
 
   const handleFilterChange = (index, field, value) => {
     const newFilters = [...editingFilters];
-    newFilters[index][field] = value;
+    if (field === 'value' && newFilters[index].operator === 'any_of') {
+      newFilters[index][field] = Array.isArray(value) ? value : [value];
+    } else {
+      newFilters[index][field] = value;
+    }
     if (field === 'column') {
       newFilters[index].value = '';
+      // Reset operator for custom checkbox fields to 'is' since boolean values work best with is/is_not
+      const selectedColumn = filterableColumns.find(c => c.value === value);
+      if (selectedColumn && selectedColumn.type === 'checkbox') {
+        newFilters[index].operator = 'is';
+      }
     }
     newFilters[index].saved = false; // Mark as unsaved if changed
     setEditingFilters(newFilters);
@@ -88,6 +114,50 @@ const FilterPopup = ({
           className="flex-1 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           placeholder="Enter text to search..."
         />
+      );
+    }
+
+    // For 'any_of', show multi-select if options exist
+    if (filter.operator === 'any_of' && selectedColumn.options) {
+      return (
+        <div className="flex-1">
+          <select
+            multiple
+            value={Array.isArray(filter.value) ? filter.value : []}
+            onChange={e => {
+              const selected = Array.from(e.target.selectedOptions, opt => opt.value);
+              handleFilterChange(index, 'value', selected);
+            }}
+            size={Math.min(6, selectedColumn.options.length)}
+            className="w-full min-h-[120px] max-h-48 p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white custom-scrollbar"
+            style={{
+              minHeight: '120px',
+              maxHeight: '200px',
+              fontSize: '1rem',
+              padding: '8px',
+              borderRadius: '0.5rem',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+              overflowY: 'auto',
+              marginTop: '2px',
+            }}
+          >
+            {selectedColumn.options.map(opt => (
+              typeof opt === 'object'
+                ? <option key={opt.value} value={opt.value}>{opt.label}</option>
+                : <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+          <style>{`
+            .custom-scrollbar::-webkit-scrollbar {
+              width: 8px;
+              background: #f1f1f1;
+            }
+            .custom-scrollbar::-webkit-scrollbar-thumb {
+              background: #cbd5e1;
+              border-radius: 4px;
+            }
+          `}</style>
+        </div>
       );
     }
 
@@ -140,6 +210,7 @@ const FilterPopup = ({
               >
                 <option value="AND">AND</option>
                 <option value="OR">OR</option>
+                <option value="ANY_OF">Any of</option>
               </select>
             )}
             <select
