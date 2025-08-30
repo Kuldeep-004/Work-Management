@@ -48,6 +48,12 @@ const Settings = () => {
   const [addingWorkType, setAddingWorkType] = useState(false);
   const [editingWorkType, setEditingWorkType] = useState(null);
   const [editWorkTypeName, setEditWorkTypeName] = useState('');
+  
+  // Backup dropdown state
+  const [showBackupDropdown, setShowBackupDropdown] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [exportingUser, setExportingUser] = useState(null);
   const [updatingWorkType, setUpdatingWorkType] = useState(false);
   const [workTypeSearchTerm, setWorkTypeSearchTerm] = useState('');
 
@@ -69,6 +75,20 @@ const Settings = () => {
     };
     fetchStats();
   }, [user]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showBackupDropdown && !event.target.closest('.backup-dropdown-container')) {
+        setShowBackupDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showBackupDropdown]);
 
   // Calculate stats
   const totalTasks = tasks.length;
@@ -540,12 +560,8 @@ const Settings = () => {
     setEditWorkTypeName('');
   };
 
-  // Database backup function (Admin only)
+  // Database backup function (Admin only) - No confirmation needed
   const handleBackup = async () => {
-    if (!confirm('This will create a backup of the entire database. This may take a few minutes. Continue?')) {
-      return;
-    }
-
     setIsBackingUp(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/backup/database`, {
@@ -595,15 +611,42 @@ const Settings = () => {
     }
   };
 
-  // Excel export function (Admin only)
+  // Excel export function (Admin only) - Show dropdown instead of immediate export
   const handleExcelExport = async () => {
-    if (!confirm('This will export all tasks to an Excel file. Continue?')) {
-      return;
-    }
+    if (!showBackupDropdown) {
+      // Fetch users first
+      setLoadingUsers(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/backup/users`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${user.token}`,
+          }
+        });
 
-    setIsExportingExcel(true);
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to fetch users');
+        }
+
+        const usersData = await response.json();
+        setUsers(usersData);
+        setShowBackupDropdown(true);
+      } catch (error) {
+        toast.error(error.message);
+      } finally {
+        setLoadingUsers(false);
+      }
+    } else {
+      setShowBackupDropdown(false);
+    }
+  };
+
+  // Export tasks for specific user
+  const handleUserTaskExport = async (userId, userName) => {
+    setExportingUser(userId);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/export/excel`, {
+      const response = await fetch(`${API_BASE_URL}/api/backup/tasks/${userId}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${user.token}`,
@@ -617,9 +660,8 @@ const Settings = () => {
 
       const tasks = await response.json();
 
-      // Check if there are any tasks to export
       if (!tasks || tasks.length === 0) {
-        toast.error('No tasks found to export');
+        toast.error(`No tasks found for ${userName}`);
         return;
       }
 
@@ -677,20 +719,154 @@ const Settings = () => {
       }
 
       // Add worksheet to workbook
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'All Tasks');
+      XLSX.utils.book_append_sheet(workbook, worksheet, `Tasks - ${userName}`);
 
       // Generate filename with current date
       const currentDate = new Date().toISOString().split('T')[0];
-      const filename = `tasks_export_${currentDate}.xlsx`;
+      const filename = `tasks_${userName.replace(/\s+/g, '_')}_${currentDate}.xlsx`;
 
       // Save the file
       XLSX.writeFile(workbook, filename);
 
-      toast.success('Tasks exported to Excel successfully');
+      toast.success(`Tasks for ${userName} exported successfully`);
+      setShowBackupDropdown(false);
     } catch (error) {
       toast.error(error.message);
     } finally {
-      setIsExportingExcel(false);
+      setExportingUser(null);
+    }
+  };
+
+  // Export all data (tasks, priorities, stages, work types)
+  const handleAllDataExport = async () => {
+    setExportingUser('all');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/backup/all-data`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to export all data');
+      }
+
+      const data = await response.json();
+      const { tasks, priorities, taskStatuses, workTypes } = data;
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+
+      // Tasks Sheet
+      if (tasks && tasks.length > 0) {
+        const tasksData = tasks.map(task => ({
+          'Task ID': task._id,
+          'Title': task.title,
+          'Description': task.description,
+          'Status': task.status,
+          'Priority': task.priority,
+          'Client Name': task.clientName || '',
+          'Client Group': task.clientGroup || '',
+          'Work Type': task.workType || '',
+          'Assigned To': task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : '',
+          'Assigned To Email': task.assignedTo?.email || '',
+          'Assigned By': task.assignedBy ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}` : '',
+          'Assigned By Email': task.assignedBy?.email || '',
+          'Verification Status': task.verificationStatus || '',
+          'Verification': task.verification || '',
+          'Primary Verifier': task.verificationAssignedTo ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}` : '',
+          'Second Verifier': task.secondVerificationAssignedTo ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}` : '',
+          'Third Verifier': task.thirdVerificationAssignedTo ? `${task.thirdVerificationAssignedTo.firstName} ${task.thirdVerificationAssignedTo.lastName}` : '',
+          'Fourth Verifier': task.fourthVerificationAssignedTo ? `${task.fourthVerificationAssignedTo.firstName} ${task.fourthVerificationAssignedTo.lastName}` : '',
+          'Fifth Verifier': task.fifthVerificationAssignedTo ? `${task.fifthVerificationAssignedTo.firstName} ${task.fifthVerificationAssignedTo.lastName}` : '',
+          'Guides': task.guides?.map(guide => `${guide.firstName} ${guide.lastName}`).join(', ') || '',
+          'Inward Entry Date': task.inwardEntryDate ? new Date(task.inwardEntryDate).toLocaleDateString() : '',
+          'Due Date': task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '',
+          'Target Date': task.targetDate ? new Date(task.targetDate).toLocaleDateString() : '',
+          'Created At': new Date(task.createdAt).toLocaleDateString(),
+          'Updated At': new Date(task.updatedAt).toLocaleDateString(),
+          'Billed': task.billed ? 'Yes' : 'No',
+          'Self Verification': task.selfVerification ? 'Yes' : 'No',
+          'Files Count': task.files?.length || 0,
+          'Comments Count': task.comments?.length || 0,
+          'Custom Fields': task.customFields ? JSON.stringify(task.customFields) : '',
+          'Verification Comments': task.verificationComments || ''
+        }));
+
+        const tasksWorksheet = XLSX.utils.json_to_sheet(tasksData);
+        
+        // Auto-size columns for tasks
+        const tasksHeaders = Object.keys(tasksData[0] || {});
+        if (tasksHeaders.length > 0) {
+          const tasksColWidths = tasksHeaders.map(header => {
+            const maxLength = Math.max(
+              header.length,
+              ...tasksData.map(row => (row[header] || '').toString().length)
+            );
+            return { wch: Math.min(maxLength + 2, 50) };
+          });
+          tasksWorksheet['!cols'] = tasksColWidths;
+        }
+        
+        XLSX.utils.book_append_sheet(workbook, tasksWorksheet, 'All Tasks');
+      }
+
+      // Priorities Sheet
+      if (priorities && priorities.length > 0) {
+        const prioritiesData = priorities.map((priority, index) => ({
+          'S.No': index + 1,
+          'Priority Name': priority.name,
+          'Is Default': priority.isDefault ? 'Yes' : 'No',
+          'Order': priority.order || '',
+          'Created At': priority.createdAt ? new Date(priority.createdAt).toLocaleDateString() : ''
+        }));
+
+        const prioritiesWorksheet = XLSX.utils.json_to_sheet(prioritiesData);
+        XLSX.utils.book_append_sheet(workbook, prioritiesWorksheet, 'Priorities');
+      }
+
+      // Task Statuses/Stages Sheet
+      if (taskStatuses && taskStatuses.length > 0) {
+        const statusesData = taskStatuses.map((status, index) => ({
+          'S.No': index + 1,
+          'Status Name': status.name,
+          'Color': status.color || '',
+          'Is Default': status.isDefault ? 'Yes' : 'No',
+          'Order': status.order || '',
+          'Created At': status.createdAt ? new Date(status.createdAt).toLocaleDateString() : ''
+        }));
+
+        const statusesWorksheet = XLSX.utils.json_to_sheet(statusesData);
+        XLSX.utils.book_append_sheet(workbook, statusesWorksheet, 'Task Stages');
+      }
+
+      // Work Types Sheet
+      if (workTypes && workTypes.length > 0) {
+        const workTypesData = workTypes.map((workType, index) => ({
+          'S.No': index + 1,
+          'Work Type Name': workType.name,
+          'Created At': workType.createdAt ? new Date(workType.createdAt).toLocaleDateString() : ''
+        }));
+
+        const workTypesWorksheet = XLSX.utils.json_to_sheet(workTypesData);
+        XLSX.utils.book_append_sheet(workbook, workTypesWorksheet, 'Work Types');
+      }
+
+      // Generate filename with current date
+      const currentDate = new Date().toISOString().split('T')[0];
+      const filename = `complete_backup_${currentDate}.xlsx`;
+
+      // Save the file
+      XLSX.writeFile(workbook, filename);
+
+      toast.success('Complete data backup exported successfully');
+      setShowBackupDropdown(false);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setExportingUser(null);
     }
   };
 
@@ -707,29 +883,108 @@ const Settings = () => {
         {/* Admin Buttons */}
         {user.role === 'Admin' && (
           <div className="absolute top-4 right-4 flex gap-2">
-            <button
-              onClick={handleExcelExport}
-              disabled={isExportingExcel}
-              className="bg-green-600/20 hover:bg-green-600/30 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Export All Tasks to Excel"
-            >
-              {isExportingExcel ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Backup Excel
-                </>
+            {/* Excel Backup Button with Dropdown */}
+            <div className="relative backup-dropdown-container">
+              <button
+                onClick={handleExcelExport}
+                disabled={loadingUsers}
+                className="bg-green-600/20 hover:bg-green-600/30 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Export Tasks to Excel"
+              >
+                {loadingUsers ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Backup Excel
+                    <svg className={`h-4 w-4 transition-transform duration-200 ${showBackupDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </>
+                )}
+              </button>
+              
+              {/* Dropdown Menu */}
+              {showBackupDropdown && (
+                <div className="absolute top-full right-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 z-50 min-w-64 max-h-80 overflow-y-auto">
+                  {/* All Data Option */}
+                  <div className="p-2 border-b border-gray-100">
+                    <button
+                      onClick={() => handleAllDataExport()}
+                      disabled={exportingUser === 'all'}
+                      className="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 transition-colors duration-200 flex items-center gap-3 text-sm font-medium text-gray-700 disabled:opacity-50"
+                    >
+                      {exportingUser === 'all' ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>Exporting All Data...</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                            <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div className="font-semibold text-blue-600">All Data</div>
+                            <div className="text-xs text-gray-500">Tasks, Priorities, Stages & Work Types</div>
+                          </div>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  
+                  {/* Users List */}
+                  <div className="p-2">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-2">Select User</div>
+                    {users.map((user) => (
+                      <button
+                        key={user._id}
+                        onClick={() => handleUserTaskExport(user._id, `${user.firstName} ${user.lastName}`)}
+                        disabled={exportingUser === user._id}
+                        className="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors duration-200 flex items-center gap-3 text-sm disabled:opacity-50"
+                      >
+                        {exportingUser === user._id ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Exporting...</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center">
+                              <span className="text-white text-sm font-semibold">
+                                {user.firstName.charAt(0)}{user.lastName.charAt(0)}
+                              </span>
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-700">{user.firstName} {user.lastName}</div>
+                              <div className="text-xs text-gray-500">{user.email}</div>
+                            </div>
+                          </>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
-            </button>
+            </div>
+            
+            {/* Database Backup Button */}
             <button
               onClick={handleBackup}
               disabled={isBackingUp}

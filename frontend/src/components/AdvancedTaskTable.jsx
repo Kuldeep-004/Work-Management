@@ -213,9 +213,6 @@ const AdvancedTaskTable = ({
                       </th>
                     );
                   })}
-                  {(viewType === 'assigned' || viewType === 'admin') && (
-                    <th key="actions" className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none">Actions</th>
-                  )}
                 </tr>
               </thead>
             )}
@@ -331,9 +328,6 @@ const AdvancedTaskTable = ({
                           </th>
                         );
                       })}
-                      {(viewType === 'assigned' || viewType === 'admin') && (
-                        <th key="actions" className="px-2 py-1 text-left text-sm font-normal bg-white tracking-wider select-none">Actions</th>
-                      )}
                     </tr>
                     {tasksToShow.map((task, idx) => (
                       <tr
@@ -1400,33 +1394,6 @@ const AdvancedTaskTable = ({
                               return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{cellValue}</span></div></td>;
                           }
                         })}
-                        {(viewType === 'assigned' || viewType === 'admin') && (
-                          <td key="actions" className="px-2 py-1 text-sm font-normal align-middle bg-white">
-                            {(!shouldDisableActions || !shouldDisableActions(task)) && (
-                              <div className="flex items-center gap-0">
-                                {/* Role-based action buttons */}
-                                {['Team Head', 'Admin', 'Senior'].includes(currentUser?.role) && (
-                                  <button
-                                    onClick={() => handleEditTask(task)}
-                                    className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                                    title="Edit Task"
-                                  >
-                                    Edit
-                                  </button>
-                                )}
-                                {['Team Head', 'Admin'].includes(currentUser?.role) && (
-                                  <button
-                                    onClick={() => handleDeleteFromDropdown(task)}
-                                    className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                                    title="Delete Task"
-                                  >
-                                    Delete
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                        )}
                       </tr>
                     ))}
                   </React.Fragment>
@@ -2486,33 +2453,6 @@ const AdvancedTaskTable = ({
                         return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{cellValue}</span></div></td>;
                     }
                   })}
-                  {(viewType === 'assigned' || viewType === 'admin') && (
-                    <td key="actions" className="px-2 py-1 text-sm font-normal align-middle bg-white">
-                      {(!shouldDisableActions || !shouldDisableActions(task)) && (
-                        <div className="flex items-center gap-0">
-                          {/* Role-based action buttons */}
-                          {['Team Head', 'Admin', 'Senior'].includes(currentUser?.role) && (
-                            <button
-                              onClick={() => onEditTask && onEditTask(task)}
-                              className="text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                              title="Edit Task"
-                            >
-                              Edit
-                            </button>
-                          )}
-                          {['Team Head', 'Admin'].includes(currentUser?.role) && (
-                            <button
-                              onClick={() => handleDeleteTask(task)}
-                              className="text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition-colors"
-                              title="Delete Task"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  )}
                 </tr>
               )))}
             </tbody>

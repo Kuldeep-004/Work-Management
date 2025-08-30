@@ -25,7 +25,8 @@ function getMinutesBetween(start, end) {
 
 // dateStr: ISO date string or display-ready date
 // timesheets: array of { user: {firstName,lastName,role,email}, date, entries: [...] }
-export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 'timesheets' }) {
+// fontSize: base font size for the PDF (default: 12)
+export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 'timesheets', fontSize = 12 }) {
   if (!Array.isArray(timesheets) || timesheets.length === 0) {
     throw new Error('No timesheets to export');
   }
@@ -34,6 +35,12 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 10;
   let cursorY = margin;
+
+  // Calculate font sizes based on the base fontSize
+  const titleFontSize = fontSize + 2;
+  const headerFontSize = fontSize - 1;
+  const bodyFontSize = fontSize - 3;
+  const tableFontSize = fontSize - 3;
 
   const niceDate = (() => {
     try {
@@ -47,10 +54,10 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
   })();
 
   // Title
-  doc.setFontSize(14);
+  doc.setFontSize(titleFontSize);
   doc.setTextColor(33);
   doc.text('Subordinate Timesheets', margin, cursorY);
-  doc.setFontSize(11);
+  doc.setFontSize(headerFontSize);
   doc.setTextColor(80);
   doc.text(niceDate, pageWidth - margin, cursorY, { align: 'right' });
   cursorY += 8;
@@ -61,7 +68,7 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
       acc + ts.entries
         .filter(e => e.approvalStatus === 'pending' || e.approvalStatus === 'accepted')
         .reduce((s, e) => s + getMinutesBetween(e.startTime, e.endTime), 0), 0);
-    doc.setFontSize(10);
+    doc.setFontSize(bodyFontSize);
     doc.setTextColor(60);
     doc.text(`Total (all users): ${formatTimeHM(grandTotal)}`, margin, cursorY);
     cursorY += 4;
@@ -86,10 +93,10 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
     const email = ts?.user?.email || '';
 
     // Header block with name/role/email and total time on the right
-    doc.setFontSize(12);
+    doc.setFontSize(fontSize);
     doc.setTextColor(33);
     doc.text(name || 'User', margin, cursorY);
-    doc.setFontSize(9);
+    doc.setFontSize(bodyFontSize);
     doc.setTextColor(100);
     cursorY += 4;
     if (email) doc.text(email, margin, cursorY);
@@ -99,7 +106,7 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
     const totalMins = ts.entries
       .filter(e => e.approvalStatus === 'pending' || e.approvalStatus === 'accepted')
       .reduce((sum, e) => sum + getMinutesBetween(e.startTime, e.endTime), 0);
-    doc.setFontSize(10);
+    doc.setFontSize(bodyFontSize);
     doc.setTextColor(20, 80, 180);
     doc.text(`Total: ${formatTimeHM(totalMins)}`, pageWidth - margin, cursorY, { align: 'right' });
     cursorY += 5;
@@ -135,7 +142,7 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
       margin: { left: margin, right: margin },
   head: [['Timeslot', 'Task Name', 'Description', { content: 'Time', styles: { halign: 'right' } }, 'State']],
       body: rows.length ? rows : [['-', '-', 'No Entries', '-', '-']],
-      styles: { fontSize: 9, cellPadding: 2.2, overflow: 'linebreak' },
+      styles: { fontSize: tableFontSize, cellPadding: 2.2, overflow: 'linebreak' },
       headStyles: { fillColor: [245, 245, 245], textColor: 60, lineColor: [230, 230, 230] },
       columnStyles: {
         0: { cellWidth: colTimeslot },
@@ -147,7 +154,7 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
       didDrawPage: (data) => {
         // Add footer page numbers
         const pageCount = doc.getNumberOfPages();
-        doc.setFontSize(8);
+        doc.setFontSize(bodyFontSize - 2);
         doc.setTextColor(120);
         doc.text(`Page ${data.pageNumber} of ${pageCount}`, pageWidth - margin, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
       }
@@ -161,7 +168,7 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
     // Hari Sir's Sign (left)
     doc.setDrawColor(80);
     doc.line(margin, signLineY, margin + signLineLength, signLineY);
-    doc.setFontSize(10);
+    doc.setFontSize(bodyFontSize);
     doc.setTextColor(60);
     doc.text("Hari Sir's Sign", margin, signLineY + 6);
     // Team Head Sign (right)

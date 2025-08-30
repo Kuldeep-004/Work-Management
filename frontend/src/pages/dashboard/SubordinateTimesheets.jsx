@@ -29,6 +29,8 @@ const SubordinateTimesheets = () => {
   const [showTimesheetDetail, setShowTimesheetDetail] = useState(false);
   // Search bar state
   const [searchTerm, setSearchTerm] = useState('');
+  // Font size for PDF
+  const [pdfFontSize, setPdfFontSize] = useState(12);
 
   // Filtered subordinates for search
   const filteredSubordinates = subordinates.filter(sub => {
@@ -65,7 +67,7 @@ const SubordinateTimesheets = () => {
         }
         return 'timesheets';
       })();
-      generateTimesheetPdf({ dateStr: selectedDate, timesheets, fileLabel: label });
+      generateTimesheetPdf({ dateStr: selectedDate, timesheets, fileLabel: label, fontSize: pdfFontSize });
     } catch (e) {
       console.error(e);
       toast.error('Failed to generate PDF');
@@ -295,6 +297,64 @@ const SubordinateTimesheets = () => {
     }
   };
 
+  const handleAcceptAllEntries = async (timesheetId) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/timesheets/${timesheetId}/accept-all`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to accept all entries');
+      }
+      
+      // Check if there were actually entries to accept
+      if (data.entriesAccepted === 0) {
+        toast('All entries are already accepted.');
+        return;
+      }
+      
+      // Update the timesheet in the state to reflect accepted entries
+      setTimesheets(prev => prev.map(ts => {
+        if (ts._id === timesheetId) {
+          return {
+            ...ts,
+            entries: ts.entries.map(entry => ({
+              ...entry,
+              approvalStatus: (entry.approvalStatus === 'pending' || entry.approvalStatus === 'rejected') ? 'accepted' : entry.approvalStatus
+            }))
+          };
+        }
+        return ts;
+      }));
+      
+      setGroupedTimesheets(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(date => {
+          updated[date] = updated[date].map(ts => {
+            if (ts._id === timesheetId) {
+              return {
+                ...ts,
+                entries: ts.entries.map(entry => ({
+                  ...entry,
+                  approvalStatus: (entry.approvalStatus === 'pending' || entry.approvalStatus === 'rejected') ? 'accepted' : entry.approvalStatus
+                }))
+              };
+            }
+            return ts;
+          });
+        });
+        return updated;
+      });
+      
+      toast.success(`${data.entriesAccepted} entries accepted`);
+    } catch (error) {
+      toast.error(error.message || 'Failed to accept all entries');
+    }
+  };
+
   if (!isAuthenticated()) {
     return <div className="p-8 text-center">Please log in to view this page.</div>;
   }
@@ -384,16 +444,43 @@ const SubordinateTimesheets = () => {
             </div>
           )}
 
-          <div className="flex md:justify-end">
-            <button
-              type="button"
-              onClick={onDownloadPdf}
-              disabled={loading || timesheets.length === 0}
-              className="mt-6 md:mt-0 inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 16a1 1 0 0 1-.707-.293l-4-4 1.414-1.414L11 12.586V3h2v9.586l2.293-2.293 1.414 1.414-4 4A1 1 0 0 1 12 16z"/><path d="M5 19h14v2H5z"/></svg>
-              Download PDF
-            </button>
+          <div className="flex md:justify-end space-x-3">
+            {/* Font Size Dropdown */}
+            <div className="flex flex-col">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Font Size
+              </label>
+              <select
+                value={pdfFontSize}
+                onChange={(e) => setPdfFontSize(parseInt(e.target.value))}
+                className="px-1 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value={8}>8pt</option>
+                <option value={9}>9pt</option>
+                <option value={10}>10pt</option>
+                <option value={11}>11pt</option>
+                <option value={12}>12pt</option>
+                <option value={14}>14pt</option>
+                <option value={16}>16pt</option>
+                <option value={18}>18pt</option>
+              </select>
+            </div>
+            
+            {/* Download PDF Button */}
+            <div className="flex flex-col">
+              <label className="block text-sm font-medium text-gray-700 mb-1 opacity-0">
+                Download
+              </label>
+              <button
+                type="button"
+                onClick={onDownloadPdf}
+                disabled={loading || timesheets.length === 0}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 16a1 1 0 0 1-.707-.293l-4-4 1.414-1.414L11 12.586V3h2v9.586l2.293-2.293 1.414 1.414-4 4A1 1 0 0 1 12 16z"/><path d="M5 19h14v2H5z"/></svg>
+                Download PDF
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -455,13 +542,22 @@ const SubordinateTimesheets = () => {
                             .reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0)
                           )
                         }</p>
-                        <button
-                          onClick={() => handleReturnTimesheet(timesheet._id)}
-                          className="mt-2 bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600 text-sm font-medium"
-                          title="Return timesheet for editing"
-                        >
-                          Return
-                        </button>
+                        <div className="mt-2 space-x-2">
+                          <button
+                            onClick={() => handleAcceptAllEntries(timesheet._id)}
+                            className="bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600 text-sm font-medium"
+                            title="Accept all pending and rejected timeslots"
+                          >
+                            Accept All
+                          </button>
+                          <button
+                            onClick={() => handleReturnTimesheet(timesheet._id)}
+                            className="bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600 text-sm font-medium"
+                            title="Return timesheet for editing"
+                          >
+                            Return
+                          </button>
+                        </div>
                       </div>
                     </div>
 

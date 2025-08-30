@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
-import { PencilSquareIcon, CheckIcon, MagnifyingGlassIcon, EyeIcon } from '@heroicons/react/24/outline';
-import { API_BASE_URL } from '../../apiConfig';
+import { PencilSquareIcon, CheckIcon, MagnifyingGlassIcon, EyeIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { API_BASE_URL, saveTabState, fetchTabState } from '../../apiConfig';
 
 const Cost = () => {
   const { user, token } = useAuth();
@@ -10,7 +10,7 @@ const Cost = () => {
   const [editingUserId, setEditingUserId] = useState(null);
   const [hourlyRateInput, setHourlyRateInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [costs, setCosts] = useState(null); // null = not loaded, [] = loaded but empty
+  const [costs, setCosts] = useState([]); // Array of tasks
   const [search, setSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [costLoading, setCostLoading] = useState(false);
@@ -20,24 +20,124 @@ const Cost = () => {
   const [taskDetails, setTaskDetails] = useState(null);
   const [taskTimeslots, setTaskTimeslots] = useState([]);
   const [taskDetailsLoading, setTaskDetailsLoading] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [totalTasks, setTotalTasks] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const TASKS_PER_PAGE = 25;
+  
+  // Refs for infinite scroll
+  const loadMoreTriggerRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
+
+  // Column management state
+  const [visibleColumns, setVisibleColumns] = useState([]);
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const [tabsLoaded, setTabsLoaded] = useState(false);
+  const columnsDropdownRef = useRef(null);
+
+  // All available columns for Cost page
+  const ALL_COLUMNS = [
+    { id: 'taskTitle', label: 'Task', type: 'text' },
+    { id: 'assignedTo', label: 'Assigned To', type: 'user' },
+    { id: 'firstVerifier', label: 'First Verifier', type: 'user' },
+    { id: 'secondVerifier', label: 'Second Verifier', type: 'user' },
+    { id: 'thirdVerifier', label: 'Third Verifier', type: 'user' },
+    { id: 'fourthVerifier', label: 'Fourth Verifier', type: 'user' },
+    { id: 'fifthVerifier', label: 'Fifth Verifier', type: 'user' },
+    { id: 'guides', label: 'Guide', type: 'guides' },
+    { id: 'totalCost', label: 'Total Cost (₹)', type: 'cost' }
+  ];
+
+  // Default visible columns
+  const DEFAULT_VISIBLE_COLUMNS = ALL_COLUMNS.map(col => col.id);
 
   useEffect(() => {
     if (user?.role === 'Admin') {
       fetchUsers();
-      // Removed fetchCosts() here to avoid double loading
     }
   }, [user, activeTab]);
 
-  // Auto-search effect for task costing
+  // Load tab state (visible columns) on mount
+  useEffect(() => {
+    if (!user?.token) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        const tabState = await fetchTabState('costManagement', user.token);
+        console.log('Loaded cost management tab state:', tabState);
+        if (isMounted && tabState && tabState.visibleColumns) {
+          setVisibleColumns(tabState.visibleColumns);
+        } else if (isMounted) {
+          console.log('Using default visible columns:', DEFAULT_VISIBLE_COLUMNS);
+          setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+        }
+      } catch (error) {
+        console.error('Error loading tab state:', error);
+        if (isMounted) {
+          setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+        }
+      } finally {
+        if (isMounted) setTabsLoaded(true);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [user]);
+
+  // Save visible columns to backend whenever they change
+  useEffect(() => {
+    if (!user?.token || !tabsLoaded) return;
+    console.log('Saving visible columns to backend:', visibleColumns);
+    saveTabState('costManagement', { visibleColumns }, user.token).catch((error) => {
+      console.error('Error saving tab state:', error);
+    });
+  }, [visibleColumns, user, tabsLoaded]);
+
+  // Handle click outside dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (columnsDropdownRef.current && !columnsDropdownRef.current.contains(event.target)) {
+        setShowColumnDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Auto-search effect for task costing with pagination reset
   useEffect(() => {
     if (activeTab === 'taskCosting') {
-      const timeoutId = setTimeout(() => {
-        fetchCosts(search);
-      }, 300); // Debounce search by 300ms
+      // Clear the previous timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
       
-      return () => clearTimeout(timeoutId);
+      // Set a new timeout for debounced search
+      searchTimeoutRef.current = setTimeout(() => {
+        setCurrentPage(1);
+        setCosts([]);
+        fetchCosts(search, 1, true);
+      }, 300);
+      
+      return () => {
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+        }
+      };
     }
   }, [search, activeTab]);
+
+  // Initial load when switching to task costing tab
+  useEffect(() => {
+    if (activeTab === 'taskCosting' && costs.length === 0) {
+      fetchCosts('', 1, true);
+    }
+  }, [activeTab]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -53,21 +153,82 @@ const Cost = () => {
     setLoading(false);
   };
 
-  const fetchCosts = async (q = '') => {
-    setCosts(null); // Clear previous data immediately
-    setCostLoading(true);
+  const fetchCosts = useCallback(async (searchQuery = '', page = 1, reset = false) => {
+    if (reset) {
+      setCostLoading(true);
+    } else {
+      setIsLoadingMore(true);
+    }
+    
     try {
-      const res = await fetch(`${API_BASE_URL}/api/timesheets/task-costs${q ? `?search=${encodeURIComponent(q)}` : ''}`, {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: TASKS_PER_PAGE.toString()
+      });
+      
+      if (searchQuery && searchQuery.trim()) {
+        params.append('search', searchQuery);
+      }
+      
+      const res = await fetch(`${API_BASE_URL}/api/timesheets/task-costs?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      setCosts(data);
+      
+      if (reset) {
+        setCosts(data.tasks || []);
+      } else {
+        setCosts(prev => [...prev, ...(data.tasks || [])]);
+      }
+      
+      setCurrentPage(data.pagination?.current || page);
+      setHasNextPage(data.pagination?.hasNext || false);
+      setTotalTasks(data.pagination?.total || 0);
     } catch (e) {
       toast.error('Failed to load costs');
-      setCosts([]); // Set to empty array on error
+      if (reset) {
+        setCosts([]);
+      }
+    } finally {
+      setCostLoading(false);
+      setIsLoadingMore(false);
     }
-    setCostLoading(false);
-  };
+  }, [token]);
+
+  // Load more tasks function
+  const loadMoreTasks = useCallback(() => {
+    if (hasNextPage && !isLoadingMore && !costLoading) {
+      fetchCosts(search, currentPage + 1, false);
+    }
+  }, [hasNextPage, isLoadingMore, costLoading, fetchCosts, search, currentPage]);
+
+  // Infinite scroll implementation
+  useEffect(() => {
+    const triggerElement = loadMoreTriggerRef.current;
+    if (!triggerElement) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting && hasNextPage && !isLoadingMore && !costLoading) {
+          loadMoreTasks();
+        }
+      },
+      {
+        root: null,
+        rootMargin: '200px', // Load more when 200px from bottom
+        threshold: 0.01
+      }
+    );
+
+    observer.observe(triggerElement);
+
+    return () => {
+      if (triggerElement) {
+        observer.unobserve(triggerElement);
+      }
+    };
+  }, [hasNextPage, isLoadingMore, costLoading, loadMoreTasks]);
 
   const fetchTaskDetails = async (taskId) => {
     setTaskDetailsLoading(true);
@@ -113,13 +274,85 @@ const Cost = () => {
       setEditingUserId(null);
       setHourlyRateInput('');
       fetchUsers();
+      // Refresh costs data to reflect rate changes
       if (activeTab === 'taskCosting') {
-        fetchCosts();
+        setCurrentPage(1);
+        setCosts([]);
+        fetchCosts(search, 1, true);
       }
     } catch (e) {
       toast.error('Update failed');
     }
     setLoading(false);
+  };
+
+  // Column management functions
+  const toggleColumn = (columnId) => {
+    console.log('Toggling column:', columnId);
+    setVisibleColumns(prev => {
+      console.log('Previous visible columns:', prev);
+      if (prev.includes(columnId)) {
+        // Don't allow hiding all columns
+        if (prev.length <= 1) {
+          console.log('Cannot hide last column');
+          return prev;
+        }
+        const newColumns = prev.filter(id => id !== columnId);
+        console.log('New visible columns (removed):', newColumns);
+        return newColumns;
+      } else {
+        const newColumns = [...prev, columnId];
+        console.log('New visible columns (added):', newColumns);
+        return newColumns;
+      }
+    });
+  };
+
+  // Function to render table cell content based on column type
+  const renderCellContent = (task, columnId) => {
+    switch (columnId) {
+      case 'taskTitle':
+        return (
+          <div 
+            className="max-w-[320px] overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 cursor-pointer hover:text-blue-600 font-semibold"
+            onClick={() => handleTaskClick(task)}
+          >
+            <span className="inline-block min-w-full align-middle">{task.title}</span>
+          </div>
+        );
+      case 'assignedTo':
+      case 'firstVerifier':
+      case 'secondVerifier':
+      case 'thirdVerifier':
+      case 'fourthVerifier':
+      case 'fifthVerifier':
+        const user = task[columnId];
+        return user ? (
+          <div>
+            <div className="font-medium">{user.name}</div>
+            <div className="inline-block bg-blue-100 text-blue-700 rounded px-2 py-0.5 text-xs mt-1">
+              {user.hours} hr | ₹{user.cost.toFixed(2)}
+            </div>
+          </div>
+        ) : <span className="text-gray-400">-</span>;
+      case 'guides':
+        return task.guides && task.guides.length > 0 ? (
+          <div className="space-y-1">
+            {task.guides.map((guide, idx) => (
+              <div key={idx}>
+                <div className="font-medium text-sm">{guide.name}</div>
+                <div className="inline-block bg-purple-100 text-purple-700 rounded px-2 py-0.5 text-xs">
+                  {guide.hours} hr | ₹{guide.cost.toFixed(2)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : <span className="text-gray-400">-</span>;
+      case 'totalCost':
+        return <span className="font-bold text-green-700">₹{task.totalCost.toFixed(2)}</span>;
+      default:
+        return '-';
+    }
   };
 
   const handleSearch = (e) => {
@@ -258,6 +491,13 @@ const Cost = () => {
                       <p className="text-sm text-blue-600">{selectedTask.fifthVerifier.hours}h × ₹{selectedTask.fifthVerifier.hourlyRate} = ₹{selectedTask.fifthVerifier.cost.toFixed(2)}</p>
                     </div>
                   )}
+                  {selectedTask.guides && selectedTask.guides.length > 0 && selectedTask.guides.map((guide, idx) => (
+                    <div key={idx} className="bg-white rounded p-3">
+                      <p className="text-sm text-gray-600">Guide {idx + 1}</p>
+                      <p className="font-medium">{guide.name}</p>
+                      <p className="text-sm text-purple-600">{guide.hours}h × ₹{guide.hourlyRate} = ₹{guide.cost.toFixed(2)}</p>
+                    </div>
+                  ))}
                 </div>
                 <div className="mt-4 text-right">
                   <p className="text-xl font-bold text-green-700">Total Cost: ₹{selectedTask.totalCost.toFixed(2)}</p>
@@ -362,7 +602,14 @@ const Cost = () => {
       {/* Task Costing Tab */}
       {activeTab === 'taskCosting' && (
         <div>
-          <h2 className="text-2xl font-bold mb-6">Task Costing</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold">Task Costing</h2>
+            {totalTasks > 0 && (
+              <div className="text-sm text-gray-600">
+                Total Tasks: <span className="font-semibold">{totalTasks}</span>
+              </div>
+            )}
+          </div>
           <div className="mb-4 flex items-center gap-2">
             <div className="relative">
               <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -374,61 +621,100 @@ const Cost = () => {
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead>
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-white">Task</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Assigned To</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">First Verifier</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Second Verifier</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Third Verifier</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fourth Verifier</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fifth Verifier</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Cost (₹)</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {costLoading || costs === null ? (
-                  <tr><td colSpan={9} className="text-center py-8">Loading...</td></tr>
-                ) : Array.isArray(costs) && costs.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-8">No tasks found.</td></tr>
-                ) : costs.map((t) => (
-                  <tr key={t.taskId} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 whitespace-nowrap font-semibold sticky left-0 bg-white border-r">
-                      <div className="max-w-[320px] overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300">
-                        <span className="inline-block min-w-full align-middle">{t.title}</span>
-                      </div>
-                    </td>
-                    {[t.assignedTo, t.firstVerifier, t.secondVerifier, t.thirdVerifier, t.fourthVerifier, t.fifthVerifier].map((u, idx) => (
-                      <td key={idx} className="px-4 py-2 whitespace-nowrap">
-                        {u ? (
-                          <div>
-                            <div className="font-medium">{u.name}</div>
-                            <div className="inline-block bg-blue-100 text-blue-700 rounded px-2 py-0.5 text-xs mt-1">
-                              {u.hours} hr | ₹{u.cost.toFixed(2)}
-                            </div>
-                          </div>
-                        ) : <span className="text-gray-400">-</span>}
-                      </td>
+            
+            {/* Column Dropdown */}
+            <div className="relative" ref={columnsDropdownRef}>
+              <button
+                onClick={() => setShowColumnDropdown(!showColumnDropdown)}
+                className="px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center gap-2"
+              >
+                Columns
+                <ChevronDownIcon className="w-4 h-4" />
+              </button>
+
+              {showColumnDropdown && (
+                <div className="absolute z-50 mt-1 w-56 bg-white border border-gray-200 rounded-md shadow-lg">
+                  <div className="py-2">
+                    <div className="px-3 py-1 text-xs font-semibold text-gray-500 uppercase">Show/Hide Columns</div>
+                    {ALL_COLUMNS.map((column) => (
+                      <label key={column.id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns.includes(column.id)}
+                          onChange={() => toggleColumn(column.id)}
+                          className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">{column.label}</span>
+                      </label>
                     ))}
-                    <td className="px-4 py-2 whitespace-nowrap font-bold text-green-700">₹{t.totalCost.toFixed(2)}</td>
-                    <td className="px-4 py-2 whitespace-nowrap">
-                      <button
-                        onClick={() => handleTaskClick(t)}
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {!tabsLoaded && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="text-center py-8">Loading table configuration...</div>
+            </div>
+          )}
+          {tabsLoaded && visibleColumns.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-4 overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    {ALL_COLUMNS.filter(col => visibleColumns.includes(col.id)).map((column) => (
+                      <th 
+                        key={column.id} 
+                        className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-white"
+                        style={{ width: `${100 / visibleColumns.length}%` }}
                       >
-                        <EyeIcon className="w-4 h-4" />
-                        View Details
-                      </button>
-                    </td>
+                        {column.label}
+                      </th>
+                    ))}
                   </tr>
-                ))}
+                </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {costLoading && costs.length === 0 ? (
+                  <tr><td colSpan={visibleColumns.length} className="text-center py-8">Loading...</td></tr>
+                ) : costs.length === 0 ? (
+                  <tr><td colSpan={visibleColumns.length} className="text-center py-8">No tasks found.</td></tr>
+                ) : (
+                  <>
+                    {costs.map((task) => (
+                      <tr key={task.taskId} className="hover:bg-gray-50">
+                        {ALL_COLUMNS.filter(col => visibleColumns.includes(col.id)).map((column) => (
+                          <td 
+                            key={column.id} 
+                            className="px-4 py-2 whitespace-nowrap"
+                            style={{ width: `${100 / visibleColumns.length}%` }}
+                          >
+                            {renderCellContent(task, column.id)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </>
+                )}
               </tbody>
             </table>
-          </div>
+            
+            {/* Infinite scroll trigger element */}
+            <div
+              ref={loadMoreTriggerRef}
+              className="w-full h-4"
+              style={{ height: '1px' }}
+            ></div>
+            
+            {/* Load more info */}
+            {costs.length > 0 && (
+              <div className="mt-4 text-center text-sm text-gray-500">
+                Showing {costs.length} of {totalTasks} tasks
+                
+                
+              </div>
+            )}
+            </div>
+          )}
         </div>
       )}
 

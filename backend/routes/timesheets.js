@@ -705,9 +705,25 @@ router.get('/task-costs', protect, async (req, res) => {
     if (adminUser.role !== 'Admin') {
       return res.status(403).json({ message: 'Not authorized as Admin' });
     }
-    const { search } = req.query;
-    // Get all tasks
-    const tasks = await Task.find().populate('assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo', 'firstName lastName hourlyRate');
+    const { search, page = 1, limit = 25 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Build task filter for search
+    let taskFilter = {};
+    if (search) {
+      const searchLower = search.toLowerCase();
+      taskFilter.title = { $regex: searchLower, $options: 'i' };
+    }
+    
+    // Get tasks with pagination
+    const tasks = await Task.find(taskFilter)
+      .populate('assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides', 'firstName lastName hourlyRate')
+      .skip(skip)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 });
+      
+    const totalTasks = await Task.countDocuments(taskFilter);
+    
     // Get all timesheets with entries (both regular tasks and manual tasks)
     const timesheets = await Timesheet.find({}).populate('user', 'firstName lastName hourlyRate').populate('entries.task', 'title');
     // Map: { taskId: { userId: { totalMinutes } } }
@@ -750,13 +766,6 @@ router.get('/task-costs', protect, async (req, res) => {
     // Build cost breakdown for each task
     const result = [];
     for (const task of tasks) {
-      // Filter by search if needed
-      if (search) {
-        const searchLower = search.toLowerCase();
-        if (!task.title.toLowerCase().includes(searchLower)) {
-          continue;
-        }
-      }
       const taskId = task._id.toString();
       // Helper to get user info
       function getUserCost(user) {
@@ -778,8 +787,21 @@ router.get('/task-costs', protect, async (req, res) => {
       const thirdVerifier = getUserCost(task.thirdVerificationAssignedTo);
       const fourthVerifier = getUserCost(task.fourthVerificationAssignedTo);
       const fifthVerifier = getUserCost(task.fifthVerificationAssignedTo);
+      
+      // Process guides - can have multiple guides
+      const guides = [];
+      if (Array.isArray(task.guides) && task.guides.length > 0) {
+        task.guides.forEach(guide => {
+          const guideInfo = getUserCost(guide);
+          if (guideInfo) {
+            guides.push(guideInfo);
+          }
+        });
+      }
+      
+      const guidesCost = guides.reduce((sum, guide) => sum + (guide.cost || 0), 0);
       const totalCost = (assignedTo?.cost || 0) + (firstVerifier?.cost || 0) + (secondVerifier?.cost || 0) + 
-                       (thirdVerifier?.cost || 0) + (fourthVerifier?.cost || 0) + (fifthVerifier?.cost || 0);
+                       (thirdVerifier?.cost || 0) + (fourthVerifier?.cost || 0) + (fifthVerifier?.cost || 0) + guidesCost;
       result.push({
         taskId: task._id,
         title: task.title,
@@ -789,10 +811,21 @@ router.get('/task-costs', protect, async (req, res) => {
         thirdVerifier,
         fourthVerifier,
         fifthVerifier,
+        guides,
         totalCost
       });
     }
-    res.json(result);
+    
+    res.json({
+      tasks: result,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(totalTasks / parseInt(limit)),
+        hasNext: parseInt(page) < Math.ceil(totalTasks / parseInt(limit)),
+        hasPrev: parseInt(page) > 1,
+        total: totalTasks
+      }
+    });
   } catch (error) {
     console.error('Error aggregating task costs:', error.stack || error);
     res.status(500).json({ message: 'Server error' });
@@ -1111,6 +1144,87 @@ router.patch('/:timesheetId/return', protect, async (req, res) => {
     });
     
     res.json({ message: 'Timesheet returned for editing', timesheet });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Accept all pending entries in a timesheet
+router.patch('/:timesheetId/accept-all', protect, async (req, res) => {
+  try {
+    const { timesheetId } = req.params;
+    const timesheet = await Timesheet.findById(timesheetId)
+      .populate('user', 'firstName lastName email');
+    
+    if (!timesheet) {
+      return res.status(404).json({ message: 'Timesheet not found' });
+    }
+
+    // Check if user has permission to approve entries
+    const isTeamHead = req.user.role === 'Team Head';
+    const isTimeSheetVerifier = Array.isArray(req.user.role2)
+      ? req.user.role2.includes('TimeSheet Verifier')
+      : req.user.role2 === 'TimeSheet Verifier';
+    const isAdmin = req.user.role === 'Admin';
+
+    if (!isTeamHead && !isTimeSheetVerifier && !isAdmin) {
+      return res.status(403).json({ message: 'Access denied. You do not have permission to approve entries.' });
+    }
+
+    // Additional authorization check for Team Head - only approve subordinates
+    if (isTeamHead && !isAdmin && !isTimeSheetVerifier) {
+      if (!req.user.team) {
+        return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
+      }
+      if (timesheet.user.team !== req.user.team) {
+        return res.status(403).json({ message: 'Access denied. You can only approve timesheets from your team.' });
+      }
+    }
+
+    // Count entries that need to be accepted (pending or rejected)
+    const entriesToAccept = timesheet.entries.filter(entry => 
+      entry.approvalStatus === 'pending' || entry.approvalStatus === 'rejected'
+    );
+    
+    if (entriesToAccept.length === 0) {
+      return res.status(200).json({ message: 'No entries to accept. All entries are already accepted.', entriesAccepted: 0 });
+    }
+
+    // Accept all pending and rejected entries
+    timesheet.entries.forEach(entry => {
+      if (entry.approvalStatus === 'pending' || entry.approvalStatus === 'rejected') {
+        entry.approvalStatus = 'accepted';
+        entry.approvedBy = req.user._id;
+        entry.approvedAt = new Date();
+      }
+    });
+
+    await timesheet.save();
+
+    // Log activity for accepting all entries
+    const ActivityLogger = (await import('../utils/activityLogger.js')).default;
+    await ActivityLogger.log({
+      userId: req.user._id,
+      action: 'timesheet_entry_approved', // valid enum value
+      entity: 'Timesheet',
+      entityId: timesheetId,
+      description: `Accepted all ${entriesToAccept.length} pending/rejected entries for: ${timesheet.user.firstName} ${timesheet.user.lastName} (${timesheet.date.toISOString().split('T')[0]})`,
+      metadata: {
+        targetUserId: timesheet.user._id,
+        timesheetDate: timesheet.date,
+        entriesAccepted: entriesToAccept.length,
+        totalEntries: timesheet.entries.length
+      },
+      severity: 'medium',
+      targetUserId: timesheet.user._id,
+      req
+    });
+    
+    res.json({ 
+      message: `Successfully accepted ${entriesToAccept.length} pending/rejected entries`, 
+      timesheet,
+      entriesAccepted: entriesToAccept.length 
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

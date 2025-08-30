@@ -23,6 +23,7 @@ function validateTabKey(tabKey) {
     'assignedTasks',
     'billedTasks',
     'unbilledTasks',
+    'costManagement',
     // add more as needed
   ];
   if (!validTabKeys.includes(tabKey)) {

@@ -1097,9 +1097,20 @@ const ReceivedTasks = () => {
         />
       </ErrorBoundary>
       <CreateTask
+        key={showCreateTaskModal ? Date.now() : 'closed'} // Force re-mount when modal opens
         isOpen={showCreateTaskModal}
         onClose={() => setShowCreateTaskModal(false)}
         users={users}
+        onSubmit={async (createdTasks) => {
+          // Handle successful task creation
+          if (createdTasks && Array.isArray(createdTasks) && createdTasks.length > 0) {
+            // Add new tasks to the beginning of the tasks list
+            setTasks(prevTasks => [...createdTasks, ...prevTasks]);
+            
+            // Optionally refresh the task counts and other data
+            await fetchTasksAndTabState();
+          }
+        }}
       />
     </div>
   );

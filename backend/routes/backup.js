@@ -6,6 +6,11 @@ import { fileURLToPath } from 'url';
 import { protect } from '../middleware/authMiddleware.js';
 import admin from '../middleware/admin.js';
 import ActivityLogger from '../utils/activityLogger.js';
+import Task from '../models/Task.js';
+import User from '../models/User.js';
+import Priority from '../models/Priority.js';
+import TaskStatus from '../models/TaskStatus.js';
+import WorkType from '../models/WorkType.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -241,6 +246,105 @@ router.get('/database', protect, admin, async (req, res) => {
 
     res.status(500).json({ 
       message: 'Internal server error during backup', 
+      error: error.message 
+    });
+  }
+});
+
+// Get all users for Excel export dropdown
+router.get('/users', protect, admin, async (req, res) => {
+  try {
+    const users = await User.find({ 
+      isEmailVerified: true, 
+      status: { $ne: 'rejected' } 
+    }).select('firstName lastName email').sort({ firstName: 1 });
+    
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users for backup:', error);
+    res.status(500).json({ 
+      message: 'Error fetching users', 
+      error: error.message 
+    });
+  }
+});
+
+// Get tasks by user for Excel export
+router.get('/tasks/:userId', protect, admin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const tasks = await Task.find({ assignedTo: userId })
+      .populate('assignedTo', 'firstName lastName email')
+      .populate('assignedBy', 'firstName lastName email')
+      .populate('verificationAssignedTo', 'firstName lastName email')
+      .populate('secondVerificationAssignedTo', 'firstName lastName email')
+      .populate('thirdVerificationAssignedTo', 'firstName lastName email')
+      .populate('fourthVerificationAssignedTo', 'firstName lastName email')
+      .populate('fifthVerificationAssignedTo', 'firstName lastName email')
+      .populate('guides', 'firstName lastName email')
+      .sort({ createdAt: -1 });
+
+    res.json(tasks);
+  } catch (error) {
+    console.error('Error fetching tasks for user:', error);
+    res.status(500).json({ 
+      message: 'Error fetching tasks for user', 
+      error: error.message 
+    });
+  }
+});
+
+// Get all data for complete Excel export
+router.get('/all-data', protect, admin, async (req, res) => {
+  try {
+    // Fetch all data in parallel
+    const [tasks, priorities, taskStatuses, workTypes] = await Promise.all([
+      Task.find({})
+        .populate('assignedTo', 'firstName lastName email')
+        .populate('assignedBy', 'firstName lastName email')
+        .populate('verificationAssignedTo', 'firstName lastName email')
+        .populate('secondVerificationAssignedTo', 'firstName lastName email')
+        .populate('thirdVerificationAssignedTo', 'firstName lastName email')
+        .populate('fourthVerificationAssignedTo', 'firstName lastName email')
+        .populate('fifthVerificationAssignedTo', 'firstName lastName email')
+        .populate('guides', 'firstName lastName email')
+        .sort({ createdAt: -1 }),
+      
+      // Get all priorities (including default ones)
+      Priority.find({ isDefault: false }).sort({ order: 1, createdAt: 1 }),
+      
+      // Get all task statuses
+      TaskStatus.find({}).sort({ order: 1, createdAt: 1 }),
+      
+      // Get all work types
+      WorkType.find({}).sort({ name: 1 })
+    ]);
+
+    // Add default priorities
+    const defaultPriorities = [
+      { name: 'urgent', isDefault: true, order: 1 },
+      { name: 'today', isDefault: true, order: 2 },
+      { name: 'lessThan3Days', isDefault: true, order: 3 },
+      { name: 'thisWeek', isDefault: true, order: 4 },
+      { name: 'thisMonth', isDefault: true, order: 5 },
+      { name: 'regular', isDefault: true, order: 6 },
+      { name: 'filed', isDefault: true, order: 7 },
+      { name: 'dailyWorksOffice', isDefault: true, order: 8 },
+      { name: 'monthlyWorks', isDefault: true, order: 9 }
+    ];
+    const allPriorities = [...defaultPriorities, ...priorities];
+
+    res.json({
+      tasks,
+      priorities: allPriorities,
+      taskStatuses,
+      workTypes
+    });
+  } catch (error) {
+    console.error('Error fetching all data:', error);
+    res.status(500).json({ 
+      message: 'Error fetching all data', 
       error: error.message 
     });
   }
