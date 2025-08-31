@@ -55,6 +55,13 @@ const CreateTask = ({
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const assignSearchInputRef = useRef(null);
+  // Focus the Assign To search input when dropdown opens
+  useEffect(() => {
+    if (isDropdownOpen && assignSearchInputRef.current) {
+      assignSearchInputRef.current.focus();
+    }
+  }, [isDropdownOpen]);
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const modalRef = useRef(null);
@@ -336,9 +343,12 @@ const CreateTask = ({
       console.log('[EditModal-FIX] assignedToRaw:', assignedToRaw);
       console.log('[EditModal-FIX] users:', users);
       console.log('[EditModal-FIX] assignedUserIds:', assignedUserIds);
-      const selected = users.filter(u => assignedUserIds.includes(u._id));
+      const selected = usersWithCurrent.filter(u => assignedUserIds.includes(u._id));
       console.log('[EditModal-FIX] selectedUsers to set:', selected);
       setSelectedUsers(selected);
+      
+      // Set multi-user assignment toggle based on number of assigned users
+      setIsMultiUserAssign(assignedUserIds.length > 1);
     } else if (mode === 'create' && isOpen) {
       const { date, time } = getCurrentDateTime();
       
@@ -368,6 +378,7 @@ const CreateTask = ({
       });
       setClientSearchTerm('');
       setSelectedUsers([]);
+      setIsMultiUserAssign(false); // Reset multi-user toggle for create mode
     }
   }, [mode, initialData, isOpen, users]);
 
@@ -390,9 +401,12 @@ const CreateTask = ({
       console.log('[EditModal-FIX][users effect] assignedToRaw:', assignedToRaw);
       console.log('[EditModal-FIX][users effect] users:', users);
       console.log('[EditModal-FIX][users effect] assignedUserIds:', assignedUserIds);
-      const selected = users.filter(u => assignedUserIds.includes(u._id));
+      const selected = usersWithCurrent.filter(u => assignedUserIds.includes(u._id));
       console.log('[EditModal-FIX][users effect] selectedUsers to set:', selected);
       setSelectedUsers(selected);
+      
+      // Set multi-user assignment toggle based on number of assigned users
+      setIsMultiUserAssign(assignedUserIds.length > 1);
     }
     // eslint-disable-next-line
   }, [users, initialData, isOpen, mode]);
@@ -410,8 +424,17 @@ const CreateTask = ({
       return;
     }
 
+
     if (!formData.clientName.trim()) {
       toast.error('Client Name is required');
+      return;
+    }
+    // Validate that clientName matches a real client
+    const clientExists = clients.some(
+      c => c.name.trim().toLowerCase() === formData.clientName.trim().toLowerCase()
+    );
+    if (!clientExists) {
+      toast.error('Please select a valid client from the list.');
       return;
     }
 
@@ -479,10 +502,27 @@ const CreateTask = ({
       // Log for debugging
       console.log('Submitting task with inwardEntryDate:', combinedInwardEntryDate);
 
+      // Handle assignedTo differently for create vs edit mode
+      let assignedToData;
+      if (mode === 'edit') {
+        // For edit mode, send only the first user to update the current task
+        assignedToData = formData.assignedTo.length > 0 ? formData.assignedTo[0] : null;
+        
+        // Validate that we have at least one user assigned
+        if (!assignedToData) {
+          toast.error('Please select at least one user to assign the task to');
+          setUploading(false);
+          return;
+        }
+      } else {
+        // For create mode, send the array as usual
+        assignedToData = Array.isArray(formData.assignedTo) ? formData.assignedTo.filter(Boolean) : [formData.assignedTo].filter(Boolean);
+      }
+
       const taskData = {
         ...formData,
         inwardEntryDate: combinedInwardEntryDate,
-        assignedTo: Array.isArray(formData.assignedTo) ? formData.assignedTo.filter(Boolean) : [formData.assignedTo].filter(Boolean),
+        assignedTo: assignedToData,
         inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
         billed: formData.billed
       };
@@ -502,7 +542,42 @@ const CreateTask = ({
           throw new Error(errorData.message || 'Failed to update task');
         }
         updatedTask = await response.json();
-        toast.success('Task updated successfully');
+        
+        // If there are additional users to assign, create new tasks for them
+        if (formData.assignedTo.length > 1) {
+          const additionalUsers = formData.assignedTo.slice(1); // Skip the first user
+          const additionalTaskData = {
+            ...formData,
+            inwardEntryDate: combinedInwardEntryDate,
+            assignedTo: additionalUsers,
+            inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
+            billed: formData.billed
+          };
+          
+          try {
+            const additionalResponse = await fetch(`${API_BASE_URL}/api/tasks`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${loggedInUser.token}`,
+              },
+              body: JSON.stringify(additionalTaskData),
+            });
+            
+            if (additionalResponse.ok) {
+              const additionalTasks = await additionalResponse.json();
+              toast.success(`Task updated and ${additionalTasks.length} additional task(s) created for other users`);
+            } else {
+              toast.warning('Task updated but failed to create additional tasks for other users');
+            }
+          } catch (additionalError) {
+            console.error('Error creating additional tasks:', additionalError);
+            toast.warning('Task updated but failed to create additional tasks for other users');
+          }
+        } else {
+          toast.success('Task updated successfully');
+        }
+        
         if (onSubmit) onSubmit(updatedTask);
         onClose();
       } else {
@@ -610,10 +685,20 @@ const CreateTask = ({
         return;
       }
 
+      // Handle assignedTo - use only the first user for the update (same logic as handleSubmit)
+      let assignedToData = formData.assignedTo.length > 0 ? formData.assignedTo[0] : null;
+      
+      // Validate that we have at least one user assigned
+      if (!assignedToData) {
+        toast.error('Please select at least one user to assign the task to');
+        setUploading(false);
+        return;
+      }
+
       const taskData = {
         ...formData,
         inwardEntryDate: combinedInwardEntryDate,
-        assignedTo: Array.isArray(formData.assignedTo) ? formData.assignedTo.filter(Boolean) : [formData.assignedTo].filter(Boolean),
+        assignedTo: assignedToData,
         inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
         billed: formData.billed
       };
@@ -635,6 +720,38 @@ const CreateTask = ({
 
       const updatedTask = await updateResponse.json();
 
+      // If there are additional users to assign, create new tasks for them
+      if (formData.assignedTo.length > 1) {
+        const additionalUsers = formData.assignedTo.slice(1); // Skip the first user
+        const additionalTaskData = {
+          ...formData,
+          inwardEntryDate: combinedInwardEntryDate,
+          assignedTo: additionalUsers,
+          inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
+          billed: formData.billed
+        };
+        
+        try {
+          const additionalResponse = await fetch(`${API_BASE_URL}/api/tasks`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${loggedInUser.token}`,
+            },
+            body: JSON.stringify(additionalTaskData),
+          });
+          
+          if (additionalResponse.ok) {
+            const additionalTasks = await additionalResponse.json();
+            console.log(`Created ${additionalTasks.length} additional task(s) for other users`);
+          } else {
+            console.warn('Failed to create additional tasks for other users');
+          }
+        } catch (additionalError) {
+          console.error('Error creating additional tasks:', additionalError);
+        }
+      }
+
       // Then approve the task
       const approveResponse = await fetch(`${API_BASE_URL}/api/tasks/${initialData._id}/verify`, {
         method: 'POST',
@@ -650,7 +767,11 @@ const CreateTask = ({
         throw new Error(errorData.message || 'Failed to approve task');
       }
 
-      toast.success('Task updated and approved successfully');
+      const successMessage = formData.assignedTo.length > 1 
+        ? `Task updated and approved successfully. ${formData.assignedTo.length - 1} additional task(s) created for other users.`
+        : 'Task updated and approved successfully';
+      
+      toast.success(successMessage);
       if (onSubmit) onSubmit(updatedTask);
       onClose();
     } catch (error) {
@@ -729,14 +850,14 @@ const CreateTask = ({
   };
 
   const handleAssignedToChange = (userId) => {
-    const user = users.find(u => u._id === userId);
+    const user = usersWithCurrent.find(u => u._id === userId);
     if (!user) return;
 
     setFormData(prev => {
       const newAssignedTo = prev.assignedTo.includes(userId)
         ? prev.assignedTo.filter(id => id !== userId)
         : [...prev.assignedTo, userId];
-      setSelectedUsers(users.filter(u => newAssignedTo.includes(u._id)));
+      setSelectedUsers(usersWithCurrent.filter(u => newAssignedTo.includes(u._id)));
       setIsDropdownOpen(false); // Close dropdown after each selection
       return { ...prev, assignedTo: newAssignedTo };
     });
@@ -924,7 +1045,9 @@ const CreateTask = ({
                       type="text"
                       value={clientSearchTerm}
                       onChange={(e) => {
-                        setClientSearchTerm(e.target.value);
+                        const value = e.target.value;
+                        setClientSearchTerm(value);
+                        setFormData(prev => ({ ...prev, clientName: value, clientGroup: value === '' ? '' : prev.clientGroup }));
                         setIsClientDropdownOpen(true);
                       }}
                       onFocus={() => setIsClientDropdownOpen(true)}
@@ -1122,6 +1245,7 @@ const CreateTask = ({
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 onClick={(e) => e.stopPropagation()}
+                                ref={assignSearchInputRef}
                               />
                             </div>
                             <div className="py-1">
@@ -1190,7 +1314,7 @@ const CreateTask = ({
                             const next = !v;
                             if (!next && formData.assignedTo.length > 1) {
                               setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.slice(0, 1) }));
-                              setSelectedUsers(users.filter(u => u._id === formData.assignedTo[0]));
+                              setSelectedUsers(usersWithCurrent.filter(u => u._id === formData.assignedTo[0]));
                             }
                             return next;
                           });
@@ -1204,6 +1328,8 @@ const CreateTask = ({
                       </button>
                       <span className="ml-2 text-xs text-gray-500">Multiple</span>
                     </div>
+                    
+                    
                     {/* Absolutely position chips below dropdown, not affecting Team Head */}
                     {selectedUsers.length > 0 && (
                       <div className="absolute left-0 w-full mt-2 flex flex-wrap gap-2 z-10">

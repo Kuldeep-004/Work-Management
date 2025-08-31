@@ -31,6 +31,7 @@ const Cost = () => {
   // Refs for infinite scroll
   const loadMoreTriggerRef = useRef(null);
   const searchTimeoutRef = useRef(null);
+  const initialLoadCompletedRef = useRef(false);
 
   // Column management state
   const [visibleColumns, setVisibleColumns] = useState([]);
@@ -58,7 +59,7 @@ const Cost = () => {
     if (user?.role === 'Admin') {
       fetchUsers();
     }
-  }, [user, activeTab]);
+  }, [user]);
 
   // Load tab state (visible columns) on mount
   useEffect(() => {
@@ -109,7 +110,7 @@ const Cost = () => {
     };
   }, []);
 
-  // Auto-search effect for task costing with pagination reset
+  // Combined effect for initial load and search with debouncing
   useEffect(() => {
     if (activeTab === 'taskCosting') {
       // Clear the previous timeout
@@ -117,11 +118,20 @@ const Cost = () => {
         clearTimeout(searchTimeoutRef.current);
       }
       
-      // Set a new timeout for debounced search
+      // For initial load (no search), fetch immediately only if not already loaded
+      if (!search.trim() && !initialLoadCompletedRef.current) {
+        initialLoadCompletedRef.current = true;
+        setCurrentPage(1);
+        setCosts([]);
+        fetchCosts('', 1, true);
+        return;
+      }
+      
+      // For all other cases (search queries or clearing search), use debounced search
       searchTimeoutRef.current = setTimeout(() => {
         setCurrentPage(1);
         setCosts([]);
-        fetchCosts(search, 1, true);
+        fetchCosts(search.trim(), 1, true);
       }, 300);
       
       return () => {
@@ -132,10 +142,10 @@ const Cost = () => {
     }
   }, [search, activeTab]);
 
-  // Initial load when switching to task costing tab
+  // Reset initial load flag when switching away from task costing tab
   useEffect(() => {
-    if (activeTab === 'taskCosting' && costs.length === 0) {
-      fetchCosts('', 1, true);
+    if (activeTab !== 'taskCosting') {
+      initialLoadCompletedRef.current = false;
     }
   }, [activeTab]);
 
@@ -576,7 +586,8 @@ const Cost = () => {
           <button
             onClick={() => {
               setActiveTab('taskCosting');
-              setCosts(null); // Clear costs when switching to this tab
+              setCosts([]); // Clear costs when switching to this tab
+              initialLoadCompletedRef.current = false; // Reset initial load flag
             }}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'taskCosting'

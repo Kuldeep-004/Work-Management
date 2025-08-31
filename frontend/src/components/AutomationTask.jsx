@@ -335,9 +335,12 @@ const AutomationTask = ({
       console.log('[EditModal-FIX] assignedToRaw:', assignedToRaw);
       console.log('[EditModal-FIX] users:', users);
       console.log('[EditModal-FIX] assignedUserIds:', assignedUserIds);
-      const selected = users.filter(u => assignedUserIds.includes(u._id));
+      const selected = usersWithCurrent.filter(u => assignedUserIds.includes(u._id));
       console.log('[EditModal-FIX] selectedUsers to set:', selected);
       setSelectedUsers(selected);
+      
+      // Set multi-user assignment toggle based on number of assigned users
+      setIsMultiUserAssign(assignedUserIds.length > 1);
     } else if (mode === 'create' && isOpen) {
       const { date, time } = getCurrentDateTime();
       
@@ -367,6 +370,7 @@ const AutomationTask = ({
       });
       setClientSearchTerm('');
       setSelectedUsers([]);
+      setIsMultiUserAssign(false); // Reset multi-user toggle for create mode
     }
   }, [mode, initialData, isOpen, users]);
 
@@ -389,9 +393,12 @@ const AutomationTask = ({
       console.log('[EditModal-FIX][users effect] assignedToRaw:', assignedToRaw);
       console.log('[EditModal-FIX][users effect] users:', users);
       console.log('[EditModal-FIX][users effect] assignedUserIds:', assignedUserIds);
-      const selected = users.filter(u => assignedUserIds.includes(u._id));
+      const selected = usersWithCurrent.filter(u => assignedUserIds.includes(u._id));
       console.log('[EditModal-FIX][users effect] selectedUsers to set:', selected);
       setSelectedUsers(selected);
+      
+      // Set multi-user assignment toggle based on number of assigned users
+      setIsMultiUserAssign(assignedUserIds.length > 1);
     }
     // eslint-disable-next-line
   }, [users, initialData, isOpen, mode]);
@@ -686,14 +693,14 @@ const AutomationTask = ({
   };
 
   const handleAssignedToChange = (userId) => {
-    const user = users.find(u => u._id === userId);
+    const user = usersWithCurrent.find(u => u._id === userId);
     if (!user) return;
 
     setFormData(prev => {
       const newAssignedTo = prev.assignedTo.includes(userId)
         ? prev.assignedTo.filter(id => id !== userId)
         : [...prev.assignedTo, userId];
-      setSelectedUsers(users.filter(u => newAssignedTo.includes(u._id)));
+      setSelectedUsers(usersWithCurrent.filter(u => newAssignedTo.includes(u._id)));
       setIsDropdownOpen(false); // Close dropdown after each selection
       return { ...prev, assignedTo: newAssignedTo };
     });
@@ -1145,7 +1152,7 @@ const AutomationTask = ({
                             const next = !v;
                             if (!next && formData.assignedTo.length > 1) {
                               setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.slice(0, 1) }));
-                              setSelectedUsers(users.filter(u => u._id === formData.assignedTo[0]));
+                              setSelectedUsers(usersWithCurrent.filter(u => u._id === formData.assignedTo[0]));
                             }
                             return next;
                           });
@@ -1200,7 +1207,7 @@ const AutomationTask = ({
                         selectedUsers.forEach(u => {
                           if (u.team) teamIds.add(u.team.toString());
                         });
-                        const heads = users.filter(
+                        const heads = usersWithCurrent.filter(
                           x => x.team && teamIds.has(x.team.toString()) && x.role === 'Team Head'
                         );
                         if (heads.length === 0) return '';

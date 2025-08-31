@@ -804,6 +804,21 @@ router.put('/:id', protect, async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
 
+    // Validate assignedTo if provided in the update
+    if (req.body.assignedTo) {
+      // Check if assignedTo is an array (which is not supported in update mode)
+      if (Array.isArray(req.body.assignedTo)) {
+        return res.status(400).json({ 
+          message: 'Multiple user assignment is not supported in update mode. Please assign to a single user only.' 
+        });
+      }
+      
+      const assignee = await User.findById(req.body.assignedTo);
+      if (!assignee) {
+        return res.status(404).json({ message: 'Assigned user not found' });
+      }
+    }
+
     // Store old values for activity logging
     const oldValues = {
       title: task.title,
