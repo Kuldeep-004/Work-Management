@@ -128,7 +128,7 @@ const AllUsers = () => {
 
       setUsers(prev => prev.map(u =>
         u._id === userId
-          ? { ...u, role: newRole, team: newRole === 'Senior' ? null : u.team } // Only Senior clears team
+          ? { ...u, role: newRole } // Do not touch team when changing to Senior
           : u
       ));
       toast.success('User role updated successfully');

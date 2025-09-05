@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import CreateTask from './CreateTask';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -12,8 +12,36 @@ import { API_BASE_URL } from '../apiConfig';
 import ReactDOM from 'react-dom';
 import React from 'react';
 import { useAdvancedTaskTableLogic } from './AdvancedTaskTableLogic.jsx';
+import { useAdvancedTableHandlers } from '../hooks/useAdvancedTableHandlers';
 
-const AdvancedTaskTable = ({ 
+// Custom hook for virtualizing the task list
+const useVirtualization = (items, itemHeight = 50, containerHeight = window.innerHeight) => {
+  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 25 });
+  const containerRef = useRef(null);
+
+  const updateVisibleRange = useCallback((scrollTop) => {
+    const start = Math.floor(scrollTop / itemHeight);
+    const numVisible = Math.ceil(containerHeight / itemHeight);
+    const end = Math.min(start + numVisible + 10, items.length); // +10 for buffer
+    setVisibleRange({ start: Math.max(0, start - 10), end }); // -10 for buffer
+  }, [items.length, itemHeight, containerHeight]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      updateVisibleRange(container.scrollTop);
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [updateVisibleRange]);
+
+  return { visibleRange, containerRef };
+};
+
+const AdvancedTaskTable = React.memo(({ 
   tasks, 
   viewType, 
   taskType, 
@@ -38,40 +66,48 @@ const AdvancedTaskTable = ({
   sortBy,
   tabKey = 'defaultTabKey',
   tabId,
-  allColumns, // Accept allColumns prop
-  highlightedTaskId, // Add highlighted task ID prop
-  // Bulk selection props
+  allColumns,
+  highlightedTaskId,
   enableBulkSelection = false,
   selectedTasks = [],
   onTaskSelect,
   isAllSelected = false,
   onSelectAll,
+  externalTableRef = null,
 }) => {
-  // Local state for edit modal
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editTask, setEditTask] = useState(null);
+  // Core state
+  const [tableWidth, setTableWidth] = useState(0);
+  const [scrollbarLeft, setScrollbarLeft] = useState(0);
+  const [scrollbarWidth, setScrollbarWidth] = useState(0);
+  
+  // All refs before any other hooks
+  const permanentScrollbarRef = useRef(null);
 
-  // Handler to open edit modal (used by No column and Edit button)
-  const handleEditTask = (task) => {
-    setEditTask(task);
-    setEditModalOpen(true);
-  };
+  // Use our custom hook for all task-related state and handlers
+  const {
+    editModalOpen,
+    setEditModalOpen,
+    editTask,
+    setEditTask,
+    handleStatusChange,
+    handleVerificationStatusChange,
+    handleTaskSelect,
+    handleEditTask,
+    handleTaskSubmit
+  } = useAdvancedTableHandlers({
+    onStatusChange,
+    onVerificationStatusChange,
+    onTaskSelect,
+    onTaskUpdate,
+    refetchTasks
+  });
 
-  // Handler for submitting the edit modal
-  const handleTaskSubmit = async (updatedOrCreated) => {
-    setEditModalOpen(false);
-    setEditTask(null);
-    // Optimistically update the task in the table
-    if (updatedOrCreated && updatedOrCreated._id) {
-      if (onTaskUpdate) {
-        onTaskUpdate(updatedOrCreated._id, () => updatedOrCreated);
-      }
-      // Optionally refetch just this task for consistency
-      if (refetchTasks) {
-        setTimeout(() => refetchTasks(), 200);
-      }
-    }
-  };
+  // Memoize column-related props before using them
+  const memoizedColumns = useMemo(() => ({
+    visibleColumns,
+    columnWidths,
+    columnOrder,
+  }), [visibleColumns, columnWidths, columnOrder]);
 
 
   const logic = useAdvancedTaskTableLogic({
@@ -87,7 +123,7 @@ const AdvancedTaskTable = ({
 
   // Destructure everything we need from logic
   const {
-    formatDate, formatDateTime, BASE_COLUMNS, PRIORITY_OPTIONS, VERIFICATION_OPTIONS,
+    formatDate, formatDateTime, BASE_COLUMNS, VERIFICATION_OPTIONS,
     STATUS_OPTIONS, DRAG_ROW_CLASS, prevColumnOrder, setPrevColumnOrder,
     dynamicPriorities, setDynamicPriorities, prioritiesLoaded, setPrioritiesLoaded,
     dynamicTaskStatuses, setDynamicTaskStatuses, taskStatusesLoaded, setTaskStatusesLoaded,
@@ -132,8 +168,97 @@ const AdvancedTaskTable = ({
     groupTasksBy, handleRowDragStart, handleRowDragOver, handleRowDrop, handleRowDragEnd,
     handleGroupDrop, saveOrder, saveGroupOrder, getAssignedVerifierIds, getGroupKey, loadMoreTasks,
     shouldShowLoadMore, groupField, shouldGroup, groupedTasks, renderGroupedTasks, user,
-    groupOrder, groupOrderLoaded, isGroupedModeLoading
+    groupOrder, groupOrderLoaded, isGroupedModeLoading, taskTransitions, hiddenTaskIds,
+    startTaskTransition, completeTaskTransition, updateTaskWithTransition
   } = logic;
+
+  // Permanent scrollbar synchronization
+  useEffect(() => {
+    // Use external table ref if provided (for AdminDashboard), otherwise use internal ref
+    const activeTableRef = externalTableRef || tableRef;
+    let scrollContainer = null;
+    
+    const getScrollContainer = () => {
+      if (!activeTableRef.current) return null;
+      
+      let container = activeTableRef.current;
+      
+      // If we have an external ref, find the actual scrolling container
+      if (externalTableRef) {
+        const innerContainer = container.querySelector('.table-wrapper-no-scrollbar');
+        if (innerContainer) {
+          container = innerContainer;
+        }
+      }
+      
+      return container;
+    };
+    
+    const updateScrollbarDimensions = () => {
+      const container = getScrollContainer();
+      if (container) {
+        const table = container.querySelector('table');
+        
+        if (table) {
+          const containerRect = container.getBoundingClientRect();
+          const tableScrollWidth = table.scrollWidth;
+          const containerWidth = container.clientWidth;
+          
+          // Only show scrollbar if table is wider than container
+          // For grouped tables, we need to ensure the scrollbar still works
+          if (tableScrollWidth > containerWidth) {
+            setTableWidth(tableScrollWidth);
+            setScrollbarLeft(containerRect.left);
+            setScrollbarWidth(containerWidth);
+          } else {
+            setTableWidth(0); // Hide scrollbar
+          }
+        }
+      }
+    };
+
+    const handleTableScroll = () => {
+      const container = getScrollContainer();
+      if (container && permanentScrollbarRef.current) {
+        permanentScrollbarRef.current.scrollLeft = container.scrollLeft;
+      }
+    };
+
+    const handlePermanentScroll = () => {
+      const container = getScrollContainer();
+      if (container && permanentScrollbarRef.current) {
+        container.scrollLeft = permanentScrollbarRef.current.scrollLeft;
+      }
+    };
+
+    // Set up event listeners
+    scrollContainer = getScrollContainer();
+    
+    if (scrollContainer) {
+      scrollContainer.addEventListener('scroll', handleTableScroll);
+    }
+    if (permanentScrollbarRef.current) {
+      permanentScrollbarRef.current.addEventListener('scroll', handlePermanentScroll);
+    }
+
+    // Update dimensions on mount, resize, and content changes
+    updateScrollbarDimensions();
+    window.addEventListener('resize', updateScrollbarDimensions);
+    
+    // Update after a short delay to ensure DOM is rendered
+    const timeoutId = setTimeout(updateScrollbarDimensions, 100);
+
+    return () => {
+      if (scrollContainer) {
+        scrollContainer.removeEventListener('scroll', handleTableScroll);
+      }
+      if (permanentScrollbarRef.current) {
+        permanentScrollbarRef.current.removeEventListener('scroll', handlePermanentScroll);
+      }
+      window.removeEventListener('resize', updateScrollbarDimensions);
+      clearTimeout(timeoutId);
+    };
+  }, [tasks, visibleColumns, columnWidths, externalTableRef, shouldGroup, groupedTasks]);
   
 
   // Handle loading state for grouped mode
@@ -147,10 +272,25 @@ const AdvancedTaskTable = ({
 
   return (
     <>
+      {/* CSS for smooth task transitions */}
+      <style>{`
+        .task-row-transition {
+          transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+        }
+        .task-row-hidden {
+          opacity: 0;
+          transform: translateY(-5px);
+        }
+        .task-row-visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      `}</style>
+      
       <div className="pt-4 bg-gray-50 min-h-screen">
-        {/* Responsive table wrapper */}
-        <div className="overflow-x-auto w-full" ref={tableRef}>
-          <table className={`min-w-full divide-y divide-gray-200 ${isResizing ? 'select-none' : ''}`}> 
+        {/* Responsive table wrapper - hide scrollbar */}
+        <div className="table-wrapper-no-scrollbar w-full" ref={tableRef}>
+          <table className={`min-w-full divide-y divide-gray-200 ${isResizing ? 'select-none' : ''}`} style={{ minWidth: 'max-content' }}> 
             {/* Only render thead at the top if not grouping */}
             {!shouldGroup && (
               <thead className="border-b border-gray-200">
@@ -332,7 +472,7 @@ const AdvancedTaskTable = ({
                     {tasksToShow.map((task, idx) => (
                       <tr
                         key={task._id}
-                        className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''}`}
+                        className={`task-row-transition border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''} ${hiddenTaskIds.has(task._id) ? 'task-row-hidden' : 'task-row-visible'}`}
                         draggable
                         onDragStart={e => handleRowDragStart(e, task._id)}
                         onDragOver={e => handleRowDragOver(e, task._id)}
@@ -425,8 +565,7 @@ const AdvancedTaskTable = ({
                               return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 80) + 'px', minWidth: (columnWidths[colId] || 80) + 'px', maxWidth: (columnWidths[colId] || 80) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{task.billed ? 'Yes' : 'No'}</span></div></td>;
                             
                             case 'status':
-                              // Show colored status but disable interaction in 'Task Issued For Verification' and 'Task For Guidance' tabs in Received Tasks
-                              // Allow interaction in 'completed' tab
+                              // Editable for admin dashboard, keep received logic unchanged
                               if (
                                 viewType === 'received' &&
                                 (taskType === 'issuedVerification' || taskType === 'guidance')
@@ -445,6 +584,7 @@ const AdvancedTaskTable = ({
                                 </td>
                               );
                             }
+                            const canEditStatus = viewType === 'admin' || viewType === 'received';
                             return (
                               <td
                                 key={colId}
@@ -455,12 +595,12 @@ const AdvancedTaskTable = ({
                                   maxWidth: (columnWidths[colId] || 120) + 'px',
                                   background: 'white',
                                   overflow: 'visible',
-                                  cursor: viewType === 'received' ? 'pointer' : 'default',
+                                  cursor: canEditStatus ? 'pointer' : 'default',
                                   position: 'relative',
                                   zIndex: editingStatusTaskId === task._id ? 50 : 'auto',
                                 }}
                                 onClick={e => {
-                                  if (viewType === 'received') {
+                                  if (canEditStatus) {
                                     e.stopPropagation();
                                     const rect = e.currentTarget.getBoundingClientRect();
                                     setDropdownPosition({
@@ -490,11 +630,11 @@ const AdvancedTaskTable = ({
                                     {currentStatusOptions.find(opt => opt.value === task.status)?.label || task.status}
                                   </span>
                                   {/* Show dropdown as portal if open */}
-                                  {editingStatusTaskId === task._id && viewType === 'received' && (
+                                  {editingStatusTaskId === task._id && canEditStatus && (
                                     <SearchableStatusDropdown
                                       task={task}
                                       currentStatusOptions={
-                                        viewType === 'received' && taskType === 'execution'
+                                        (viewType === 'received' && taskType === 'execution')
                                           ? currentStatusOptions.filter(opt => opt.value !== 'reject')
                                           : currentStatusOptions
                                       }
@@ -511,8 +651,8 @@ const AdvancedTaskTable = ({
                             );
                           
                             case 'priority':
-                              // Only allow editing if not in guidance or issuedVerification tab
-                              const canEditPriority = viewType === 'received' && (taskType === 'execution' || taskType === 'receivedVerification');
+                              // Editable for admin dashboard, keep received logic unchanged
+                              const canEditPriority = (viewType === 'admin') || (viewType === 'received' && (taskType === 'execution' || taskType === 'receivedVerification'));
                               return (
                                 <td
                                   key={colId}
@@ -540,7 +680,7 @@ const AdvancedTaskTable = ({
                                   }}
                                 >
                                   <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                                    <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getPriorityColor(task.priority)}`}>{PRIORITY_OPTIONS.find(opt => opt.value === task.priority)?.label || task.priority}</span>
+                                    <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getPriorityColor(task.priority)}`}>{getCurrentPriorityOptions().find(opt => opt.value === task.priority)?.label || task.priority}</span>
                                   </div>
                                   {/* Show dropdown as portal if open and canEditPriority */}
                                   {editingPriorityTaskId === task._id && canEditPriority && ReactDOM.createPortal(
@@ -687,7 +827,8 @@ const AdvancedTaskTable = ({
                               );            
                               
                             case 'selfVerification':
-                              const canEditSelfVerification = viewType === 'received' && taskType === 'execution';
+                              // Editable for admin dashboard, keep received logic unchanged
+                              const canEditSelfVerification = (viewType === 'admin') || (viewType === 'received' && taskType === 'execution');
                               
                               return (
                                 <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
@@ -1020,8 +1161,10 @@ const AdvancedTaskTable = ({
                               );
                             }
                             case 'guides':
-                              const guideChipsClass = viewType === 'received' ? 'pr-6' : 'pr-0';
-                              const guideChipsMaxWidth = viewType === 'received' ? 'calc(100% - 28px)' : '100%';
+                              // Editable for admin dashboard, keep received logic unchanged
+                              const isAdmin = viewType === 'admin';
+                              const guideChipsClass = (viewType === 'received' || isAdmin) ? 'pr-6' : 'pr-0';
+                              const guideChipsMaxWidth = (viewType === 'received' || isAdmin) ? 'calc(100% - 28px)' : '100%';
                               return (
                                 <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`}
                                   style={{width: (columnWidths[colId] || 200) + 'px', minWidth: (columnWidths[colId] || 200) + 'px', maxWidth: (columnWidths[colId] || 200) + 'px', background: 'white', overflow: 'hidden'}}>
@@ -1067,7 +1210,7 @@ const AdvancedTaskTable = ({
                                     )}
                                   </div>
                                   {/* Fixed dropdown icon at end, only in received viewType */}
-                                  {viewType === 'received' && (
+                                  {(viewType === 'received' || isAdmin) && (
                                     <button
                                       className="absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-white rounded-full border border-gray-200 hover:bg-blue-100 hover:border-blue-400 transition-colors cursor-pointer z-10"
                                       style={{boxShadow: '0 1px 4px rgba(0,0,0,0.04)'}}
@@ -1086,7 +1229,7 @@ const AdvancedTaskTable = ({
                                     </button>
                                   )}
                                   {/* Dropdown for selecting guides */}
-                                  {viewType === 'received' && openGuideDropdownTaskId === task._id && ReactDOM.createPortal(
+                                  {(viewType === 'received' || isAdmin) && openGuideDropdownTaskId === task._id && ReactDOM.createPortal(
                                     <div
                                       ref={guideDropdownRef}
                                       style={{
@@ -1371,7 +1514,7 @@ const AdvancedTaskTable = ({
                                                   setEditingCustomTextValue(customValue || columnDef.defaultValue || '');
                                                 }}
                                               >
-                                                {customValue || columnDef.defaultValue || 'Click to edit...'}
+                                                {customValue || columnDef.defaultValue || ''}
                                               </div>
                                             )}
                                           </>
@@ -1404,7 +1547,7 @@ const AdvancedTaskTable = ({
                 orderedTasks.slice(0, loadedTasksCount).map((task, idx) => (
                   <tr
                     key={task._id}
-                    className={`border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''}`}
+                    className={`task-row-transition border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''} ${hiddenTaskIds.has(task._id) ? 'task-row-hidden' : 'task-row-visible'}`}
                     draggable
                     onDragStart={e => handleRowDragStart(e, task._id)}
                     onDragOver={e => handleRowDragOver(e, task._id)}
@@ -1613,7 +1756,7 @@ const AdvancedTaskTable = ({
                             }}
                           >
                             <div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}>
-                              <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getPriorityColor(task.priority)}`}>{PRIORITY_OPTIONS.find(opt => opt.value === task.priority)?.label || task.priority}</span>
+                              <span className={`inline-block px-2 py-1 rounded-4xl text-xs font-semibold ${getPriorityColor(task.priority)}`}>{getCurrentPriorityOptions().find(opt => opt.value === task.priority)?.label || task.priority}</span>
                             </div>
                             {/* Show dropdown as portal if open and canEditPriority */}
                             {editingPriorityTaskId === task._id && canEditPriority && ReactDOM.createPortal(
@@ -2430,7 +2573,7 @@ const AdvancedTaskTable = ({
                                             setEditingCustomTextValue(customValue || columnDef.defaultValue || '');
                                           }}
                                         >
-                                          {customValue || columnDef.defaultValue || 'Click to edit...'}
+                                          {customValue || columnDef.defaultValue || ''}
                                         </div>
                                       )}
                                     </>
@@ -2595,8 +2738,24 @@ const AdvancedTaskTable = ({
           hideFileSection={true}
         />
       )}
+
+      {/* Permanent horizontal scrollbar */}
+      {tableWidth > 0 && (
+        <div 
+          className="permanent-bottom-scrollbar"
+          ref={permanentScrollbarRef}
+          style={{
+            left: scrollbarLeft,
+            width: scrollbarWidth,
+          }}
+        >
+          <div className="scrollbar-content" style={{ width: tableWidth }}></div>
+        </div>
+      )}
     </>
   );
-};
+;
+
+});
 
 export default AdvancedTaskTable; 

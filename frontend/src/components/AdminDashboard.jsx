@@ -207,27 +207,12 @@ const AdminDashboard = () => {
     setTabs(tabs.map(tab => {
       if (tab.id !== activeTabId) return tab;
       let newTab = { ...tab, ...patch };
-      // If grouping by 'priority', always reset groupOrder to fixed order
+      // If grouping by 'priority', always reset groupOrder to database order
       if (patch.groupBy === 'priority') {
-        // Build fixed group order: default priorities first, then custom
-        const defaultPriorityNames = [
-          'urgent',
-          'today',
-          'lessThan3Days',
-          'thisWeek',
-          'thisMonth',
-          'regular',
-          'filed',
-          'dailyWorksOffice',
-          'monthlyWorks'
-        ];
-        let groupOrder = [...defaultPriorityNames];
-        // Add custom priorities (not in default list) at the end
-        priorities
-          .filter(p => !defaultPriorityNames.includes(p.name))
-          .forEach(priority => {
-            groupOrder.push(priority.name);
-          });
+        // Build group order using database priorities
+        let groupOrder = priorities
+          .sort((a, b) => (a.order || 0) - (b.order || 0))
+          .map(p => p.name);
         newTab.groupOrder = groupOrder;
       }
       if (patch.visibleColumns) {
@@ -525,30 +510,11 @@ const AdminDashboard = () => {
     if (!Array.isArray(tasks)) return [];
     const filters = filtersToUse || activeTabObj.filters;
 
-    // Priority order mapping for sorting - default priorities first, then custom
-    const defaultPriorityNames = [
-      'urgent',
-      'today',
-      'lessThan3Days',
-      'thisWeek',
-      'thisMonth',
-      'regular',
-      'filed',
-      'dailyWorksOffice',
-      'monthlyWorks'
-    ];
+    // Priority order mapping for sorting - use database order
     const priorityOrder = {};
-    // Add default priorities in fixed order
-    let order = 1;
-    defaultPriorityNames.forEach(name => {
-      priorityOrder[name] = order++;
+    priorities.forEach((priority, index) => {
+      priorityOrder[priority.name] = priority.order || (index + 1);
     });
-    // Add custom priorities (not in default list) at the end
-    priorities
-      .filter(p => !defaultPriorityNames.includes(p.name))
-      .forEach((priority, idx) => {
-        priorityOrder[priority.name] = 100 + idx;
-      });
 
     let filteredTasks = tasks.filter(task => {
       // Exclude tasks with verificationStatus 'pending'
@@ -684,25 +650,34 @@ const AdminDashboard = () => {
   };
 
   const getPriorityColor = (priority) => {
+    // Find the priority in the priorities list to get its color
+    if (priorities.length > 0) {
+      const foundPriority = priorities.find(p => p.name === priority);
+      if (foundPriority && foundPriority.color) {
+        return foundPriority.color;
+      }
+    }
+    
+    // Fallback to default colors if priority not found
     switch (priority) {
       case 'urgent':
-        return 'bg-red-100 text-red-800 border border-red-200'; // Red - Highest importance
+        return 'bg-red-100 text-red-800 border border-red-200';
       case 'today':
-        return 'bg-orange-100 text-orange-800 border border-orange-200'; // Orange - Very high importance
+        return 'bg-orange-100 text-orange-800 border border-orange-200';
       case 'lessThan3Days':
-        return 'bg-yellow-100 text-yellow-800 border border-yellow-200'; // Yellow - High importance
+        return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
       case 'thisWeek':
-        return 'bg-blue-100 text-blue-800 border border-blue-200'; // Blue - Medium-high importance
+        return 'bg-blue-100 text-blue-800 border border-blue-200';
       case 'thisMonth':
-        return 'bg-indigo-100 text-indigo-800 border border-indigo-200'; // Indigo - Medium importance
+        return 'bg-indigo-100 text-indigo-800 border border-indigo-200';
       case 'regular':
-        return 'bg-gray-100 text-gray-800 border border-gray-200'; // Gray - Normal importance
+        return 'bg-gray-100 text-gray-800 border border-gray-200';
       case 'filed':
-        return 'bg-purple-100 text-purple-800 border border-purple-200'; // Purple - Low importance
+        return 'bg-purple-100 text-purple-800 border border-purple-200';
       case 'dailyWorksOffice':
-        return 'bg-teal-100 text-teal-800 border border-teal-200'; // Teal - Very low importance
+        return 'bg-teal-100 text-teal-800 border border-teal-200';
       case 'monthlyWorks':
-        return 'bg-slate-100 text-slate-600 border border-slate-200'; // Slate - Lowest importance
+        return 'bg-slate-100 text-slate-600 border border-slate-200';
       default:
         return 'bg-gray-100 text-gray-800 border border-gray-200';
     }
@@ -1975,19 +1950,38 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {/* Responsive table wrapper */}
-      <div className="overflow-x-auto w-full" ref={tableRef}>
+      {/* Responsive table wrapper - hide scrollbar */}
+      <div className="table-wrapper-no-scrollbar w-full" ref={tableRef}>
         <AdvancedTaskTable
           tasks={getFilteredAndSortedTasks(tasks, isFilterPopupOpen ? filterDraft : activeTabObj.filters)}
           viewType="admin"
           taskType={null}
+          externalTableRef={tableRef}
           onTaskUpdate={(taskId, updater) => {
             setTasks(prevTasks => prevTasks.map(task =>
               task._id === taskId ? updater(task) : task
             ));
           }}
           onTaskDelete={() => {}}
-          onStatusChange={() => {}}
+          onStatusChange={async (taskId, newStatus) => {
+            try {
+              const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${user.token}`,
+                },
+                body: JSON.stringify({ status: newStatus }),
+              });
+              if (!response.ok) throw new Error('Failed to update status');
+              const updatedTask = await response.json();
+              setTasks(prevTasks => prevTasks.map(task =>
+                task._id === taskId ? updatedTask : task
+              ));
+            } catch (err) {
+              toast.error('Failed to update status');
+            }
+          }}
           shouldDisableActions={() => false}
           shouldDisableFileActions={() => true}
           taskHours={taskHours}

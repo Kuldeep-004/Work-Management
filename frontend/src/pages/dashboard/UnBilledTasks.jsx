@@ -42,6 +42,7 @@ const UnBilledTasks = () => {
   const [filters, setFilters] = useState([]);
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const columnsDropdownRef = useRef(null);
+  const tableRef = useRef(null);
   const filterPopupRef = useRef(null);
   const tabId = 'unbilledTasksMain';
   const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
@@ -201,30 +202,33 @@ const UnBilledTasks = () => {
           )}
         </div>
       </div>
-      <AdvancedTaskTable
-        tasks={sortBy ? tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))
-                      .sort((a, b) => {
-                        let aValue = a[sortBy];
-                        let bValue = b[sortBy];
-                        if (sortBy === 'createdAt') {
-                          aValue = new Date(aValue);
-                          bValue = new Date(bValue);
-                        } else if (sortBy === 'priority') {
-                          // Generate priority order dynamically
-                          const priorityOrder = {};
-                          priorities.forEach((priority, index) => {
-                            priorityOrder[priority.name] = priority.order || (priority.isDefault ? index + 1 : index + 100);
-                          });
-                          aValue = priorityOrder[aValue] || 999;
-                          bValue = priorityOrder[bValue] || 999;
-                        }
-                        if (aValue < bValue) return -1;
-                        if (aValue > bValue) return 1;
-                        return 0;
-                      })
-                    : tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))}
-        viewType="unbilled"
-        visibleColumns={visibleColumns}
+      {/* Responsive table wrapper - hide scrollbar */}
+      <div className="table-wrapper-no-scrollbar w-full" ref={tableRef}>
+        <AdvancedTaskTable
+          tasks={sortBy ? tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))
+                        .sort((a, b) => {
+                          let aValue = a[sortBy];
+                          let bValue = b[sortBy];
+                          if (sortBy === 'createdAt') {
+                            aValue = new Date(aValue);
+                            bValue = new Date(bValue);
+                          } else if (sortBy === 'priority') {
+                            // Generate priority order dynamically
+                            const priorityOrder = {};
+                            priorities.forEach((priority, index) => {
+                              priorityOrder[priority.name] = priority.order || (priority.isDefault ? index + 1 : index + 100);
+                            });
+                            aValue = priorityOrder[aValue] || 999;
+                            bValue = priorityOrder[bValue] || 999;
+                          }
+                          if (aValue < bValue) return -1;
+                          if (aValue > bValue) return 1;
+                          return 0;
+                        })
+                      : tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))}
+          viewType="unbilled"
+          externalTableRef={tableRef}
+          visibleColumns={visibleColumns}
         columnOrder={columnOrder}
         setColumnOrder={setColumnOrder}
         columnWidths={columnWidths}
@@ -235,6 +239,7 @@ const UnBilledTasks = () => {
         tabKey="unbilledTasks"
         tabId="unbilledTasksMain"
       />
+      </div>
     </div>
   );
 };

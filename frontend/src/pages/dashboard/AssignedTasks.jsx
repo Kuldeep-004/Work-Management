@@ -144,6 +144,7 @@ const AssignedTasks = () => {
   });
   const [isFilterPopupOpen, setIsFilterPopupOpen] = useState(false);
   const filterPopupRef = useRef(null);
+  const tableRef = useRef(null);
   const [clientNames, setClientNames] = useState([]);
   const [clientGroups, setClientGroups] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
@@ -775,9 +776,12 @@ const AssignedTasks = () => {
         </div>
       </div>
       <ErrorBoundary>
-        <AdvancedTaskTable
-          tasks={getFilteredAndSortedTasks(tasks)}
-          viewType="assigned"
+        {/* Responsive table wrapper - hide scrollbar */}
+        <div className="table-wrapper-no-scrollbar w-full" ref={tableRef}>
+          <AdvancedTaskTable
+            tasks={getFilteredAndSortedTasks(tasks)}
+            viewType="assigned"
+            externalTableRef={tableRef}
           taskType={activeTabObj.activeTab}
           highlightedTaskId={highlightedTaskId}
           onTaskUpdate={(taskId, updater) => {
@@ -804,6 +808,7 @@ const AssignedTasks = () => {
           dynamicColumns={allColumns}
           customColumns={customColumns}
         />
+        </div>
       </ErrorBoundary>
       {/* Edit Task Modal */}
       {editModalOpen && (

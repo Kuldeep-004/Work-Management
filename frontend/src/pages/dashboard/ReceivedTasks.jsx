@@ -116,6 +116,7 @@ const ReceivedTasks = () => {
   const [priorities, setPriorities] = useState([]);
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const columnsDropdownRef = useRef(null);
+  const tableRef = useRef(null);
   const [taskHours, setTaskHours] = useState([]);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
@@ -1046,11 +1047,14 @@ const ReceivedTasks = () => {
         </div>
       </div>
       <ErrorBoundary>
-        <AdvancedTaskTable
-          tasks={getFilteredAndSortedTasks(tasks)}
-          viewType="received"
-          taskType={activeTabObj.activeTab}
-          users={users}
+        {/* Responsive table wrapper - hide scrollbar */}
+        <div className="table-wrapper-no-scrollbar w-full" ref={tableRef}>
+          <AdvancedTaskTable
+            tasks={getFilteredAndSortedTasks(tasks)}
+            viewType="received"
+            taskType={activeTabObj.activeTab}
+            externalTableRef={tableRef}
+            users={users}
           currentUser={user}
           highlightedTaskId={highlightedTaskId}
           onTaskUpdate={async (taskId, updater) => {
@@ -1095,6 +1099,7 @@ const ReceivedTasks = () => {
           tabKey="receivedTasks"
           allColumns={extendedColumns}
         />
+        </div>
       </ErrorBoundary>
       <CreateTask
         key={showCreateTaskModal ? Date.now() : 'closed'} // Force re-mount when modal opens

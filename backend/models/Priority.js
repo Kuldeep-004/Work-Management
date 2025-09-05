@@ -7,20 +7,19 @@ const prioritySchema = new mongoose.Schema({
     unique: true,
     trim: true
   },
-  isDefault: {
-    type: Boolean,
-    default: false
+  color: {
+    type: String,
+    required: true,
+    default: 'bg-gray-100 text-gray-800 border border-gray-200'
   },
   order: {
     type: Number,
-    default: 100 // Custom priorities start from order 100
+    required: true
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: function() {
-      return !this.isDefault;
-    }
+    required: true
   }
 }, {
   timestamps: true
@@ -28,6 +27,5 @@ const prioritySchema = new mongoose.Schema({
 
 // Index for efficient querying
 prioritySchema.index({ order: 1 });
-prioritySchema.index({ isDefault: 1 });
 
 export default mongoose.model('Priority', prioritySchema);

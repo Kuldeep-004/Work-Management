@@ -25,21 +25,12 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
-// Helper function to validate priority - check both static and dynamic priorities
+// Helper function to validate priority - check if priority exists in database
 const isValidPriority = async (priorityName) => {
-  // Default/static priorities that always exist
-  const defaultPriorities = [
-    'urgent', 'today', 'lessThan3Days', 'thisWeek', 'thisMonth', 
-    'regular', 'filed', 'dailyWorksOffice', 'monthlyWorks'
-  ];
-  
-  // Check if it's a default priority
-  if (defaultPriorities.includes(priorityName)) {
-    return true;
-  }
-  
-  // Check if it's a custom priority in database
-  const priority = await Priority.findOne({ name: priorityName, isDefault: false });
+  console.log(`Validating priority: "${priorityName}"`);
+  // All priorities are now stored in the database
+  const priority = await Priority.findOne({ name: priorityName });
+  console.log(`Priority found in DB: ${!!priority}`);
   return !!priority;
 };
 
@@ -1047,8 +1038,11 @@ router.patch('/:taskId/priority', protect, async (req, res) => {
 
     const { priority } = req.body;
 
-    // Validate priority dynamically (includes both default and custom priorities)
+    console.log(`Priority update attempt: Task ${req.params.taskId}, Priority: "${priority}"`);
+
+    // Validate priority against database
     if (!(await isValidPriority(priority))) {
+      console.log(`Priority validation failed for: "${priority}"`);
       return res.status(400).json({ message: 'Invalid priority value' });
     }
 

@@ -42,9 +42,20 @@ const activityLogSchema = new mongoose.Schema(
         
         // Work Type actions
         'work_type_created', 'work_type_updated', 'work_type_deleted',
+        // New work type propagation actions
+        'UPDATE_WORK_TYPE_WITH_TASK_PROPAGATION',
+        'DELETE_WORK_TYPE',
+        'UPDATE_WORK_TYPE_FAILED',
+        'BULK_UPDATE_WORK_TYPE_IN_TASKS',
+        'BULK_UPDATE_WORK_TYPE_FAILED',
         
         // Priority actions
         'priority_created', 'priority_updated', 'priority_deleted',
+        'priority_bulk_updated', 'priorities_order_updated',
+        
+        // Task Status actions
+        'task_status_created', 'task_status_updated', 'task_status_deleted', 'task_status_reordered',
+        'task_status_bulk_updated',
         
         // Automation actions
         'automation_created', 'automation_updated', 'automation_deleted',

@@ -38,6 +38,7 @@ const BilledTasks = () => {
   const [tableStateLoaded, setTableStateLoaded] = useState(false);
   const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
   const [rowOrder, setRowOrder] = useState([]);
+  const tableRef = useRef(null);
   const tabId = 'billedTasksMain';
 
   // Fetch full table state from backend on mount
@@ -184,19 +185,21 @@ const BilledTasks = () => {
           )}
         </div>
       </div>
-      <AdvancedTaskTable
-        tasks={sortBy ? tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))
-                      .sort((a, b) => {
-                        let aValue = a[sortBy];
-                        let bValue = b[sortBy];
-                        if (sortBy === 'createdAt') {
-                          aValue = new Date(aValue);
-                          bValue = new Date(bValue);
-                        } else if (sortBy === 'priority') {
-                          const priorityOrder = {
-                            'urgent': 1,
-                            'today': 2,
-                            'lessThan3Days': 3,
+      {/* Responsive table wrapper - hide scrollbar */}
+      <div className="table-wrapper-no-scrollbar w-full" ref={tableRef}>
+        <AdvancedTaskTable
+          tasks={sortBy ? tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))
+                        .sort((a, b) => {
+                          let aValue = a[sortBy];
+                          let bValue = b[sortBy];
+                          if (sortBy === 'createdAt') {
+                            aValue = new Date(aValue);
+                            bValue = new Date(bValue);
+                          } else if (sortBy === 'priority') {
+                            const priorityOrder = {
+                              'urgent': 1,
+                              'today': 2,
+                              'lessThan3Days': 3,
                             'thisWeek': 4,
                             'thisMonth': 5,
                             'regular': 6,
@@ -212,8 +215,9 @@ const BilledTasks = () => {
                         return 0;
                       })
                     : tasks.filter(task => task.title.toLowerCase().includes(searchTerm.toLowerCase()))}
-        viewType="billed"
-        visibleColumns={visibleColumns}
+          viewType="billed"
+          externalTableRef={tableRef}
+          visibleColumns={visibleColumns}
         setVisibleColumns={setVisibleColumns}
         columnOrder={columnOrder}
         setColumnOrder={setColumnOrder}
@@ -225,6 +229,7 @@ const BilledTasks = () => {
         tabKey="billedTasks"
         tabId="billedTasksMain"
       />
+      </div>
     </div>
   );
 };

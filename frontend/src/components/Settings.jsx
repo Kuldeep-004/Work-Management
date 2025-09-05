@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../apiConfig';
 import ColumnManagement from './ColumnManagement';
 import * as XLSX from 'xlsx';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 const Settings = () => {
   const { user, updateUser } = useAuth();
@@ -22,10 +23,10 @@ const Settings = () => {
   // Priority management state
   const [priorities, setPriorities] = useState([]);
   const [loadingPriorities, setLoadingPriorities] = useState(false);
-  const [newPriorityName, setNewPriorityName] = useState('');
+  const [newPriorityData, setNewPriorityData] = useState({ name: '', color: 'bg-gray-100 text-gray-800 border border-gray-200' });
   const [addingPriority, setAddingPriority] = useState(false);
   const [editingPriority, setEditingPriority] = useState(null);
-  const [editPriorityName, setEditPriorityName] = useState('');
+  const [editPriorityData, setEditPriorityData] = useState({ name: '', color: '' });
   const [updatingPriority, setUpdatingPriority] = useState(false);
   const [prioritySearchTerm, setPrioritySearchTerm] = useState('');
 
@@ -189,7 +190,7 @@ const Settings = () => {
   };
 
   const addPriority = async () => {
-    if (!newPriorityName.trim()) {
+    if (!newPriorityData.name.trim()) {
       toast.error('Priority name is required');
       return;
     }
@@ -202,7 +203,10 @@ const Settings = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${user.token}`,
         },
-        body: JSON.stringify({ name: newPriorityName.trim() }),
+        body: JSON.stringify({ 
+          name: newPriorityData.name.trim(),
+          color: newPriorityData.color
+        }),
       });
 
       if (!response.ok) {
@@ -211,7 +215,7 @@ const Settings = () => {
       }
 
       toast.success('Priority added successfully');
-      setNewPriorityName('');
+      setNewPriorityData({ name: '', color: 'bg-gray-100 text-gray-800 border border-gray-200' });
       fetchPriorities();
     } catch (error) {
       toast.error(error.message);
@@ -241,8 +245,8 @@ const Settings = () => {
     }
   };
 
-  const updatePriority = async (priorityId, newName) => {
-    if (!newName.trim()) {
+  const updatePriority = async (priorityId, newData) => {
+    if (!newData.name.trim()) {
       toast.error('Priority name is required');
       return;
     }
@@ -255,7 +259,10 @@ const Settings = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${user.token}`,
         },
-        body: JSON.stringify({ name: newName.trim() }),
+        body: JSON.stringify({ 
+          name: newData.name.trim(),
+          color: newData.color
+        }),
       });
 
       if (!response.ok) {
@@ -265,7 +272,7 @@ const Settings = () => {
 
       toast.success('Priority updated successfully');
       setEditingPriority(null);
-      setEditPriorityName('');
+      setEditPriorityData({ name: '', color: '' });
       fetchPriorities();
     } catch (error) {
       toast.error(error.message);
@@ -276,12 +283,149 @@ const Settings = () => {
 
   const handleEditPriority = (priority) => {
     setEditingPriority(priority._id);
-    setEditPriorityName(priority.name);
+    setEditPriorityData({ 
+      name: priority.name,
+      color: priority.color || 'bg-gray-100 text-gray-800 border border-gray-200' 
+    });
   };
 
   const cancelEditPriority = () => {
     setEditingPriority(null);
-    setEditPriorityName('');
+    setEditPriorityData({ name: '', color: '' });
+  };
+
+  // Handle priority drag and drop
+  const handlePriorityDragEnd = async (result) => {
+    if (!result.destination) {
+      return;
+    }
+
+    const filteredPriorities = priorities.filter(priority => 
+      prioritySearchTerm === '' || 
+      priority.name.toLowerCase().includes(prioritySearchTerm.toLowerCase())
+    );
+
+    const reorderedPriorities = Array.from(filteredPriorities);
+    const [reorderedItem] = reorderedPriorities.splice(result.source.index, 1);
+    reorderedPriorities.splice(result.destination.index, 0, reorderedItem);
+
+    // Update the local state immediately for better UX
+    const newPriorities = priorities.map(priority => {
+      const indexInFiltered = filteredPriorities.findIndex(p => p._id === priority._id);
+      if (indexInFiltered !== -1) {
+        const newIndex = reorderedPriorities.findIndex(p => p._id === priority._id);
+        return { ...priority, order: newIndex + 1 };
+      }
+      return priority;
+    });
+    
+    setPriorities(newPriorities.sort((a, b) => a.order - b.order));
+
+    // Send update to backend
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/priorities/bulk-update-order`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          priorities: reorderedPriorities
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update priority order');
+      }
+
+      toast.success('Priority order updated successfully');
+      // Refresh the priorities to ensure consistency
+      fetchPriorities();
+    } catch (error) {
+      toast.error(error.message);
+      // Revert the local state on error
+      fetchPriorities();
+    }
+  };
+
+  // Bulk update functions
+  const updatePriorityWithBulkCheck = async (priorityId, newData, oldName) => {
+    // If name hasn't changed, proceed with normal update
+    if (newData.name.trim() === oldName) {
+      return updatePriority(priorityId, newData);
+    }
+
+    // If name changed, execute bulk update directly
+    setUpdatingPriority(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/bulk-update/execute-priority-update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          oldName: oldName,
+          newName: newData.name.trim()
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update priority');
+      }
+
+      const result = await response.json();
+      toast.success(`Successfully updated ${result.updatedTasksCount} tasks and priority name`);
+      
+      fetchPriorities();
+      setEditingPriority(null);
+      setEditPriorityData({ name: '', color: '' });
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setUpdatingPriority(false);
+    }
+  };
+
+  const updateStatusWithBulkCheck = async (statusId, newData, oldName) => {
+    // If name hasn't changed, proceed with normal update
+    if (newData.name.trim() === oldName) {
+      return updateTaskStatus(statusId, newData);
+    }
+
+    // If name changed, execute bulk update directly
+    setUpdatingStatus(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/bulk-update/execute-status-update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          oldName: oldName,
+          newName: newData.name.trim()
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update status');
+      }
+
+      const result = await response.json();
+      toast.success(`Successfully updated ${result.updatedTasksCount} tasks and status name`);
+      
+      fetchTaskStatuses();
+      setEditingStatus(null);
+      setEditStatusData({ name: '', color: '' });
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setUpdatingStatus(false);
+    }
   };
 
   // Fetch priorities when tab changes to Priority Management
@@ -289,7 +433,7 @@ const Settings = () => {
     if (activeTab === 'Priority Management') {
       fetchPriorities();
       setPrioritySearchTerm('');
-      setNewPriorityName('');
+      setNewPriorityData({ name: '', color: 'bg-gray-100 text-gray-800 border border-gray-200' });
     } else if (activeTab === 'Stages') {
       fetchTaskStatuses();
       setStatusSearchTerm('');
@@ -1159,30 +1303,56 @@ const Settings = () => {
             {/* Add New Priority */}
             <div className="px-0 md:px-6 py-4 border-b border-gray-200">
               <h3 className="text-md font-medium text-gray-800 mb-3">Add New Priority</h3>
-              <div className="flex gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                 <input
                   type="text"
-                  value={newPriorityName}
+                  value={newPriorityData.name}
                   onChange={(e) => {
-                    setNewPriorityName(e.target.value);
+                    setNewPriorityData({...newPriorityData, name: e.target.value});
                     setPrioritySearchTerm(e.target.value);
                   }}
                   placeholder="Search priorities or add new priority name"
-                  className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 />
-                <button
-                  onClick={addPriority}
-                  disabled={addingPriority || !newPriorityName.trim()}
-                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                  {addingPriority ? 'Adding...' : 'Add Priority'}
-                </button>
+                <div className="flex gap-2">
+                  <select
+                    value={newPriorityData.color}
+                    onChange={(e) => setNewPriorityData({...newPriorityData, color: e.target.value})}
+                    className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="bg-red-100 text-red-800 border border-red-200">Red (Urgent)</option>
+                    <option value="bg-orange-100 text-orange-800 border border-orange-200">Orange (High)</option>
+                    <option value="bg-yellow-100 text-yellow-800 border border-yellow-200">Yellow (Medium-High)</option>
+                    <option value="bg-blue-100 text-blue-800 border border-blue-200">Blue (Medium)</option>
+                    <option value="bg-indigo-100 text-indigo-800 border border-indigo-200">Indigo (Normal)</option>
+                    <option value="bg-gray-100 text-gray-800 border border-gray-200">Gray (Default)</option>
+                    <option value="bg-purple-100 text-purple-800 border border-purple-200">Purple (Low)</option>
+                    <option value="bg-teal-100 text-teal-800 border border-teal-200">Teal (Very Low)</option>
+                    <option value="bg-slate-100 text-slate-600 border border-slate-200">Slate (Lowest)</option>
+                    <option value="bg-green-100 text-green-800 border border-green-200">Green</option>
+                    <option value="bg-pink-100 text-pink-800 border border-pink-200">Pink</option>
+                    <option value="bg-cyan-100 text-cyan-800 border border-cyan-200">Cyan</option>
+                  </select>
+                  <div className={`w-12 h-10 rounded-md ${newPriorityData.color} flex items-center justify-center`}>
+                    <span className="text-xs font-medium">●</span>
+                  </div>
+                </div>
               </div>
+              <button
+                onClick={addPriority}
+                disabled={addingPriority || !newPriorityData.name.trim()}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed w-full md:w-auto"
+              >
+                {addingPriority ? 'Adding...' : 'Add Priority'}
+              </button>
             </div>
 
             {/* Priorities List */}
             <div className="px-0 md:px-6 py-4">
-              <h3 className="text-md font-medium text-gray-800 mb-3">Current Priorities</h3>
+              <h3 className="text-md font-medium text-gray-800 mb-3">
+                Current Priorities 
+                <span className="text-sm text-gray-500 ml-2">(Drag to reorder)</span>
+              </h3>
               
               {loadingPriorities ? (
                 <div className="text-center py-8">
@@ -1190,88 +1360,157 @@ const Settings = () => {
                   <p className="text-gray-600 mt-2">Loading priorities...</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {priorities
-                    .filter(priority => 
-                      prioritySearchTerm === '' || 
-                      priority.name.toLowerCase().includes(prioritySearchTerm.toLowerCase())
-                    )
-                    .map((priority) => (
-                    <div
-                      key={priority._id || priority.name}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
-                    >
-                      <div className="flex-1">
-                        {editingPriority === priority._id ? (
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={editPriorityName}
-                              onChange={(e) => setEditPriorityName(e.target.value)}
-                              className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => updatePriority(priority._id, editPriorityName)}
-                              disabled={updatingPriority || !editPriorityName.trim()}
-                              className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400"
+                <DragDropContext onDragEnd={handlePriorityDragEnd}>
+                  <Droppable droppableId="priorities">
+                    {(provided, snapshot) => (
+                      <div
+                        {...provided.droppableProps}
+                        ref={provided.innerRef}
+                        className={`space-y-2 ${snapshot.isDraggingOver ? 'bg-blue-50 rounded-lg p-2' : ''}`}
+                      >
+                        {priorities
+                          .filter(priority => 
+                            prioritySearchTerm === '' || 
+                            priority.name.toLowerCase().includes(prioritySearchTerm.toLowerCase())
+                          )
+                          .map((priority, index) => (
+                            <Draggable
+                              key={priority._id || priority.name}
+                              draggableId={priority._id || priority.name}
+                              index={index}
+                              isDragDisabled={editingPriority === priority._id}
                             >
-                              {updatingPriority ? 'Saving...' : 'Save'}
-                            </button>
-                            <button
-                              onClick={cancelEditPriority}
-                              disabled={updatingPriority}
-                              className="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 transition-colors disabled:bg-gray-400"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center">
-                            <span className="font-medium text-gray-800">{priority.name}</span>
-                            {priority.isDefault && (
-                              <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
-                                Default
-                              </span>
-                            )}
-                          </div>
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  className={`flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 transition-all ${
+                                    snapshot.isDragging ? 'shadow-lg rotate-1 bg-white' : ''
+                                  } ${editingPriority === priority._id ? 'ring-2 ring-blue-500' : ''}`}
+                                >
+                                  <div className="flex items-center gap-3 flex-1">
+                                    {/* Drag Handle */}
+                                    <div
+                                      {...provided.dragHandleProps}
+                                      className={`cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 rounded ${
+                                        editingPriority === priority._id ? 'opacity-50 cursor-not-allowed' : ''
+                                      }`}
+                                      title={editingPriority === priority._id ? 'Cannot drag while editing' : 'Drag to reorder'}
+                                    >
+                                      <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zM8 4h4v2H8V4zm0 4h4v2H8V8zm0 4h4v2H8v-2z"/>
+                                      </svg>
+                                    </div>
+
+                                    {/* Priority Content */}
+                                    <div className="flex-1">
+                                      {editingPriority === priority._id ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                          <input
+                                            type="text"
+                                            value={editPriorityData.name}
+                                            onChange={(e) => setEditPriorityData({...editPriorityData, name: e.target.value})}
+                                            className="bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                                            autoFocus
+                                          />
+                                          <div className="flex gap-2">
+                                            <select
+                                              value={editPriorityData.color}
+                                              onChange={(e) => setEditPriorityData({...editPriorityData, color: e.target.value})}
+                                              className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                              <option value="bg-red-100 text-red-800 border border-red-200">Red (Urgent)</option>
+                                              <option value="bg-orange-100 text-orange-800 border border-orange-200">Orange (High)</option>
+                                              <option value="bg-yellow-100 text-yellow-800 border border-yellow-200">Yellow (Medium-High)</option>
+                                              <option value="bg-blue-100 text-blue-800 border border-blue-200">Blue (Medium)</option>
+                                              <option value="bg-indigo-100 text-indigo-800 border border-indigo-200">Indigo (Normal)</option>
+                                              <option value="bg-gray-100 text-gray-800 border border-gray-200">Gray (Default)</option>
+                                              <option value="bg-purple-100 text-purple-800 border border-purple-200">Purple (Low)</option>
+                                              <option value="bg-teal-100 text-teal-800 border border-teal-200">Teal (Very Low)</option>
+                                              <option value="bg-slate-100 text-slate-600 border border-slate-200">Slate (Lowest)</option>
+                                              <option value="bg-green-100 text-green-800 border border-green-200">Green</option>
+                                              <option value="bg-pink-100 text-pink-800 border border-pink-200">Pink</option>
+                                              <option value="bg-cyan-100 text-cyan-800 border border-cyan-200">Cyan</option>
+                                            </select>
+                                            <div className={`w-12 h-10 rounded-md ${editPriorityData.color} flex items-center justify-center`}>
+                                              <span className="text-xs font-medium">●</span>
+                                            </div>
+                                          </div>
+                                          <div className="md:col-span-2 flex gap-2">
+                                            <button
+                                              onClick={() => updatePriorityWithBulkCheck(priority._id, editPriorityData, priority.name)}
+                                              disabled={updatingPriority || !editPriorityData.name.trim()}
+                                              className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400"
+                                            >
+                                              {updatingPriority ? 'Saving...' : 'Save'}
+                                            </button>
+                                            <button
+                                              onClick={cancelEditPriority}
+                                              disabled={updatingPriority}
+                                              className="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 transition-colors disabled:bg-gray-400"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-3">
+                                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${priority.color || 'bg-gray-100 text-gray-800 border border-gray-200'}`}>
+                                            {priority.name}
+                                          </span>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-sm text-gray-600">Order: {priority.order || 'N/A'}</span>
+                                            {priority.createdBy && (
+                                              <span className="text-xs text-gray-500">
+                                                by {priority.createdBy.firstName} {priority.createdBy.lastName}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  
+                                  {editingPriority !== priority._id && (
+                                    <div className="flex space-x-2">
+                                      <button
+                                        onClick={() => handleEditPriority(priority)}
+                                        className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors"
+                                        title="Edit priority"
+                                      >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                      </button>
+                                      <button
+                                        onClick={() => deletePriority(priority._id)}
+                                        className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-full transition-colors"
+                                        title="Delete priority"
+                                      >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                        {provided.placeholder}
+                        
+                        {priorities.filter(priority => 
+                          prioritySearchTerm === '' || 
+                          priority.name.toLowerCase().includes(prioritySearchTerm.toLowerCase())
+                        ).length === 0 && (
+                          <p className="text-gray-600 text-center py-4">
+                            {prioritySearchTerm ? 'No priorities found matching your search.' : 'No priorities found.'}
+                          </p>
                         )}
                       </div>
-                      
-                      {!priority.isDefault && editingPriority !== priority._id && (
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleEditPriority(priority)}
-                            className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors"
-                            title="Edit priority"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => deletePriority(priority._id)}
-                            className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-full transition-colors"
-                            title="Delete priority"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  
-                  {priorities.filter(priority => 
-                    prioritySearchTerm === '' || 
-                    priority.name.toLowerCase().includes(prioritySearchTerm.toLowerCase())
-                  ).length === 0 && (
-                    <p className="text-gray-600 text-center py-4">
-                      {prioritySearchTerm ? 'No priorities found matching your search.' : 'No priorities found.'}
-                    </p>
-                  )}
-                </div>
+                    )}
+                  </Droppable>
+                </DragDropContext>
               )}
             </div>
           </>
@@ -1353,7 +1592,7 @@ const Settings = () => {
                                 title="Status color"
                               />
                               <button
-                                onClick={() => updateTaskStatus(status._id, editStatusData)}
+                                onClick={() => updateStatusWithBulkCheck(status._id, editStatusData, status.name)}
                                 disabled={updatingStatus || !editStatusData.name.trim()}
                                 className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400"
                               >

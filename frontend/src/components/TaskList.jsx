@@ -339,25 +339,27 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
   };
 
   const getPriorityColor = (priority) => {
+    // This component should ideally receive priorities as props to get dynamic colors
+    // For now, using fallback colors
     switch (priority) {
       case 'urgent':
-        return 'bg-red-100 text-red-800 border border-red-200'; // Red - Highest importance
+        return 'bg-red-100 text-red-800 border border-red-200';
       case 'today':
-        return 'bg-orange-100 text-orange-800 border border-orange-200'; // Orange - Very high importance
+        return 'bg-orange-100 text-orange-800 border border-orange-200';
       case 'lessThan3Days':
-        return 'bg-yellow-100 text-yellow-800 border border-yellow-200'; // Yellow - High importance
+        return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
       case 'thisWeek':
-        return 'bg-blue-100 text-blue-800 border border-blue-200'; // Blue - Medium-high importance
+        return 'bg-blue-100 text-blue-800 border border-blue-200';
       case 'thisMonth':
-        return 'bg-indigo-100 text-indigo-800 border border-indigo-200'; // Indigo - Medium importance
+        return 'bg-indigo-100 text-indigo-800 border border-indigo-200';
       case 'regular':
-        return 'bg-gray-100 text-gray-800 border border-gray-200'; // Gray - Normal importance
+        return 'bg-gray-100 text-gray-800 border border-gray-200';
       case 'filed':
-        return 'bg-purple-100 text-purple-800 border border-purple-200'; // Purple - Low importance
+        return 'bg-purple-100 text-purple-800 border border-purple-200';
       case 'dailyWorksOffice':
-        return 'bg-teal-100 text-teal-800 border border-teal-200'; // Teal - Very low importance
+        return 'bg-teal-100 text-teal-800 border border-teal-200';
       case 'monthlyWorks':
-        return 'bg-slate-100 text-slate-600 border border-slate-200'; // Slate - Lowest importance
+        return 'bg-slate-100 text-slate-600 border border-slate-200';
       default:
         return 'bg-gray-100 text-gray-800 border border-gray-200';
     }

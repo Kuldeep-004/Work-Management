@@ -16,6 +16,18 @@ const SearchableStatusDropdown = ({
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [onClose]);
 
   useEffect(() => {
     // Focus search input when dropdown opens
@@ -101,7 +113,7 @@ const SearchableStatusDropdown = ({
 
       {/* Options List */}
       <div 
-        className="max-h-60 overflow-y-auto p-1"
+        className="max-h-90 overflow-y-auto p-1"
         style={{ 
           scrollbarWidth: 'thin',
           scrollbarColor: '#cbd5e0 #f7fafc'
@@ -152,11 +164,7 @@ const SearchableStatusDropdown = ({
         )}
       </div>
 
-      {filteredOptions.length > 5 && (
-        <div className="px-2 py-1 text-xs text-gray-500 border-t border-gray-200 bg-gray-50">
-          Use ↑↓ to navigate, Enter to select, Esc to close
-        </div>
-      )}
+      
     </div>,
     document.body
   );

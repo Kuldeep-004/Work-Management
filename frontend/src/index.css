@@ -28,3 +28,60 @@ td * {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
 }
+
+/* Hide native scrollbar from table wrapper */
+.table-wrapper-no-scrollbar {
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.table-wrapper-no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Permanent bottom scrollbar styles */
+.permanent-bottom-scrollbar {
+  position: fixed;
+  bottom: 0;
+  height: 14px;
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.1);
+  z-index: 999;
+  overflow-x: auto;
+  overflow-y: hidden;
+  transition: opacity 0.2s ease;
+}
+
+.permanent-bottom-scrollbar::-webkit-scrollbar {
+  height: 10px;
+}
+
+.permanent-bottom-scrollbar::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 5px;
+  margin: 2px;
+}
+
+.permanent-bottom-scrollbar::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border-radius: 5px;
+  border: 1px solid #f3f4f6;
+  min-width: 20px;
+}
+
+.permanent-bottom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+.permanent-bottom-scrollbar::-webkit-scrollbar-thumb:active {
+  background: #374151;
+}
+
+/* Scrollbar content to match table width */
+.scrollbar-content {
+  height: 1px;
+  pointer-events: none;
+}

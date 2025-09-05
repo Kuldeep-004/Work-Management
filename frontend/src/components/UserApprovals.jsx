@@ -59,24 +59,8 @@ const UserApprovals = () => {
       ...prev,
       [userId]: role
     }));
-
-    // If role is Senior, find and set Senior team
-    if (role === 'Senior') {
-      const seniorTeam = teams.find(team => team.name === 'Senior');
-      if (seniorTeam) {
-        setSelectedTeams(prev => ({
-          ...prev,
-          [userId]: seniorTeam._id
-        }));
-      }
-    } else {
-      // Clear team selection if role changes from Senior
-      setSelectedTeams(prev => {
-        const newTeams = { ...prev };
-        delete newTeams[userId];
-        return newTeams;
-      });
-    }
+    // Do not auto-set or clear team when changing role
+    // Team will only be changed if user explicitly selects a team
   };
 
   const handleApproval = async (userId, status) => {
@@ -95,17 +79,21 @@ const UserApprovals = () => {
         }
       }
 
+      // Only include team if it is selected (for non-Senior roles)
+      const body = {
+        status,
+        role: selectedRoles[userId],
+      };
+      if (selectedRoles[userId] !== 'Senior' && selectedTeams[userId]) {
+        body.team = selectedTeams[userId];
+      }
       const response = await fetch(`${API_BASE_URL}/api/users/${userId}/approval`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${user.token}`,
         },
-        body: JSON.stringify({ 
-          status,
-          role: selectedRoles[userId],
-          team: selectedRoles[userId] === 'Senior' ? null : selectedTeams[userId]
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

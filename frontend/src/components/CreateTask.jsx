@@ -25,18 +25,7 @@ const CreateTask = ({
   const [clients, setClients] = useState([]);
   const [clientGroups, setClientGroups] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
-  // Initialize priorities with default values to prevent empty dropdown
-  const [priorities, setPriorities] = useState([
-    { name: 'urgent', isDefault: true },
-    { name: 'today', isDefault: true },
-    { name: 'lessThan3Days', isDefault: true },
-    { name: 'thisWeek', isDefault: true },
-    { name: 'thisMonth', isDefault: true },
-    { name: 'regular', isDefault: true },
-    { name: 'filed', isDefault: true },
-    { name: 'dailyWorksOffice', isDefault: true },
-    { name: 'monthlyWorks', isDefault: true }
-  ]);
+  const [priorities, setPriorities] = useState([]);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -44,7 +33,7 @@ const CreateTask = ({
     clientGroup: '',
     workType: [],
     assignedTo: [],
-    priority: 'today',
+    priority: '',
     inwardEntryDate: '',
     inwardEntryTime: '',
     dueDate: '',
@@ -161,30 +150,10 @@ const CreateTask = ({
             },
           });
           const prioritiesData = await prioritiesResponse.json();
-          
-          // Define default priorities
-          const defaultPriorities = [
-            { name: 'urgent', isDefault: true },
-            { name: 'today', isDefault: true },
-            { name: 'lessThan3Days', isDefault: true },
-            { name: 'thisWeek', isDefault: true },
-            { name: 'thisMonth', isDefault: true },
-            { name: 'regular', isDefault: true },
-            { name: 'filed', isDefault: true },
-            { name: 'dailyWorksOffice', isDefault: true },
-            { name: 'monthlyWorks', isDefault: true }
-          ];
-          
-          // Merge default priorities with custom priorities from API
-          // Filter out any default priorities that might be returned from API to avoid duplicates
-          const customPriorities = prioritiesData.filter(p => !p.isDefault);
-          const allPriorities = [...defaultPriorities, ...customPriorities];
-          
-          setPriorities(allPriorities);
+          setPriorities(prioritiesData);
         } catch (priorityError) {
-          console.error('Error fetching priorities, using defaults:', priorityError);
-          // If priorities API fails, keep the default priorities that are already set
-          // They were initialized in useState, so no need to set them again
+          console.error('Error fetching priorities:', priorityError);
+          setPriorities([]);
         }
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -1106,6 +1075,7 @@ const CreateTask = ({
                     }
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
+                    <option value="">Select Priority</option>
                     {priorities.map((priority) => (
                       <option key={priority._id || priority.name} value={priority.name}>
                         {priority.name.charAt(0).toUpperCase() + priority.name.slice(1).replace(/([A-Z])/g, ' $1')}

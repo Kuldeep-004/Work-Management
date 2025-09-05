@@ -152,6 +152,17 @@ router.put('/:id', protect, adminOrTeamHead, async (req, res) => {
       return res.status(400).json({ message: 'Cannot change name of default task status' });
     }
 
+    // Check if new name already exists (excluding current status)
+    if (name && name.trim() !== taskStatus.name) {
+      const existingStatus = await TaskStatus.findOne({ 
+        name: name.trim(),
+        _id: { $ne: req.params.id }
+      });
+      if (existingStatus) {
+        return res.status(400).json({ message: 'Task status with this name already exists' });
+      }
+    }
+
     // Process color if provided
     let processedColor = color;
     if (color && color.startsWith('#')) {

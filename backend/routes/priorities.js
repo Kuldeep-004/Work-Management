@@ -10,25 +10,9 @@ const router = express.Router();
 // Get all priorities (public for all authenticated users)
 router.get('/', protect, async (req, res) => {
   try {
-    // Always return default priorities + custom priorities
-    const defaultPriorities = [
-      { name: 'urgent', isDefault: true, order: 1 },
-      { name: 'today', isDefault: true, order: 2 },
-      { name: 'lessThan3Days', isDefault: true, order: 3 },
-      { name: 'thisWeek', isDefault: true, order: 4 },
-      { name: 'thisMonth', isDefault: true, order: 5 },
-      { name: 'regular', isDefault: true, order: 6 },
-      { name: 'filed', isDefault: true, order: 7 },
-      { name: 'dailyWorksOffice', isDefault: true, order: 8 },
-      { name: 'monthlyWorks', isDefault: true, order: 9 }
-    ];
-    
-    // Get custom priorities from database
-    const customPriorities = await Priority.find({ isDefault: false }).sort({ order: 1, createdAt: 1 });
-    
-    // Combine and return
-    const allPriorities = [...defaultPriorities, ...customPriorities];
-    res.json(allPriorities);
+    // Get all priorities from database sorted by order
+    const priorities = await Priority.find({}).sort({ order: 1 }).populate('createdBy', 'firstName lastName');
+    res.json(priorities);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -37,28 +21,30 @@ router.get('/', protect, async (req, res) => {
 // Create new priority (Admin and Team Head only)
 router.post('/', protect, async (req, res) => {
   try {
-    const { name, order } = req.body;
+    const { name, color, order } = req.body;
 
     // Check if user is Admin or Team Head
     if (req.user.role !== 'Admin' && req.user.role !== 'Team Head') {
       return res.status(403).json({ message: 'Access denied. Admin or Team Head role required.' });
     }
 
-    // Check if priority name already exists (including default priorities)
-    const defaultPriorities = ['urgent', 'today', 'lessThan3Days', 'thisWeek', 'thisMonth', 'regular', 'filed', 'dailyWorksOffice', 'monthlyWorks'];
-    if (defaultPriorities.includes(name.trim())) {
-      return res.status(400).json({ message: 'Cannot create priority with default priority name' });
-    }
-
+    // Check if priority name already exists
     const existingPriority = await Priority.findOne({ name: name.trim() });
     if (existingPriority) {
       return res.status(400).json({ message: 'Priority with this name already exists' });
     }
 
+    // If no order provided, set it to be the last
+    let finalOrder = order;
+    if (!finalOrder) {
+      const lastPriority = await Priority.findOne({}).sort({ order: -1 });
+      finalOrder = lastPriority ? lastPriority.order + 1 : 1;
+    }
+
     const priority = new Priority({
       name: name.trim(),
-      order: order || 100, // Custom priorities start from 100
-      isDefault: false,
+      color: color || 'bg-gray-100 text-gray-800 border border-gray-200',
+      order: finalOrder,
       createdBy: req.user._id
     });
 
@@ -70,9 +56,9 @@ router.post('/', protect, async (req, res) => {
       req.user._id,
       'priority_created',
       savedPriority._id,
-      `Created custom priority "${name.trim()}"`,
+      `Created priority "${name.trim()}"`,
       null,
-      { name: name.trim(), order: order || 100 },
+      { name: name.trim(), color: color || 'bg-gray-100 text-gray-800 border border-gray-200', order: finalOrder },
       req
     );
     
@@ -82,10 +68,52 @@ router.post('/', protect, async (req, res) => {
   }
 });
 
+// Bulk update priority orders (Admin and Team Head only)
+router.put('/bulk-update-order', protect, async (req, res) => {
+  try {
+    const { priorities } = req.body;
+
+    // Check if user is Admin or Team Head
+    if (req.user.role !== 'Admin' && req.user.role !== 'Team Head') {
+      return res.status(403).json({ message: 'Access denied. Admin or Team Head role required.' });
+    }
+
+    if (!Array.isArray(priorities) || priorities.length === 0) {
+      return res.status(400).json({ message: 'Invalid priorities data' });
+    }
+
+    // Update each priority's order
+    const updatePromises = priorities.map((priority, index) => {
+      return Priority.findByIdAndUpdate(
+        priority._id,
+        { order: index + 1 },
+        { new: true }
+      );
+    });
+
+    await Promise.all(updatePromises);
+
+    // Log bulk priority order update
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'priorities_order_updated',
+      null,
+      `Updated priority order for ${priorities.length} priorities`,
+      null,
+      { count: priorities.length },
+      req
+    );
+
+    res.json({ message: 'Priority orders updated successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Update priority (Admin and Team Head only)
 router.put('/:id', protect, async (req, res) => {
   try {
-    const { name, order } = req.body;
+    const { name, color, order } = req.body;
 
     // Check if user is Admin or Team Head
     if (req.user.role !== 'Admin' && req.user.role !== 'Team Head') {
@@ -95,11 +123,6 @@ router.put('/:id', protect, async (req, res) => {
     const priority = await Priority.findById(req.params.id);
     if (!priority) {
       return res.status(404).json({ message: 'Priority not found' });
-    }
-
-    // Prevent editing default priorities
-    if (priority.isDefault) {
-      return res.status(400).json({ message: 'Cannot edit default priorities' });
     }
 
     // Check if new name already exists (excluding current priority)
@@ -113,14 +136,16 @@ router.put('/:id', protect, async (req, res) => {
       }
     }
 
-    if (name) priority.name = name.trim();
-    if (order !== undefined) priority.order = order;
-
     // Store old values for logging
     const oldValues = {
       name: priority.name,
+      color: priority.color,
       order: priority.order
     };
+
+    if (name) priority.name = name.trim();
+    if (color) priority.color = color;
+    if (order !== undefined) priority.order = order;
 
     const updatedPriority = await priority.save();
     await updatedPriority.populate('createdBy', 'firstName lastName');
@@ -130,9 +155,9 @@ router.put('/:id', protect, async (req, res) => {
       req.user._id,
       'priority_updated',
       updatedPriority._id,
-      `Updated custom priority "${priority.name}"`,
+      `Updated priority "${priority.name}"`,
       oldValues,
-      { name: name?.trim(), order },
+      { name: name?.trim(), color, order },
       req
     );
     
@@ -155,11 +180,6 @@ router.delete('/:id', protect, async (req, res) => {
       return res.status(404).json({ message: 'Priority not found' });
     }
 
-    // Prevent deleting default priorities
-    if (priority.isDefault) {
-      return res.status(400).json({ message: 'Cannot delete default priorities' });
-    }
-
     // Check if priority is being used in any tasks
     const tasksWithPriority = await Task.countDocuments({ priority: priority.name });
     if (tasksWithPriority > 0) {
@@ -174,8 +194,8 @@ router.delete('/:id', protect, async (req, res) => {
       req.user._id,
       'priority_deleted',
       priority._id,
-      `Deleted custom priority "${priority.name}"`,
-      { name: priority.name, order: priority.order },
+      `Deleted priority "${priority.name}"`,
+      { name: priority.name, color: priority.color, order: priority.order },
       null,
       req
     );

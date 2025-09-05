@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../apiConfig';
+import { useTaskDataOptimizer } from '../hooks/useTaskDataOptimizer';
 
 // =============================================================================
 // UTILITY FUNCTIONS
@@ -69,18 +70,6 @@ const getColumnsForTaskType = (taskType) => {
   return columns;
 };
 
-const PRIORITY_OPTIONS = [
-  { value: 'urgent', label: 'Urgent' },
-  { value: 'today', label: 'Today' },
-  { value: 'lessThan3Days', label: '< 3 days' },
-  { value: 'thisWeek', label: 'This week' },
-  { value: 'thisMonth', label: 'This month' },
-  { value: 'regular', label: 'Regular' },
-  { value: 'filed', label: 'Filed' },
-  { value: 'dailyWorksOffice', label: 'Daily works office' },
-  { value: 'monthlyWorks', label: 'Monthly works' },
-];
-
 const VERIFICATION_OPTIONS = [
   { value: 'pending', label: 'Pending' },
   { value: 'rejected', label: 'Return' },
@@ -102,6 +91,9 @@ const DRAG_ROW_CLASS = 'drag-row-highlight';
 // MAIN CUSTOM HOOK - CONTAINS ALL TABLE LOGIC
 // =============================================================================
 export const useAdvancedTaskTableLogic = (props) => {
+  // Move useAuth to the top
+  const { user } = useAuth();
+
   const {
     tasks, 
     viewType, 
@@ -136,8 +128,6 @@ export const useAdvancedTaskTableLogic = (props) => {
     isAllSelected = false,
     onSelectAll,
   } = props;
-
-  const { user } = useAuth();
 
   // =============================================================================
   // STATE DECLARATIONS - ALL USESTATE AND USEREF HOOKS
@@ -278,10 +268,6 @@ export const useAdvancedTaskTableLogic = (props) => {
   
     // Get current priority options (dynamic + static fallback)
     const getCurrentPriorityOptions = () => {
-      if (!prioritiesLoaded) {
-        return PRIORITY_OPTIONS; // Use static options while loading
-      }
-      
       if (dynamicPriorities.length > 0) {
         return dynamicPriorities.map(p => ({
           value: p.name,
@@ -289,7 +275,8 @@ export const useAdvancedTaskTableLogic = (props) => {
         }));
       }
       
-      return PRIORITY_OPTIONS; // Fallback to static if no dynamic priorities
+      // Return empty array if no dynamic priorities loaded yet
+      return [];
     };
   
     // Drag and drop state
@@ -421,6 +408,9 @@ export const useAdvancedTaskTableLogic = (props) => {
     // Add a ref to track the last set of task IDs and grouping
     const lastTaskIdsRef = useRef([]);
     const lastGroupFieldRef = useRef(null);
+    
+    // Track when we're updating individual task properties to prevent unnecessary refetches
+    const [isUpdatingTaskProperties, setIsUpdatingTaskProperties] = useState(false);
   
     const isControlled = !!visibleColumns && !!setVisibleColumns;
   
@@ -430,6 +420,10 @@ export const useAdvancedTaskTableLogic = (props) => {
     // Fix: move selfVerification update state hooks to top level to avoid hook order issues
     const [isUpdating, setIsUpdating] = useState(false);
     const [isUpdating2, setIsUpdating2] = useState(false);
+    
+    // State for managing smooth transitions during grouping updates
+    const [taskTransitions, setTaskTransitions] = useState(new Map());
+    const [hiddenTaskIds, setHiddenTaskIds] = useState(new Set());
   
     // Helper functions
     const getStatusColor = (status) => {
@@ -484,6 +478,15 @@ export const useAdvancedTaskTableLogic = (props) => {
       : STATUS_OPTIONS;
   
     const getPriorityColor = (priority) => {
+      // Find the priority in dynamic priorities to get its color
+      if (dynamicPriorities.length > 0) {
+        const foundPriority = dynamicPriorities.find(p => p.name === priority);
+        if (foundPriority && foundPriority.color) {
+          return foundPriority.color;
+        }
+      }
+      
+      // Fallback to default colors if priority not found or no dynamic priorities loaded
       switch (priority) {
         case 'urgent':
           return 'bg-red-100 text-red-800 border border-red-200';
@@ -663,12 +666,124 @@ export const useAdvancedTaskTableLogic = (props) => {
         }));
       }
     };
+
+    // Helper functions for smooth task transitions during grouping updates
+    const startTaskTransition = (taskId, task, updates) => {
+      if (!shouldGroup || !groupField) return false;
+      
+      // Get old and new group keys
+      const oldGroupKey = getGroupKey(task);
+      
+      // Create a temporary updated task to get the new group key
+      const tempUpdatedTask = { ...task, ...updates };
+      const newGroupKey = getGroupKey(tempUpdatedTask);
+      
+      // Only start transition if the group actually changes
+      if (oldGroupKey !== newGroupKey) {
+        setTaskTransitions(prev => {
+          const newTransitions = new Map(prev);
+          newTransitions.set(taskId, {
+            fromGroup: oldGroupKey,
+            toGroup: newGroupKey,
+            timestamp: Date.now()
+          });
+          return newTransitions;
+        });
+        
+        // Hide the task immediately from its original position
+        setHiddenTaskIds(prev => new Set([...prev, taskId]));
+        return true; // Transition started
+      }
+      
+      return false; // No transition needed
+    };
+
+    // Generic task update wrapper that handles transitions automatically
+    const updateTaskWithTransition = async (taskId, task, updates, updateCallback, successMessage = 'Task updated') => {
+      setIsUpdatingTaskProperties(true);
+      
+      // Start smooth transition if the group will change
+      const transitionStarted = startTaskTransition(taskId, task, updates);
+      
+      try {
+        // Execute the update callback
+        await updateCallback();
+        
+        // Complete the transition after updating
+        if (transitionStarted) {
+          completeTaskTransition(taskId);
+        }
+        
+        if (successMessage) {
+          toast.success(successMessage);
+        }
+      } catch (error) {
+        // On error, cancel the transition and show error
+        if (transitionStarted) {
+          completeTaskTransition(taskId);
+        }
+        throw error; // Re-throw to be handled by the calling function
+      } finally {
+        // Add a small delay to ensure the update is processed before allowing refetches
+        setTimeout(() => setIsUpdatingTaskProperties(false), 100);
+      }
+    };
+
+    const completeTaskTransition = (taskId) => {
+      // Remove from transitions and hidden tasks after a short delay
+      setTimeout(() => {
+        setTaskTransitions(prev => {
+          const newTransitions = new Map(prev);
+          newTransitions.delete(taskId);
+          return newTransitions;
+        });
+        
+        setHiddenTaskIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(taskId);
+          return newSet;
+        });
+      }, 50); // Short delay to ensure new position is rendered
+    };
+
+    // Clean up old transitions (fallback safety)
+    useEffect(() => {
+      const cleanup = setInterval(() => {
+        const now = Date.now();
+        setTaskTransitions(prev => {
+          const newTransitions = new Map();
+          const expiredTaskIds = [];
+          
+          for (const [taskId, transition] of prev) {
+            if (now - transition.timestamp < 2000) { // Keep for max 2 seconds
+              newTransitions.set(taskId, transition);
+            } else {
+              expiredTaskIds.push(taskId);
+            }
+          }
+          
+          // Remove expired tasks from hidden set too
+          if (expiredTaskIds.length > 0) {
+            setHiddenTaskIds(prevHidden => {
+              const newSet = new Set(prevHidden);
+              expiredTaskIds.forEach(id => newSet.delete(id));
+              return newSet;
+            });
+          }
+          
+          return newTransitions;
+        });
+      }, 1000);
+
+      return () => clearInterval(cleanup);
+    }, []);
   
     const handleDescriptionEditSave = async (task) => {
       if (editingDescriptionValue === task.description) {
         setEditingDescriptionTaskId(null);
         return;
       }
+      setIsUpdatingTaskProperties(true);
       try {
         const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/description`, {
           method: 'PATCH',
@@ -688,6 +803,8 @@ export const useAdvancedTaskTableLogic = (props) => {
         toast.error(error.message || 'Failed to update status');
       }
       setEditingDescriptionTaskId(null);
+      // Add a small delay to ensure the update is processed before allowing refetches
+      setTimeout(() => setIsUpdatingTaskProperties(false), 100);
     };
   
     // Handle custom text field editing
@@ -774,38 +891,41 @@ export const useAdvancedTaskTableLogic = (props) => {
   
     const handlePriorityChange = async (task, newPriority) => {
       setPriorityLoading(true);
+      
       try {
-        const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/priority`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${user.token}`,
+        await updateTaskWithTransition(
+          task._id, 
+          task, 
+          { priority: newPriority },
+          async () => {
+            const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/priority`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${user.token}`,
+              },
+              body: JSON.stringify({ priority: newPriority }),
+            });
+            if (!response.ok) throw new Error('Failed to update priority');
+            const updatedTask = await response.json();
+            
+            // Update both local ordered tasks and parent tasks without triggering refetch
+            setOrderedTasks(prev => prev.map(t => t._id === task._id ? { ...t, priority: newPriority } : t));
+            
+            if (onTaskUpdate) {
+              onTaskUpdate(task._id, () => ({ ...task, priority: updatedTask.priority }));
+            }
           },
-          body: JSON.stringify({ priority: newPriority }),
-        });
-        if (!response.ok) throw new Error('Failed to update priority');
-        const updatedTask = await response.json();
-        if (onTaskUpdate) {
-          onTaskUpdate(task._id, () => ({ ...task, priority: updatedTask.priority }));
-        }
-        
-        // Update the task in orderedTasks without changing positions
-        const updatedOrderedTasks = orderedTasks.map(t => 
-          t._id === task._id ? { ...t, priority: newPriority } : t
+          'Priority updated'
         );
-        setOrderedTasks(updatedOrderedTasks);
-        
-        // Refresh tasks from backend if refetchTasks is available
-        if (refetchTasks) {
-          refetchTasks();
-        }
-        
-        toast.success('Priority updated');
       } catch (error) {
         toast.error(error.message || 'Failed to update priority');
+        // On error, refetch tasks for consistency
+        if (refetchTasks) refetchTasks();
+      } finally {
+        setPriorityLoading(false);
+        setEditingPriorityTaskId(null);
       }
-      setPriorityLoading(false);
-      setEditingPriorityTaskId(null);
     };
   
     // Get filtered verification options based on current verifier
@@ -850,6 +970,7 @@ export const useAdvancedTaskTableLogic = (props) => {
   
       // For other statuses (pending, next verification), proceed directly
       setVerificationLoading(true);
+      setIsUpdatingTaskProperties(true);
       try {
         const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verification`, {
           method: 'PATCH',
@@ -871,15 +992,15 @@ export const useAdvancedTaskTableLogic = (props) => {
         
         console.log('Updated task received:', updatedTask);
         
-        if (onTaskUpdate) {
-          onTaskUpdate(task._id, () => updatedTask);
-        }
-        
         // Update the task in orderedTasks without changing positions
         const updatedOrderedTasks = orderedTasks.map(t => 
           t._id === task._id ? { ...t, ...updatedTask } : t
         );
         setOrderedTasks(updatedOrderedTasks);
+
+        if (onTaskUpdate) {
+          onTaskUpdate(task._id, () => updatedTask);
+        }
         
         // Refresh tasks from backend if refetchTasks is available
         if (refetchTasks) {
@@ -893,6 +1014,8 @@ export const useAdvancedTaskTableLogic = (props) => {
       }
       setVerificationLoading(false);
       setEditingVerificationTaskId(null);
+      // Add a small delay to ensure the update is processed before allowing refetches
+      setTimeout(() => setIsUpdatingTaskProperties(false), 100);
     };
   
     // Handle verification with remarks
@@ -952,31 +1075,47 @@ export const useAdvancedTaskTableLogic = (props) => {
   
     const handleStatusChangeLocal = async (task, newStatus) => {
       setStatusLoading(true);
+      
       try {
-        if (newStatus === 'reject' && viewType === 'received') {
-          // Call backend to reject and clear verifiers, set status to pending
-          const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/status`, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${user.token}`,
-            },
-            body: JSON.stringify({ status: 'reject' }),
-          });
-          if (!response.ok) throw new Error('Failed to reject task');
-          const updatedTask = await response.json();
-          if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
-          toast.success('Task rejected and set to pending');
-          if (refetchTasks) refetchTasks();
-        } else {
-          await onStatusChange(task._id, newStatus);
-          if (refetchTasks) refetchTasks();
-        }
+        await updateTaskWithTransition(
+          task._id,
+          task,
+          { status: newStatus },
+          async () => {
+            let updatedTask;
+            if (newStatus === 'reject' && viewType === 'received') {
+              // Call backend to reject and clear verifiers, set status to pending
+              const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/status`, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${user.token}`,
+                },
+                body: JSON.stringify({ status: 'reject' }),
+              });
+              if (!response.ok) throw new Error('Failed to reject task');
+              updatedTask = await response.json();
+              
+              // Update local state first
+              setOrderedTasks(prev => prev.map(t => t._id === task._id ? { ...t, ...updatedTask } : t));
+              
+              if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
+            } else {
+              await onStatusChange(task._id, newStatus);
+              // Optimistically update local state
+              setOrderedTasks(prev => prev.map(t => t._id === task._id ? { ...t, status: newStatus } : t));
+            }
+          },
+          newStatus === 'reject' && viewType === 'received' ? 'Task rejected and set to pending' : 'Status updated'
+        );
       } catch (error) {
         toast.error(error.message || 'Failed to update status');
+        // On error, refetch tasks for consistency
+        if (refetchTasks) refetchTasks();
+      } finally {
+        setStatusLoading(false);
+        setEditingStatusTaskId(null);
       }
-      setStatusLoading(false);
-      setEditingStatusTaskId(null);
     };
   
     const handleDeleteTask = async (task) => {
@@ -1101,7 +1240,7 @@ export const useAdvancedTaskTableLogic = (props) => {
     let groupedTasks = null;
     if (shouldGroup) {
       let options = {};
-      if (groupField === 'priority') PRIORITY_OPTIONS.forEach(opt => options[opt.value] = opt.label);
+      if (groupField === 'priority') getCurrentPriorityOptions().forEach(opt => options[opt.value] = opt.label);
       if (groupField === 'status') currentStatusOptions.forEach(opt => options[opt.value] = opt.label);
       if (groupField === 'billed') {
         options[true] = 'Yes';
@@ -1295,9 +1434,48 @@ export const useAdvancedTaskTableLogic = (props) => {
     };
   
   
-    // Reset loaded tasks count when tasks change or view type changes
+    // Track task array length and identity to determine when to reset progressive rendering
+    const taskArrayIdentityRef = useRef(null);
+    const prevTaskTypeRef = useRef(taskType);
+    
+    // Reset loaded tasks count only when:
+    // 1. Task type changes (switching between different views)
+    // 2. Task array identity changes significantly (new fetch, not just updates)
     useEffect(() => {
-      setLoadedTasksCount(25);
+      const currentTaskType = taskType;
+      const prevTaskType = prevTaskTypeRef.current;
+      
+      // Always reset on task type change
+      if (currentTaskType !== prevTaskType) {
+        setLoadedTasksCount(25);
+        taskArrayIdentityRef.current = tasks;
+        prevTaskTypeRef.current = currentTaskType;
+        return;
+      }
+      
+      // For task changes, only reset if this looks like a new dataset
+      // (not just status/priority updates on existing tasks)
+      const prevTaskArray = taskArrayIdentityRef.current;
+      
+      if (!prevTaskArray || 
+          prevTaskArray.length === 0 || // Initial load
+          tasks.length === 0 || // Cleared tasks
+          // Major change in task count (likely new data fetch)
+          Math.abs(tasks.length - prevTaskArray.length) > Math.min(tasks.length, prevTaskArray.length) * 0.3) {
+        setLoadedTasksCount(25);
+      } else {
+        // If task count is same but different task IDs, it could be a new fetch
+        // Only reset if more than 50% of tasks are completely different
+        const prevTaskIds = new Set(prevTaskArray.map(t => t._id));
+        const currentTaskIds = tasks.map(t => t._id);
+        const differentTasks = currentTaskIds.filter(id => !prevTaskIds.has(id)).length;
+        
+        if (differentTasks > tasks.length * 0.5) {
+          setLoadedTasksCount(25);
+        }
+      }
+      
+      taskArrayIdentityRef.current = tasks;
     }, [tasks, taskType]);
   
     // Load more tasks function
@@ -1350,12 +1528,23 @@ export const useAdvancedTaskTableLogic = (props) => {
   
     // Refactor the useEffect that fetches and applies task order
     useEffect(() => {
+      // Skip refetch if we're in the middle of updating task properties
+      if (isUpdatingTaskProperties) return;
+      
       let isMounted = true;
-      // Get current task IDs
-      const currentTaskIds = tasks.map(t => t._id).join(',');
-      // Only fetch and apply order if the set of task IDs or grouping changes
+      // Get current task IDs as a Set for comparison
+      const currentTaskIds = new Set(tasks.map(t => t._id));
+      const lastTaskIds = new Set(lastTaskIdsRef.current);
+      
+      // Only fetch and apply order if:
+      // 1. The set of task IDs actually changed (tasks added/removed), OR
+      // 2. The grouping field changed
+      const taskIdsChanged = currentTaskIds.size !== lastTaskIds.size || 
+                            [...currentTaskIds].some(id => !lastTaskIds.has(id)) ||
+                            [...lastTaskIds].some(id => !currentTaskIds.has(id));
+      
       if (
-        lastTaskIdsRef.current.join(',') !== currentTaskIds ||
+        taskIdsChanged ||
         lastGroupFieldRef.current !== groupField
       ) {
         async function fetchAndApplyOrder() {
@@ -1431,7 +1620,7 @@ export const useAdvancedTaskTableLogic = (props) => {
         fetchAndApplyOrder();
       }
       // eslint-disable-next-line
-    }, [tasks, shouldGroup, groupField, tabKey, tabId]);
+    }, [tasks, shouldGroup, groupField, tabKey, tabId, isUpdatingTaskProperties]);
   
     // Save order to backend
     const saveOrder = async (newOrder, newGroupOrder = null) => {
@@ -1686,6 +1875,9 @@ export const useAdvancedTaskTableLogic = (props) => {
     if (shouldGroup && orderLoaded) {
       renderGroupedTasks = {};
       for (const t of orderedTasks) {
+        // Skip tasks that are currently hidden during transitions
+        if (hiddenTaskIds.has(t._id)) continue;
+        
         const gk = getGroupKey(t);
         if (!renderGroupedTasks[gk]) renderGroupedTasks[gk] = [];
         renderGroupedTasks[gk].push(t);
@@ -1723,7 +1915,6 @@ export const useAdvancedTaskTableLogic = (props) => {
     
     // Constants
     BASE_COLUMNS,
-    PRIORITY_OPTIONS,
     VERIFICATION_OPTIONS,
     STATUS_OPTIONS,
     DRAG_ROW_CLASS,
@@ -1921,6 +2112,13 @@ export const useAdvancedTaskTableLogic = (props) => {
     user,
     groupOrder,
     groupOrderLoaded,
+    
+    // Task transition state for smooth grouping updates
+    taskTransitions,
+    hiddenTaskIds,
+    startTaskTransition,
+    completeTaskTransition,
+    updateTaskWithTransition,
     
     // Loading state for grouped mode
     isGroupedModeLoading: shouldGroup && !orderLoaded
