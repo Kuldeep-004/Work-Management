@@ -565,24 +565,26 @@ router.get('/subordinates-list', protect, async (req, res) => {
       if (!req.user.team) {
         return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
       }
-      // All users in the same team (including self for Team Head)
+      // All users in the same team (excluding self for Team Head)
       subordinates = await User.find({
         ...query,
         team: req.user.team,
-        isEmailVerified: true
+        isEmailVerified: true,
+        _id: { $ne: req.user._id }
       }).select('_id firstName lastName email role team');
     } else if (isTimeSheetVerifier) {
-      // TimeSheet Verifiers: show only their team members (excluding team head and admin) + themselves
+      // TimeSheet Verifiers: show only their team members (excluding team head, admin, and themselves)
       if (req.user.team) {
         subordinates = await User.find({
           ...query,
           team: req.user.team,
           role: { $nin: ['Team Head', 'Admin'] }, // Exclude team heads and admins
-          isEmailVerified: true
+          isEmailVerified: true,
+          _id: { $ne: req.user._id }
         }).select('_id firstName lastName email role team');
       } else {
         // If no team, show only themselves
-        subordinates = [req.user];
+        subordinates = [];
       }
     } else if (req.user.role === 'Admin') {
       // Admins: all users except rejected
