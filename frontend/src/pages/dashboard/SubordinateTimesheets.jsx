@@ -103,7 +103,18 @@ const SubordinateTimesheets = () => {
     setLoading(true);
     try {
       let url = `${API_BASE_URL}/api/timesheets/subordinates?page=${page}&limit=20`;
-      if (selectedUser) url += `&userId=${selectedUser}`;
+      if (selectedUser) {
+        // Handle role-based filters for Admin
+        if (selectedUser === 'ALL_TEAM_HEADS') {
+          url += `&roleFilter=Team Head`;
+        } else if (selectedUser === 'ALL_SENIORS') {
+          url += `&roleFilter=Senior`;
+        } else if (selectedUser === 'ALL_FRESHERS') {
+          url += `&roleFilter=Fresher`;
+        } else {
+          url += `&userId=${selectedUser}`;
+        }
+      }
       if (selectedDate) url += `&startDate=${selectedDate}&endDate=${selectedDate}`;
 
       const res = await fetch(url, {
@@ -403,6 +414,14 @@ const SubordinateTimesheets = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
               <option value="">All Users</option>
+              {/* Admin-only role-based filter options */}
+              {user.role === 'Admin' && (
+                <>
+                  <option value="ALL_TEAM_HEADS">All Team Heads</option>
+                  <option value="ALL_SENIORS">All Seniors</option>
+                  <option value="ALL_FRESHERS">All Freshers</option>
+                </>
+              )}
               {(() => {
                 // TimeSheet Verifiers, Team Heads, and Admins: show subordinates as returned by backend
                 return subordinates.map((sub) => (
@@ -539,6 +558,7 @@ const SubordinateTimesheets = () => {
                         <p className="text-xl font-bold text-blue-600">{
                           formatTime(timesheet.entries
                             .filter(entry => entry.approvalStatus === 'pending' || entry.approvalStatus === 'accepted')
+                            .filter(entry => entry.manualTaskName !== 'Permission' && entry.task !== 'permission') // Exclude permission
                             .reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0)
                           )
                         }</p>
@@ -732,7 +752,9 @@ const SubordinateTimesheets = () => {
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-medium text-gray-900">Total Time Spent</span>
                   <span className="text-2xl font-bold text-blue-600">
-                    {formatTime(selectedTimesheet.entries.reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0))}
+                    {formatTime(selectedTimesheet.entries
+                      .filter(entry => entry.manualTaskName !== 'Permission' && entry.task !== 'permission') // Exclude permission
+                      .reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0))}
                   </span>
                 </div>
               </div>

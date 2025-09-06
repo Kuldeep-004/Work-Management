@@ -38,6 +38,7 @@ import taskStatusRoutes from './routes/taskStatuses.js';
 import backupRoutes from './routes/backup.js';
 import workTypeRoutes from './routes/workTypes.js';
 import bulkUpdateRoutes from './routes/bulkStatusUpdate.js';
+import analyticsRoutes from './routes/analytics.js';
 import { activityLoggerMiddleware } from './middleware/activityLoggerMiddleware.js';
 import Team from './models/Team.js';
 import User from './models/User.js';
@@ -118,6 +119,7 @@ app.use('/api/task-statuses', taskStatusRoutes);
 app.use('/api/work-types', workTypeRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/bulk-update', bulkUpdateRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Socket.IO for real-time chat
 const connectedUsers = new Map();

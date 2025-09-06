@@ -102,9 +102,10 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
     if (email) doc.text(email, margin, cursorY);
     if (role) doc.text(`Role: ${role}`, margin + 80, cursorY); // same line to save space
 
-    // Total time on right
+    // Total time on right (excluding permission hours)
     const totalMins = ts.entries
       .filter(e => e.approvalStatus === 'pending' || e.approvalStatus === 'accepted')
+      .filter(e => e.manualTaskName !== 'Permission' && e.task !== 'permission') // Exclude permission
       .reduce((sum, e) => sum + getMinutesBetween(e.startTime, e.endTime), 0);
     doc.setFontSize(bodyFontSize);
     doc.setTextColor(20, 80, 180);
@@ -152,11 +153,12 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
         4: { cellWidth: colStatus, halign: 'center' }
       },
       didDrawPage: (data) => {
-        // Add footer page numbers
-        const pageCount = doc.getNumberOfPages();
+        // Add footer page numbers - fix by calculating total pages after all content is added
         doc.setFontSize(bodyFontSize - 2);
         doc.setTextColor(120);
-        doc.text(`Page ${data.pageNumber} of ${pageCount}`, pageWidth - margin, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
+        // Use data.pageNumber and calculate total pages dynamically
+        const totalPages = doc.internal.getNumberOfPages();
+        doc.text(`Page ${data.pageNumber} of ${totalPages}`, pageWidth - margin, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
       }
     });
 

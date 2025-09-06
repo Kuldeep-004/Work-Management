@@ -273,6 +273,15 @@ router.post('/add-entry', protect, async (req, res) => {
       if (taskId === 'other') {
         taskField = null;
         manualTaskNameField = 'Other';
+      } else if (taskId === 'permission') {
+        taskField = null;
+        manualTaskNameField = 'Permission';
+      } else if (taskId === 'billing') {
+        taskField = null;
+        manualTaskNameField = 'Billing';
+      } else if (taskId === 'lunch') {
+        taskField = null;
+        manualTaskNameField = 'Lunch';
       } else if (taskId === 'internal-works') {
         taskField = null;
         manualTaskNameField = 'Internal Works';
@@ -403,7 +412,7 @@ router.get('/subordinates', protect, async (req, res) => {
     if (!(isAdmin || isTimeSheetVerifier || isTeamHead)) {
       return res.status(403).json({ message: 'Access denied' });
     }
-    const { page = 1, limit = 10, startDate, userId } = req.query;
+    const { page = 1, limit = 10, startDate, userId, roleFilter } = req.query;
     let query = { status: { $ne: 'rejected' } };
     let subordinates;
     // Filtering logic for Team Head
@@ -418,25 +427,39 @@ router.get('/subordinates', protect, async (req, res) => {
         isEmailVerified: true
   }).select('_id firstName lastName email role team photo');
     } else if (isTimeSheetVerifier) {
-      // TimeSheet Verifiers: show only their team members (excluding team head) + themselves
-      if (req.user.team) {
-        subordinates = await User.find({
-          ...query,
-          team: req.user.team,
-          role: { $ne: 'Team Head' }, // Exclude team heads
-          isEmailVerified: true
-  }).select('_id firstName lastName email role team photo');
-      } else {
-        // If no team, show only themselves
-        subordinates = [req.user];
-      }
+        // TimeSheet Verifiers: show only their team members (excluding self, Admins, and Team Heads)
+        if (req.user.team) {
+          subordinates = await User.find({
+            ...query,
+            team: req.user.team,
+            role: { $nin: ['Team Head', 'Admin'] }, // Exclude team heads and admins
+            isEmailVerified: true
+          }).select('_id firstName lastName email role team photo');
+          // Exclude self from subordinates
+          subordinates = subordinates.filter(sub => String(sub._id) !== String(req.user._id));
+        } else {
+          // If no team, show no one
+          subordinates = [];
+        }
     } else if (req.user.role === 'Admin') {
       // Admins: all users except rejected
   subordinates = await User.find(query).select('_id firstName lastName email role team photo');
     }
     const subordinateIds = subordinates.map(sub => sub._id);
-    // If specific user is requested, filter to that user only
-    const targetUserIds = userId ? [userId] : subordinateIds;
+    
+    // Handle role-based filtering for Admin users
+    let targetUserIds;
+    if (roleFilter && req.user.role === 'Admin') {
+      // Filter subordinates by role
+      const filteredSubordinates = subordinates.filter(sub => sub.role === roleFilter);
+      targetUserIds = filteredSubordinates.map(sub => sub._id);
+    } else if (userId) {
+      // If specific user is requested, filter to that user only
+      targetUserIds = [userId];
+    } else {
+      // Default: all subordinates
+      targetUserIds = subordinateIds;
+    }
     if (targetUserIds.length === 0) {
       return res.json({
         timesheets: [],
@@ -549,12 +572,12 @@ router.get('/subordinates-list', protect, async (req, res) => {
         isEmailVerified: true
       }).select('_id firstName lastName email role team');
     } else if (isTimeSheetVerifier) {
-      // TimeSheet Verifiers: show only their team members (excluding team head) + themselves
+      // TimeSheet Verifiers: show only their team members (excluding team head and admin) + themselves
       if (req.user.team) {
         subordinates = await User.find({
           ...query,
           team: req.user.team,
-          role: { $ne: 'Team Head' }, // Exclude team heads
+          role: { $nin: ['Team Head', 'Admin'] }, // Exclude team heads and admins
           isEmailVerified: true
         }).select('_id firstName lastName email role team');
       } else {
@@ -937,6 +960,15 @@ router.patch('/entry/:entryId', protect, async (req, res) => {
       if (taskId === 'other') {
         taskField = null;
         manualTaskNameField = 'Other';
+      } else if (taskId === 'permission') {
+        taskField = null;
+        manualTaskNameField = 'Permission';
+      } else if (taskId === 'billing') {
+        taskField = null;
+        manualTaskNameField = 'Billing';
+      } else if (taskId === 'lunch') {
+        taskField = null;
+        manualTaskNameField = 'Lunch';
       } else if (taskId === 'internal-works') {
         taskField = null;
         manualTaskNameField = 'Internal Works';

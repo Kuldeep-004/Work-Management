@@ -19,6 +19,26 @@ function normalizeTimesheetTasks(ts) {
   };
 }
 
+// Helper functions for special task types
+const isSpecialTaskType = (taskId) => {
+  return ['other', 'permission', 'billing', 'lunch'].includes(taskId);
+};
+
+const getSpecialTaskName = (taskId) => {
+  const taskNames = {
+    'other': 'Other',
+    'permission': 'Permission', 
+    'billing': 'Billing',
+    'lunch': 'Lunch'
+  };
+  return taskNames[taskId] || '';
+};
+
+const isSpecialTaskEntry = (entry) => {
+  const specialTaskNames = ['Other', 'Permission', 'Billing', 'Lunch'];
+  return isSpecialTaskType(entry.task) || specialTaskNames.includes(entry.manualTaskName);
+};
+
 const Timesheets = () => {
   const { user, isAuthenticated } = useAuth();
   const [timesheet, setTimesheet] = useState(null);
@@ -176,14 +196,14 @@ const Timesheets = () => {
       ));
       
       // Update manual task name logic for pending entries
-      if (field === 'task' && value !== 'other') {
+      if (field === 'task' && !isSpecialTaskType(value)) {
         setPendingEntries(prev => prev.map(e => 
           e._id === entryId ? { ...e, manualTaskName: '' } : e
         ));
       }
-      if (field === 'task' && value === 'other') {
+      if (field === 'task' && isSpecialTaskType(value)) {
         setPendingEntries(prev => prev.map(e => 
-          e._id === entryId ? { ...e, manualTaskName: 'Other' } : e
+          e._id === entryId ? { ...e, manualTaskName: getSpecialTaskName(value) } : e
         ));
       }
       return;
@@ -205,11 +225,11 @@ const Timesheets = () => {
     const idx = newEntries.findIndex(e => e._id === entryId);
     if (idx !== -1) {
       newEntries[idx][field] = value;
-      if (field === 'task' && value !== 'other') {
+      if (field === 'task' && !isSpecialTaskType(value)) {
         newEntries[idx].manualTaskName = '';
       }
-      if (field === 'task' && value === 'other') {
-        newEntries[idx].manualTaskName = 'Other';
+      if (field === 'task' && isSpecialTaskType(value)) {
+        newEntries[idx].manualTaskName = getSpecialTaskName(value);
       }
     }
     setTimesheet({
@@ -229,8 +249,8 @@ const Timesheets = () => {
   const saveEntry = async (entry, returnSaved = false, tempId = null) => {
     if (!entry) return;
     // Prevent saving if neither a task nor a manual task is selected
-    const isOther = entry.task === 'other' || entry.manualTaskName === 'Other';
-    if (!entry.task && !isOther) {
+    const isSpecial = isSpecialTaskEntry(entry);
+    if (!entry.task && !isSpecial) {
       toast.error('Please select a task before saving.');
       return;
     }
@@ -245,17 +265,17 @@ const Timesheets = () => {
       
       // Extract task ID properly - handle both populated objects and strings
       let taskId = null;
-      if (entry.task === 'other') {
-        taskId = 'other';
+      if (isSpecialTaskType(entry.task)) {
+        taskId = entry.task;
       } else if (entry.task) {
         // Handle populated task object or string ID
         taskId = (typeof entry.task === 'object' && entry.task._id) ? entry.task._id : entry.task;
       }
       
-      // Only send manualTaskName if "Other" is selected
-      if (taskId === 'other') {
-        payload.taskId = 'other';
-        payload.manualTaskName = 'Other';
+      // Only send manualTaskName if special task type is selected
+      if (isSpecialTaskType(taskId)) {
+        payload.taskId = taskId;
+        payload.manualTaskName = getSpecialTaskName(taskId);
       } else if (taskId) {
         payload.taskId = taskId;
         // Do not send manualTaskName for real tasks
@@ -373,10 +393,10 @@ const Timesheets = () => {
         
         // Extract task ID properly
         let taskId = null;
-        if (entry.task === 'other') {
-          taskId = 'other';
-          payload.taskId = 'other';
-          payload.manualTaskName = 'Other';
+        if (isSpecialTaskType(entry.task)) {
+          taskId = entry.task;
+          payload.taskId = taskId;
+          payload.manualTaskName = getSpecialTaskName(taskId);
         } else if (entry.task) {
           taskId = (typeof entry.task === 'object' && entry.task._id) ? entry.task._id : entry.task;
           payload.taskId = taskId;
@@ -622,11 +642,15 @@ const Timesheets = () => {
     }
   };
 
-  // Calculate total time from all timeslots
+  // Calculate total time from all timeslots (excluding permission)
   const getTotalTime = () => {
     if (!timesheet || !timesheet.entries) return 0;
     let total = 0;
     timesheet.entries.forEach(entry => {
+      // Skip permission entries for total calculation
+      if (entry.manualTaskName === 'Permission' || entry.task === 'permission') {
+        return;
+      }
       if (entry.startTime && entry.endTime) {
         const [sh, sm] = entry.startTime.split(':').map(Number);
         const [eh, em] = entry.endTime.split(':').map(Number);
@@ -855,6 +879,9 @@ const Timesheets = () => {
                       >
                         <option value="">Select task</option>
                         <option value="other">Other</option>
+                        <option value="permission">Permission</option>
+                        <option value="billing">Billing</option>
+                        <option value="lunch">Lunch</option>
                         {tasks.map(task => (
                           <option key={task._id} value={task._id}>
                             {task.title}
@@ -928,17 +955,28 @@ const Timesheets = () => {
               // Task is populated object
               taskValue = entry.task._id;
               taskDisplayName = entry.task.title;
-            } else if (entry?.task && typeof entry.task === 'string' && entry.task !== 'other') {
+            } else if (entry?.task && typeof entry.task === 'string' && !isSpecialTaskType(entry.task)) {
               // Task is just an ID string
               taskValue = entry.task;
               // Try to find the display name from available tasks
               const foundTask = tasks.find(t => t._id === entry.task);
               taskDisplayName = foundTask ? foundTask.title : null;
-            } else if (
-              (entry?.task === 'other' || entry?.manualTaskName === 'Other') && !entry?.task?._id
-            ) {
-              taskValue = 'other';
-              taskDisplayName = 'Other';
+            } else if (isSpecialTaskEntry(entry) && !entry?.task?._id) {
+              // Special task type (other, permission, billing, lunch)
+              if (isSpecialTaskType(entry?.task)) {
+                taskValue = entry.task;
+                taskDisplayName = getSpecialTaskName(entry.task);
+              } else {
+                // Determine from manualTaskName
+                const specialTaskNames = {
+                  'Other': 'other',
+                  'Permission': 'permission',
+                  'Billing': 'billing',
+                  'Lunch': 'lunch'
+                };
+                taskValue = specialTaskNames[entry?.manualTaskName] || 'other';
+                taskDisplayName = entry?.manualTaskName || 'Other';
+              }
             } else {
               taskValue = '';
               taskDisplayName = '';
@@ -1095,6 +1133,9 @@ const Timesheets = () => {
                       >
                         <option value="">Select task</option>
                         <option value="other">Other</option>
+                        <option value="permission">Permission</option>
+                        <option value="billing">Billing</option>
+                        <option value="lunch">Lunch</option>
                         {/* Build dropdown options: all allowed tasks, plus the selected one if missing */}
                         {(() => {
                           const selectedTaskId = taskValue;
@@ -1102,7 +1143,7 @@ const Timesheets = () => {
                           let options = [...tasks];
                           
                           // If the selected task is not in current tasks list but we have it populated
-                          if (selectedTaskId && !taskIds.includes(selectedTaskId) && selectedTaskId !== 'other') {
+                          if (selectedTaskId && !taskIds.includes(selectedTaskId) && !isSpecialTaskType(selectedTaskId)) {
                             let selectedTaskObj = null;
                             
                             // If we have a populated task object, use it

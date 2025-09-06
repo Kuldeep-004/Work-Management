@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import defaultProfile from '../../assets/avatar.jpg';
 import { API_BASE_URL } from '../../apiConfig';
 import { CheckIcon } from '@heroicons/react/24/outline';
+import UserAnalytics from '../../components/UserAnalytics';
 
 const rolesList = ['Admin', 'Senior', 'Team Head', 'Fresher']; // swapped
 const role2List = ['None', 'TimeSheet Verifier', 'Task Verifier'];
@@ -14,6 +15,7 @@ const AllUsers = () => {
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
   const dropdownRefs = useRef({});
 
   useEffect(() => {
@@ -289,7 +291,11 @@ const AllUsers = () => {
                       alt={`${u.firstName} ${u.lastName}`}
                       className="w-9 h-9 rounded-full object-cover mr-3"
                     />
-                    <span className="text-sm font-medium text-gray-900">
+                    <span 
+                      className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors duration-200 hover:underline"
+                      onClick={() => setSelectedUser(u)}
+                      title="Click to view analytics"
+                    >
                       {u.firstName} {u.lastName}
                     </span>
                   </div>
@@ -399,6 +405,15 @@ const AllUsers = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Analytics Modal */}
+      {selectedUser && (
+        <UserAnalytics
+          userId={selectedUser._id}
+          userName={`${selectedUser.firstName} ${selectedUser.lastName}`}
+          onClose={() => setSelectedUser(null)}
+        />
+      )}
     </div>
   );
 };
