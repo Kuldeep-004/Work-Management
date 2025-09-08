@@ -66,6 +66,7 @@ const DEFAULT_TAB = (taskType = 'execution', customColumns = []) => {
       ...customColumns.map(col => [`custom_${col.name}`, 150])
     ]),
     activeTab: taskType,
+    selectedUserId: null, // Add selectedUserId field
   };
 };
 
@@ -117,9 +118,11 @@ const ReceivedTasks = () => {
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const columnsDropdownRef = useRef(null);
   const tableRef = useRef(null);
+  const usersDropdownRef = useRef(null);
   const [taskHours, setTaskHours] = useState([]);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
+  const [showUsersDropdown, setShowUsersDropdown] = useState(false);
 
   // Custom columns state
   const [customColumns, setCustomColumns] = useState([]);
@@ -213,10 +216,20 @@ const ReceivedTasks = () => {
   const fetchTasksAndTabState = async () => {
     try {
       let url;
-      if (activeTabObj.activeTab === 'guidance') {
-        url = `${API_BASE_URL}/api/tasks/received/guidance`;
+      // Check if we're viewing tasks for a specific user
+      if (activeTabObj.selectedUserId) {
+        if (activeTabObj.activeTab === 'guidance') {
+          url = `${API_BASE_URL}/api/tasks/received/user/${activeTabObj.selectedUserId}/guidance`;
+        } else {
+          url = `${API_BASE_URL}/api/tasks/received/user/${activeTabObj.selectedUserId}?tab=${activeTabObj.activeTab}`;
+        }
       } else {
-        url = `${API_BASE_URL}/api/tasks/received?tab=${activeTabObj.activeTab}`;
+        // Normal flow - get tasks for current user
+        if (activeTabObj.activeTab === 'guidance') {
+          url = `${API_BASE_URL}/api/tasks/received/guidance`;
+        } else {
+          url = `${API_BASE_URL}/api/tasks/received?tab=${activeTabObj.activeTab}`;
+        }
       }
       // Fetch tasks and tab state together
       const [tasksResponse, tabState] = await Promise.all([
@@ -323,10 +336,20 @@ const ReceivedTasks = () => {
         for (const tabType of receivedTabTypes) {
           const simulatedTab = { ...tab, activeTab: tabType };
           let url;
-          if (tabType === 'guidance') {
-            url = `${API_BASE_URL}/api/tasks/received/guidance`;
+          // Check if we're viewing tasks for a specific user
+          if (simulatedTab.selectedUserId) {
+            if (tabType === 'guidance') {
+              url = `${API_BASE_URL}/api/tasks/received/user/${simulatedTab.selectedUserId}/guidance`;
+            } else {
+              url = `${API_BASE_URL}/api/tasks/received/user/${simulatedTab.selectedUserId}?tab=${tabType}`;
+            }
           } else {
-            url = `${API_BASE_URL}/api/tasks/received?tab=${tabType}`;
+            // Normal flow - get tasks for current user
+            if (tabType === 'guidance') {
+              url = `${API_BASE_URL}/api/tasks/received/guidance`;
+            } else {
+              url = `${API_BASE_URL}/api/tasks/received?tab=${tabType}`;
+            }
           }
           let filteredTasks = [];
           try {
@@ -437,13 +460,21 @@ const ReceivedTasks = () => {
       fetchTasksAndTabState();
     }
     // eslint-disable-next-line
-  }, [user, activeTabObj.activeTab]);
+  }, [user, activeTabObj.activeTab, activeTabObj.selectedUserId]);
 
   // Fetch task counts for each tab
   useEffect(() => {
     const fetchTaskCounts = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/tasks/received/counts`, {
+        let url;
+        // Check if we're viewing tasks for a specific user
+        if (activeTabObj.selectedUserId) {
+          url = `${API_BASE_URL}/api/tasks/received/user/${activeTabObj.selectedUserId}/counts`;
+        } else {
+          url = `${API_BASE_URL}/api/tasks/received/counts`;
+        }
+
+        const response = await fetch(url, {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
@@ -461,7 +492,7 @@ const ReceivedTasks = () => {
     if (user && user.token) {
       fetchTaskCounts();
     }
-  }, [user]);
+  }, [user, activeTabObj.selectedUserId]);
 
   // Fetch custom columns
   useEffect(() => {
@@ -564,8 +595,28 @@ const ReceivedTasks = () => {
       // For guidance tab, only show tasks where status !== 'completed'
       if (activeTabObj.activeTab === 'guidance' && task.status === 'completed') return false;
 
-      // For completed tab, only show tasks where assignedTo is current user and status is completed
-      if (activeTabObj.activeTab === 'completed' && (!task.assignedTo || (task.assignedTo._id !== user._id && task.assignedTo !== user._id || task.status !== 'completed'))) return false;
+      // For completed tab, only show tasks where status is completed AND 
+      // (assignedTo is target user OR target user is any verifier)
+      if (activeTabObj.activeTab === 'completed') {
+        const targetUserId = activeTabObj.selectedUserId || user._id;
+        if (task.status !== 'completed') {
+          return false;
+        }
+        
+        // Check if target user is assignedTo or any verifier
+        const isAssigned = task.assignedTo && (task.assignedTo._id === targetUserId || task.assignedTo === targetUserId);
+        const isVerifier = (
+          (task.verificationAssignedTo && (task.verificationAssignedTo._id === targetUserId || task.verificationAssignedTo === targetUserId)) ||
+          (task.secondVerificationAssignedTo && (task.secondVerificationAssignedTo._id === targetUserId || task.secondVerificationAssignedTo === targetUserId)) ||
+          (task.thirdVerificationAssignedTo && (task.thirdVerificationAssignedTo._id === targetUserId || task.thirdVerificationAssignedTo === targetUserId)) ||
+          (task.fourthVerificationAssignedTo && (task.fourthVerificationAssignedTo._id === targetUserId || task.fourthVerificationAssignedTo === targetUserId)) ||
+          (task.fifthVerificationAssignedTo && (task.fifthVerificationAssignedTo._id === targetUserId || task.fifthVerificationAssignedTo === targetUserId))
+        );
+        
+        if (!isAssigned && !isVerifier) {
+          return false;
+        }
+      }
 
       // For receivedVerification tab, additional frontend filtering is not needed 
       // as backend now handles the verification accepted filtering
@@ -811,6 +862,17 @@ const ReceivedTasks = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showColumnDropdown]);
 
+  useEffect(() => {
+    if (!showUsersDropdown) return;
+    function handleClickOutside(event) {
+      if (usersDropdownRef.current && !usersDropdownRef.current.contains(event.target)) {
+        setShowUsersDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showUsersDropdown]);
+
   // Fetch tabs and activeTabId from backend on mount
   useEffect(() => {
     if (!user?.token) return;
@@ -847,6 +909,11 @@ const ReceivedTasks = () => {
             // Ensure verification column has width setting
             if (!updatedTab.columnWidths.verification) {
               updatedTab.columnWidths.verification = 130;
+            }
+            
+            // Ensure selectedUserId is initialized
+            if (updatedTab.selectedUserId === undefined) {
+              updatedTab.selectedUserId = null;
             }
             
             return updatedTab;
@@ -916,6 +983,9 @@ const ReceivedTasks = () => {
         onRenameTab={renameTab}
         onReorderTabs={reorderTabs}
       />
+      
+      
+      
       <div className="mb-6">
         {/* Replace nav tabs with a select for activeTab in the current tab */}
         <div className="border-b border-gray-200">
@@ -1036,6 +1106,56 @@ const ReceivedTasks = () => {
               </div>
             )}
           </div>
+          
+          {/* Users dropdown - only show for Admin and Team Head */}
+          {['Admin', 'Team Head'].includes(user?.role) && (
+            <div className="relative flex items-center gap-2">
+              <button
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
+                onClick={() => setShowUsersDropdown(v => !v)}
+                type="button"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                </svg>
+                <span className="font-semibold">
+                  {activeTabObj.selectedUserId ? 
+                    (() => {
+                      const selectedUser = users.find(u => u._id === activeTabObj.selectedUserId);
+                      return selectedUser ? `${selectedUser.firstName} ${selectedUser.lastName}` : 'Users';
+                    })() : 'Users'
+                  }
+                </span>
+              </button>
+              {showUsersDropdown && (
+                <div ref={usersDropdownRef} className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-48 animate-fade-in max-h-64 overflow-y-auto">
+                  <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">View Tasks For</div>
+                  <button 
+                    className={`block w-full text-left px-4 py-2 rounded ${!activeTabObj.selectedUserId ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
+                    onClick={() => { 
+                      updateActiveTab({ selectedUserId: null }); 
+                      setShowUsersDropdown(false); 
+                    }}
+                  >
+                    None (My Tasks)
+                  </button>
+                  {users.map(user => (
+                    <button 
+                      key={user._id}
+                      className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.selectedUserId === user._id ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
+                      onClick={() => { 
+                        updateActiveTab({ selectedUserId: user._id }); 
+                        setShowUsersDropdown(false); 
+                      }}
+                    >
+                      {user.firstName} {user.lastName}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          
           <button
             onClick={() => setShowCreateTaskModal(true)}
             className="ml-0 flex items-center justify-center w-7 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"

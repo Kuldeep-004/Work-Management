@@ -255,6 +255,14 @@ const Timesheets = () => {
       return;
     }
     try {
+      // Show lunch reminder toast if editing lunch entry and time > 30 mins
+      const isLunch = entry.task === 'lunch' || entry.manualTaskName === 'Lunch';
+      if (isLunch && entry.startTime && entry.endTime) {
+        const mins = getMinutesBetween(entry.startTime, entry.endTime);
+        if (mins > 30) {
+          toast('Reminder, Lunch timings are for 30 mins. Next time please ensure it is completed within the allotted time', { duration: 8000 });
+        }
+      }
       let res;
       // Prepare payload based on task selection
       let payload = {
@@ -262,7 +270,6 @@ const Timesheets = () => {
         startTime: entry.startTime,
         endTime: entry.endTime
       };
-      
       // Extract task ID properly - handle both populated objects and strings
       let taskId = null;
       if (isSpecialTaskType(entry.task)) {
@@ -271,7 +278,6 @@ const Timesheets = () => {
         // Handle populated task object or string ID
         taskId = (typeof entry.task === 'object' && entry.task._id) ? entry.task._id : entry.task;
       }
-      
       // Only send manualTaskName if special task type is selected
       if (isSpecialTaskType(taskId)) {
         payload.taskId = taskId;
@@ -283,7 +289,6 @@ const Timesheets = () => {
         payload.taskId = null;
         payload.manualTaskName = entry.manualTaskName || '';
       }
-      
       if (entry._id && isValidObjectId(entry._id)) {
         // PATCH for existing entry with valid ObjectId
         res = await fetch(`${API_BASE_URL}/api/timesheets/entry/${entry._id}`, {
@@ -383,14 +388,21 @@ const Timesheets = () => {
   const handleAcceptTimeslot = async (entryId, entry) => {
     try {
       if (entry.isPending) {
-        // This is a new pending entry - save to MongoDB
+        // Check for Lunch task and time spent > 30 mins
+        const isLunch = entry.task === 'lunch' || entry.manualTaskName === 'Lunch';
+        if (isLunch && entry.startTime && entry.endTime) {
+          const mins = getMinutesBetween(entry.startTime, entry.endTime);
+          if (mins > 30) {
+            toast('Reminder, Lunch timings are for 30 mins. Next time please ensure it is completed within the allotted time', { duration: 8000 });
+          }
+        }
+        // ...existing code...
         const payload = {
           workDescription: entry.workDescription || '',
           startTime: entry.startTime,
           endTime: entry.endTime,
           date: selectedDate.toISOString().split('T')[0]
         };
-        
         // Extract task ID properly
         let taskId = null;
         if (isSpecialTaskType(entry.task)) {
@@ -404,12 +416,10 @@ const Timesheets = () => {
           payload.taskId = null;
           payload.manualTaskName = entry.manualTaskName || '';
         }
-        
         if (!payload.taskId && !payload.manualTaskName) {
           toast.error('Please select a task before accepting.');
           return;
         }
-        
         const res = await fetch(`${API_BASE_URL}/api/timesheets/add-entry`, {
           method: 'POST',
           headers: {
@@ -418,18 +428,14 @@ const Timesheets = () => {
           },
           body: JSON.stringify(payload),
         });
-        
         if (!res.ok) {
           const errorData = await res.json();
           throw new Error(errorData.message || 'Failed to save timeslot');
         }
-        
         const updatedTimesheet = await res.json();
         setTimesheet(normalizeTimesheetTasks(updatedTimesheet));
-        
         // Remove from pending entries
         setPendingEntries(prev => prev.filter(e => e._id !== entryId));
-        
         toast.success('Timeslot saved!');
       } else {
         // This is an existing entry being edited - update in MongoDB

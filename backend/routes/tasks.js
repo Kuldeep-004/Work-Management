@@ -187,10 +187,17 @@ router.get('/received/counts', protect, async (req, res) => {
       verificationAssignedTo: { $exists: true, $ne: null },
       verification: { $ne: 'accepted' } // Don't count tasks with verification accepted
     });
-    // Completed: status is completed and assignedTo is current user
+    // Completed: status is completed and (assignedTo is current user OR user is any verifier)
     const completedCount = await Task.countDocuments({
       status: 'completed',
-      assignedTo: req.user._id
+      $or: [
+        { assignedTo: req.user._id },
+        { verificationAssignedTo: req.user._id },
+        { secondVerificationAssignedTo: req.user._id },
+        { thirdVerificationAssignedTo: req.user._id },
+        { fourthVerificationAssignedTo: req.user._id },
+        { fifthVerificationAssignedTo: req.user._id }
+      ]
     });
     // Guidance: tasks where current user is a guide and status is not completed
     const guidanceCount = await Task.countDocuments({
@@ -206,6 +213,113 @@ router.get('/received/counts', protect, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching received task counts:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get task counts for received tasks for a specific user (Admin/Team Head only)
+router.get('/received/user/:userId/counts', protect, async (req, res) => {
+  try {
+    // Check if current user has permission (Admin or Team Head)
+    if (!['Admin', 'Team Head'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied. Only Admin and Team Head can view other users\' task counts.' });
+    }
+
+    const { userId } = req.params;
+
+    // Validate userId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    // Check if target user exists
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Execution: Rule 1 (old): not completed, no verifiers, assigned to target user
+    // Rule 2 (new): not completed, verification is accepted, assigned to target user (even if has verifiers)
+    // These rules work as "OR" to each other
+    const executionCount = await Task.countDocuments({
+      status: { $ne: 'completed' },
+      assignedTo: userId,
+      $or: [
+        // Rule 1: no verifiers
+        {
+          verificationAssignedTo: { $exists: false },
+          secondVerificationAssignedTo: { $exists: false },
+          thirdVerificationAssignedTo: { $exists: false },
+          fourthVerificationAssignedTo: { $exists: false },
+          fifthVerificationAssignedTo: { $exists: false }
+        },
+        // Rule 2: verification is accepted (even if has verifiers)
+        {
+          verification: 'accepted'
+        }
+      ]
+    });
+
+    // Received for verification: not completed, user is the latest assigned verifier
+    // AND verification is not accepted
+    const verifierFields = [
+      'verificationAssignedTo',
+      'secondVerificationAssignedTo',
+      'thirdVerificationAssignedTo',
+      'fourthVerificationAssignedTo',
+      'fifthVerificationAssignedTo',
+    ];
+    const orConditions = verifierFields.map((field, idx) => {
+      const laterFields = verifierFields.slice(idx + 1);
+      const laterNulls = Object.fromEntries(laterFields.map(f => [f, { $in: [null, undefined] }]));
+      return {
+        [field]: userId,
+        ...laterNulls
+      };
+    });
+    const receivedVerificationCount = await Task.countDocuments({
+      status: { $ne: 'completed' },
+      verification: { $ne: 'accepted' }, // Don't count tasks with verification accepted
+      $or: orConditions
+    });
+
+    // Issued for verification: not completed, first verifier is set, assigned to target user
+    // AND verification is not accepted
+    const issuedVerificationCount = await Task.countDocuments({
+      status: { $ne: 'completed' },
+      assignedTo: userId,
+      verificationAssignedTo: { $exists: true, $ne: null },
+      verification: { $ne: 'accepted' } // Don't count tasks with verification accepted
+    });
+
+    // Completed: status is completed and (assignedTo is target user OR user is any verifier)
+    const completedCount = await Task.countDocuments({
+      status: 'completed',
+      $or: [
+        { assignedTo: userId },
+        { verificationAssignedTo: userId },
+        { secondVerificationAssignedTo: userId },
+        { thirdVerificationAssignedTo: userId },
+        { fourthVerificationAssignedTo: userId },
+        { fifthVerificationAssignedTo: userId }
+      ]
+    });
+
+    // Guidance: tasks where target user is a guide and status is not completed
+    const guidanceCount = await Task.countDocuments({
+      guides: userId,
+      status: { $ne: 'completed' }
+    });
+
+    res.json({
+      execution: executionCount,
+      receivedVerification: receivedVerificationCount,
+      issuedVerification: issuedVerificationCount,
+      completed: completedCount,
+      guidance: guidanceCount
+    });
+  } catch (error) {
+    console.error('Error fetching received task counts for user:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -2216,6 +2330,187 @@ router.get('/export/excel', protect, async (req, res) => {
     res.json(tasks);
   } catch (error) {
     console.error('Error fetching tasks for Excel export:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get received tasks for a specific user (Admin/Team Head only)
+router.get('/received/user/:userId', protect, async (req, res) => {
+  try {
+    // Check if current user has permission (Admin or Team Head)
+    if (!['Admin', 'Team Head'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied. Only Admin and Team Head can view other users\' tasks.' });
+    }
+
+    const { userId } = req.params;
+    const { tab = 'execution' } = req.query;
+
+    // Validate userId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    // Check if target user exists
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    let query = {};
+    switch (tab) {
+      case 'execution':
+        // Tasks for execution: 
+        // Rule 1 (old): not completed, no verifiers, assigned to target user
+        // Rule 2 (new): not completed, verification is accepted, assigned to target user (even if has verifiers)
+        // These rules work as "OR" to each other
+        query = {
+          status: { $ne: 'completed' },
+          assignedTo: userId,
+          $or: [
+            // Rule 1: no verifiers
+            {
+              verificationAssignedTo: { $exists: false },
+              secondVerificationAssignedTo: { $exists: false },
+              thirdVerificationAssignedTo: { $exists: false },
+              fourthVerificationAssignedTo: { $exists: false },
+              fifthVerificationAssignedTo: { $exists: false }
+            },
+            // Rule 2: verification is accepted (even if has verifiers)
+            {
+              verification: 'accepted'
+            }
+          ]
+        };
+        break;
+      case 'receivedVerification': {
+        // Tasks where status is not completed, user is the latest assigned verifier
+        // AND verification is not accepted
+        const verifierFields = [
+          'verificationAssignedTo',
+          'secondVerificationAssignedTo',
+          'thirdVerificationAssignedTo',
+          'fourthVerificationAssignedTo',
+          'fifthVerificationAssignedTo',
+        ];
+        const orConditions = verifierFields.map((field, idx) => {
+          // All later fields must be null or not exist
+          const laterFields = verifierFields.slice(idx + 1);
+          const laterNulls = Object.fromEntries(laterFields.map(f => [f, { $in: [null, undefined] }]));
+          return {
+            [field]: userId,
+            ...laterNulls
+          };
+        });
+        query = {
+          status: { $ne: 'completed' },
+          verification: { $ne: 'accepted' }, // Don't show tasks with verification accepted
+          $or: orConditions
+        };
+        break;
+      }
+      case 'issuedVerification':
+        // Tasks issued for verification: not completed, first verifier is set, assigned to target user
+        // AND verification is not accepted
+        query = {
+          status: { $ne: 'completed' },
+          assignedTo: userId,
+          verificationAssignedTo: { $exists: true, $ne: null },
+          verification: { $ne: 'accepted' } // Don't show tasks with verification accepted
+        };
+        break;
+      case 'completed':
+        // Completed tasks: status is completed
+        query = {
+          status: 'completed',
+          $or: [
+            { assignedTo: userId },
+            { verificationAssignedTo: userId },
+            { secondVerificationAssignedTo: userId },
+            { thirdVerificationAssignedTo: userId },
+            { fourthVerificationAssignedTo: userId },
+            { fifthVerificationAssignedTo: userId }
+          ]
+        };
+        break;
+      default:
+        // Default to execution tab
+        query = {
+          status: { $ne: 'completed' },
+          assignedTo: userId,
+          $or: [
+            // Rule 1: no verifiers
+            {
+              verificationAssignedTo: { $exists: false },
+              secondVerificationAssignedTo: { $exists: false },
+              thirdVerificationAssignedTo: { $exists: false },
+              fourthVerificationAssignedTo: { $exists: false },
+              fifthVerificationAssignedTo: { $exists: false }
+            },
+            // Rule 2: verification is accepted (even if has verifiers)
+            {
+              verification: 'accepted'
+            }
+          ]
+        };
+    }
+
+    const tasks = await Task.find(query)
+      .populate('assignedTo', 'firstName lastName photo')
+      .populate('assignedBy', 'firstName lastName photo')
+      .populate('verificationAssignedTo', 'firstName lastName photo')
+      .populate('secondVerificationAssignedTo', 'firstName lastName photo')
+      .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
+      .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
+      .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
+      .populate('guides', 'firstName lastName photo')
+      .select('title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress')
+      .sort({ createdAt: -1 });
+
+    res.json(tasks);
+  } catch (error) {
+    console.error('Error fetching received tasks for user:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get guidance tasks for a specific user (Admin/Team Head only)
+router.get('/received/user/:userId/guidance', protect, async (req, res) => {
+  try {
+    // Check if current user has permission (Admin or Team Head)
+    if (!['Admin', 'Team Head'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied. Only Admin and Team Head can view other users\' tasks.' });
+    }
+
+    const { userId } = req.params;
+
+    // Validate userId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    // Check if target user exists
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const tasks = await Task.find({
+      guides: userId
+    })
+      .populate('assignedTo', 'firstName lastName photo')
+      .populate('assignedBy', 'firstName lastName photo')
+      .populate('verificationAssignedTo', 'firstName lastName photo')
+      .populate('secondVerificationAssignedTo', 'firstName lastName photo')
+      .populate('thirdVerificationAssignedTo', 'firstName lastName photo')
+      .populate('fourthVerificationAssignedTo', 'firstName lastName photo')
+      .populate('fifthVerificationAssignedTo', 'firstName lastName photo')
+      .populate('guides', 'firstName lastName photo')
+      .select('title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress')
+      .sort({ createdAt: -1 });
+
+    res.json(tasks);
+  } catch (error) {
+    console.error('Error fetching guidance tasks for user:', error);
     res.status(500).json({ message: error.message });
   }
 });
