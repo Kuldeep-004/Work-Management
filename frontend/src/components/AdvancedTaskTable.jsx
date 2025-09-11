@@ -853,25 +853,25 @@ const AdvancedTaskTable = React.memo(({
                                         if (!response.ok) throw new Error('Failed to update self verification');
                                         const updatedTask = await response.json();
                                         console.log('Updated task received:', updatedTask);
-                                        // Update task in state immediately
+                                        // Update task in state immediately - no refetch needed
                                         if (onTaskUpdate) {
                                           onTaskUpdate(task._id, (prevTask) => ({
                                             ...prevTask,
                                             selfVerification: updatedTask.selfVerification
                                           }));
                                         }
-                                        // Also force refresh of tasks if refetchTasks is available
-                                        if (refetchTasks) {
-                                          setTimeout(() => refetchTasks(), 200);
-                                        }
+                                        // No refetchTasks() call - use local updates for smooth UX
                                         
                                         toast.success('Self Verification updated');
                                       } catch (err) {
                                         console.error('Error updating self verification:', err);
                                         toast.error('Failed to update Self Verification');
-                                        // Revert checkbox state on error by forcing a re-render
-                                        if (refetchTasks) {
-                                          refetchTasks();
+                                        // On error, revert using local state update instead of refetch
+                                        if (onTaskUpdate) {
+                                          onTaskUpdate(task._id, (prevTask) => ({
+                                            ...prevTask,
+                                            selfVerification: !checked // revert the change
+                                          }));
                                         }
                                       } finally {
                                         setIsUpdating(false);

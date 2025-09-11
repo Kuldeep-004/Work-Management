@@ -98,8 +98,10 @@ const ReceivedTasks = () => {
 
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
-  const [tasksLoaded, setTasksLoaded] = useState(false); // NEW
+  const [tasksLoaded, setTasksLoaded] = useState(false); // For initial loading only
   const [usersLoaded, setUsersLoaded] = useState(false); // NEW
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false); // Track if initial data has been loaded
+  const [isTabSwitching, setIsTabSwitching] = useState(false); // Track tab switching
   const [error, setError] = useState(null);
   const [highlightedTaskId, setHighlightedTaskId] = useState(null);
   const [taskCounts, setTaskCounts] = useState({
@@ -215,6 +217,11 @@ const ReceivedTasks = () => {
 
   const fetchTasksAndTabState = async () => {
     try {
+      // Show subtle loading state if this is tab switching (not initial load)
+      if (initialDataLoaded) {
+        setIsTabSwitching(true);
+      }
+      
       let url;
       // Check if we're viewing tasks for a specific user
       if (activeTabObj.selectedUserId) {
@@ -258,7 +265,9 @@ const ReceivedTasks = () => {
       toast.error('Failed to fetch tasks');
       setTasks([]);
     } finally {
-      setTasksLoaded(true); // NEW
+      setTasksLoaded(true);
+      setInitialDataLoaded(true); // Mark that initial data has been loaded
+      setIsTabSwitching(false); // Reset tab switching state
     }
   };
 
@@ -456,7 +465,10 @@ const ReceivedTasks = () => {
 
   useEffect(() => {
     if (user && user.token) {
-      setTasksLoaded(false); // NEW: reset before fetching
+      // Only reset loading state on initial load, not on tab switches
+      if (!initialDataLoaded) {
+        setTasksLoaded(false);
+      }
       fetchTasksAndTabState();
     }
     // eslint-disable-next-line
@@ -623,7 +635,8 @@ const ReceivedTasks = () => {
       if (activeTabObj.activeTab === 'receivedVerification') {
         if (task.status === 'completed') return false;
         // Backend already filters by verification != 'accepted' and latest verifier check
-        // So we just need to verify the latest verifier is current user
+        // So we just need to verify the latest verifier is the selected user (or current user)
+        const targetUserId = activeTabObj.selectedUserId || user._id;
         const verifierFields = [
           'verificationAssignedTo',
           'secondVerificationAssignedTo',
@@ -633,12 +646,12 @@ const ReceivedTasks = () => {
         ];
         let latestVerifier = null;
         for (let i = verifierFields.length - 1; i >= 0; i--) {
-          if (task[verifierFields[i]] && task[verifierFields[i]]._id) {
-            latestVerifier = task[verifierFields[i]]._id;
+          if (task[verifierFields[i]] && (task[verifierFields[i]]._id || task[verifierFields[i]])) {
+            latestVerifier = task[verifierFields[i]]._id || task[verifierFields[i]];
             break;
           }
         }
-        if (!latestVerifier || String(latestVerifier) !== String(user._id)) return false;
+        if (!latestVerifier || String(latestVerifier) !== String(targetUserId)) return false;
       }
 
       // Filter by search term
@@ -945,8 +958,8 @@ const ReceivedTasks = () => {
     saveTabState('receivedTasks', { tabs, activeTabId, rowOrder }, user.token).catch(() => {});
   }, [tabs, activeTabId, rowOrder, user, tabsLoaded]);
 
-  // Combine all loading states
-  const isPageLoading = !tabsLoaded || !usersLoaded || !tasksLoaded;
+  // Combine all loading states - only show loading spinner on initial page load
+  const isPageLoading = !tabsLoaded || !usersLoaded || (!tasksLoaded && !initialDataLoaded);
 
   // Early return checks - after all hooks to avoid hook order violations
   if (!isAuthenticated()) {
@@ -1168,7 +1181,13 @@ const ReceivedTasks = () => {
       </div>
       <ErrorBoundary>
         {/* Responsive table wrapper - hide scrollbar */}
-        <div className="table-wrapper-no-scrollbar w-full" ref={tableRef}>
+        <div className="table-wrapper-no-scrollbar w-full relative bg-gray-50" ref={tableRef}>
+          {/* Subtle loading overlay for tab switching */}
+          {isTabSwitching && (
+            <div className="absolute inset-0 bg-gray-50 bg-opacity-90 flex items-center justify-center z-10">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          )}
           <AdvancedTaskTable
             tasks={getFilteredAndSortedTasks(tasks)}
             viewType="received"

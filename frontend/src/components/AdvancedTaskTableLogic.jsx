@@ -959,18 +959,27 @@ export const useAdvancedTaskTableLogic = (props) => {
     const handleVerificationChange = async (task, newVerification) => {
       console.log('Starting verification update for task:', task._id, 'new verification:', newVerification);
       
-      // If it's accepted or rejected, show the remarks modal
-      if (newVerification === 'accepted' || newVerification === 'rejected') {
+      // If it's rejected, show the remarks modal
+      // For accepted, proceed directly without showing popup
+      if (newVerification === 'rejected') {
         setRemarksModalTask(task);
         setRemarksModalType(newVerification);
         setShowRemarksModal(true);
         setEditingVerificationTaskId(null);
         return;
       }
-  
-      // For other statuses (pending, next verification), proceed directly
+
+      // For all statuses (pending, next verification, accepted), proceed directly
       setVerificationLoading(true);
       setIsUpdatingTaskProperties(true);
+      
+      // If accepting in receivedVerification tab, remove task immediately to avoid re-render
+      if (taskType === 'receivedVerification' && newVerification === 'accepted') {
+        // Remove from local state immediately - no flickering
+        const filteredTasks = orderedTasks.filter(t => t._id !== task._id);
+        setOrderedTasks(filteredTasks);
+      }
+      
       try {
         const response = await fetch(`${API_BASE_URL}/api/tasks/${task._id}/verification`, {
           method: 'PATCH',
@@ -978,7 +987,10 @@ export const useAdvancedTaskTableLogic = (props) => {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${user.token}`,
           },
-          body: JSON.stringify({ verification: newVerification }),
+          body: JSON.stringify({ 
+            verification: newVerification,
+            remarks: newVerification === 'accepted' ? '' : undefined 
+          }),
         });
         
         console.log('Verification update response status:', response.status);
@@ -992,35 +1004,48 @@ export const useAdvancedTaskTableLogic = (props) => {
         
         console.log('Updated task received:', updatedTask);
         
-        // Update the task in orderedTasks without changing positions
-        const updatedOrderedTasks = orderedTasks.map(t => 
-          t._id === task._id ? { ...t, ...updatedTask } : t
-        );
-        setOrderedTasks(updatedOrderedTasks);
+        // Update local state for all verification changes - no re-render needed
+        if (taskType === 'receivedVerification' && newVerification === 'accepted') {
+          // Task already removed from local state above
+        } else {
+          // Update the task in orderedTasks without changing positions
+          const updatedOrderedTasks = orderedTasks.map(t => 
+            t._id === task._id ? { ...t, ...updatedTask } : t
+          );
+          setOrderedTasks(updatedOrderedTasks);
 
-        if (onTaskUpdate) {
-          onTaskUpdate(task._id, () => updatedTask);
+          if (onTaskUpdate) {
+            onTaskUpdate(task._id, () => updatedTask);
+          }
         }
         
-        // Refresh tasks from backend if refetchTasks is available
-        if (refetchTasks) {
-          refetchTasks();
-        }
+        // No refetchTasks() call - use local state updates only for smooth UX
         
-        toast.success('Verification updated');
+        toast.success(newVerification === 'accepted' ? 'Task accepted successfully' : 'Verification updated');
       } catch (error) {
         console.error('Error updating verification:', error);
         toast.error(error.message || 'Failed to update verification');
+        
+        // If there was an error and we removed the task, add it back
+        if (taskType === 'receivedVerification' && newVerification === 'accepted') {
+          setOrderedTasks(orderedTasks);
+        }
       }
       setVerificationLoading(false);
       setEditingVerificationTaskId(null);
       // Add a small delay to ensure the update is processed before allowing refetches
       setTimeout(() => setIsUpdatingTaskProperties(false), 100);
-    };
-  
-    // Handle verification with remarks
+    };    // Handle verification with remarks
     const handleVerificationWithRemarks = async (remarks) => {
       setRemarksModalLoading(true);
+      
+      // If accepting in receivedVerification tab, remove task immediately to avoid re-render
+      if (taskType === 'receivedVerification' && remarksModalType === 'accepted') {
+        // Remove from local state immediately - no flickering
+        const filteredTasks = orderedTasks.filter(t => t._id !== remarksModalTask._id);
+        setOrderedTasks(filteredTasks);
+      }
+      
       try {
         const response = await fetch(`${API_BASE_URL}/api/tasks/${remarksModalTask._id}/verification`, {
           method: 'PATCH',
@@ -1041,26 +1066,34 @@ export const useAdvancedTaskTableLogic = (props) => {
         
         const updatedTask = await response.json();
         
-        if (onTaskUpdate) {
-          onTaskUpdate(remarksModalTask._id, () => updatedTask);
+        // Only update local state if task wasn't removed (not accepted in receivedVerification)
+        if (!(taskType === 'receivedVerification' && remarksModalType === 'accepted')) {
+          if (onTaskUpdate) {
+            onTaskUpdate(remarksModalTask._id, () => updatedTask);
+          }
+          
+          // Update the task in orderedTasks without changing positions
+          const updatedOrderedTasks = orderedTasks.map(t => 
+            t._id === remarksModalTask._id ? { ...t, ...updatedTask } : t
+          );
+          setOrderedTasks(updatedOrderedTasks);
+          
+          // Refresh tasks from backend if refetchTasks is available
+          if (refetchTasks) {
+            refetchTasks();
+          }
         }
         
-        // Update the task in orderedTasks without changing positions
-        const updatedOrderedTasks = orderedTasks.map(t => 
-          t._id === remarksModalTask._id ? { ...t, ...updatedTask } : t
-        );
-        setOrderedTasks(updatedOrderedTasks);
-        
-        // Refresh tasks from backend if refetchTasks is available
-        if (refetchTasks) {
-          refetchTasks();
-        }
-        
-    toast.success(`Task ${remarksModalType === 'rejected' ? 'returned' : remarksModalType} successfully`);
+        toast.success(`Task ${remarksModalType === 'rejected' ? 'returned' : remarksModalType} successfully`);
         setShowRemarksModal(false);
       } catch (error) {
         console.error('Error updating verification:', error);
         toast.error(error.message || 'Failed to update verification');
+        
+        // If there was an error and we removed the task, add it back
+        if (taskType === 'receivedVerification' && remarksModalType === 'accepted') {
+          setOrderedTasks(orderedTasks);
+        }
       }
       setRemarksModalLoading(false);
     };
@@ -1249,20 +1282,20 @@ export const useAdvancedTaskTableLogic = (props) => {
       if (groupField === 'workType') {
         // For workType, group by first type if array, or by value
         groupedTasks = {};
-        tasks.forEach(task => {
+        orderedTasks.forEach(task => {
           let key = Array.isArray(task.workType) ? (task.workType[0] || 'Unspecified') : (task.workType || 'Unspecified');
           if (!groupedTasks[key]) groupedTasks[key] = [];
           groupedTasks[key].push(task);
         });
       } else if (groupField === 'billed') {
         groupedTasks = {};
-        tasks.forEach(task => {
+        orderedTasks.forEach(task => {
           let key = task.billed ? 'Yes' : 'No';
           if (!groupedTasks[key]) groupedTasks[key] = [];
           groupedTasks[key].push(task);
         });
       } else {
-        groupedTasks = groupTasksBy(tasks, groupField, options);
+        groupedTasks = groupTasksBy(orderedTasks, groupField, options);
       }
     }
   
