@@ -150,6 +150,8 @@ const AdminDashboard = () => {
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [showCheckboxes, setShowCheckboxes] = useState(false);
+  // State for showing completed tasks temporarily
+  const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   // Handler for Automation submit
   const handleAutomationSubmit = (data) => {
     setAutomationModalOpen(false);
@@ -407,7 +409,16 @@ const AdminDashboard = () => {
       } else {
         endpoint = 'tasks';
       }
-      const response = await fetch(`${API_BASE_URL}/api/${endpoint}`, {
+      
+      // Add query parameters based on completed tasks mode
+      const url = new URL(`${API_BASE_URL}/api/${endpoint}`);
+      if (showCompletedTasks) {
+        // When showing completed tasks, only fetch completed tasks
+        url.searchParams.append('onlyCompleted', 'true');
+      }
+      // Default behavior: backend excludes completed tasks automatically
+      
+      const response = await fetch(url.toString(), {
         headers: {
           Authorization: `Bearer ${user.token}`,
         },
@@ -429,13 +440,20 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [user.role, user.token]);
+  }, [user.role, user.token, showCompletedTasks]);
 
   useEffect(() => {
     if (tabsLoaded && activeTabId) {
       fetchTasks();
     }
   }, [tabsLoaded, fetchTasks]);
+
+  // Refetch tasks when showCompletedTasks changes
+  useEffect(() => {
+    if (tabsLoaded && activeTabId) {
+      fetchTasks();
+    }
+  }, [showCompletedTasks, tabsLoaded, activeTabId, fetchTasks]);
 
   // Clear selections when tasks or filters change
   useEffect(() => {
@@ -519,6 +537,10 @@ const AdminDashboard = () => {
     let filteredTasks = tasks.filter(task => {
       // Exclude tasks with verificationStatus 'pending'
       if (task.verificationStatus === 'pending') return false;
+      
+      // Backend now handles completed/non-completed filtering based on the includeCompleted parameter
+      // So we don't need to filter by status here anymore
+      
       // Apply search filter
       if (activeTabObj.searchTerm) {
         const lowercasedTerm = activeTabObj.searchTerm.toLowerCase();
@@ -1539,15 +1561,37 @@ const AdminDashboard = () => {
 
   // Calculate widget numbers - memoized for performance
   const dashboardCounts = useMemo(() => {
-    return {
-      yetToStartCount: tasks.filter(t => t.status === 'yet_to_start').length,
-      todayCount: tasks.filter(t => t.priority === 'today' && t.status !== 'completed').length,
-      totalCount: tasks.filter(t => t.status !== 'completed').length,
-      urgentCount: tasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length,
-    };
-  }, [tasks]);
+    if (showCompletedTasks) {
+      // When showing completed tasks, update counts to reflect completed tasks
+      const completedTasks = tasks.filter(t => t.status === 'completed');
+      return {
+        yetToStartCount: 0, // No yet-to-start in completed
+        todayCount: 0, // No today tasks in completed
+        totalCount: completedTasks.length,
+        urgentCount: 0, // No urgent in completed
+      };
+    } else {
+      // Normal counts (excluding completed)
+      return {
+        yetToStartCount: tasks.filter(t => t.status === 'yet_to_start').length,
+        todayCount: tasks.filter(t => t.priority === 'today' && t.status !== 'completed').length,
+        totalCount: tasks.filter(t => t.status !== 'completed').length,
+        urgentCount: tasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length,
+      };
+    }
+  }, [tasks, showCompletedTasks]);
 
   const { yetToStartCount, todayCount, totalCount, urgentCount } = dashboardCounts;
+
+  // Handler for Total Tasks widget click
+  const handleTotalTasksClick = () => {
+    setShowCompletedTasks(!showCompletedTasks);
+  };
+
+  // Reset completed tasks view when changing tabs or other navigation
+  useEffect(() => {
+    setShowCompletedTasks(false);
+  }, [activeTabId]);
 
   // Only render table UI after tabsLoaded and tabs.length > 0
   if (!tabsLoaded || tabs.length === 0) {
@@ -1592,6 +1636,22 @@ const AdminDashboard = () => {
         onReorderTabs={reorderTabs}
       />
       {/* Restore original summary cards/widgets here */}
+      {showCompletedTasks && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+              <span className="text-green-800 font-medium">Currently viewing completed tasks</span>
+            </div>
+            <button 
+              onClick={handleTotalTasksClick}
+              className="text-green-600 hover:text-green-800 text-sm font-medium transition-colors"
+            >
+              Switch to active tasks →
+            </button>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
           <div className="flex items-center">
@@ -1611,12 +1671,20 @@ const AdminDashboard = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 cursor-pointer hover:bg-gray-50 transition-colors" onClick={handleTotalTasksClick}>
           <div className="flex items-center">
             <ChartBarIcon className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500 mr-2 sm:mr-4" />
             <div>
-              <h3 className="text-sm sm:text-lg font-semibold text-gray-800">Total Tasks</h3>
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-800">
+                {showCompletedTasks ? 'Completed Tasks' : 'Total Tasks'}
+              </h3>
               <p className="text-xl sm:text-3xl font-bold text-blue-600">{totalCount}</p>
+              {!showCompletedTasks && (
+                <p className="text-xs text-gray-500 mt-1">Click to view completed</p>
+              )}
+              {showCompletedTasks && (
+                <p className="text-xs text-gray-500 mt-1">Click to view active</p>
+              )}
             </div>
           </div>
         </div>
@@ -1964,6 +2032,12 @@ const AdminDashboard = () => {
           }}
           onTaskDelete={() => {}}
           onStatusChange={async (taskId, newStatus) => {
+            // Prevent status changes when viewing completed tasks (they're already completed)
+            if (showCompletedTasks && newStatus !== 'completed') {
+              toast.error('Cannot change status of completed tasks. Switch to active tasks view to modify.');
+              return;
+            }
+            
             try {
               const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
                 method: 'PATCH',

@@ -359,10 +359,24 @@ router.get('/all', protect, async (req, res) => {
   try {
     let tasks;
     if (['Admin', 'Senior', 'Team Head'].includes(req.user.role)) {
-      // All privileged roles: show tasks that are not pending verification
-      // and exclude tasks that are fully completed to avoid sending completed
-      // tasks to the frontend (reduces payload / improves dashboard load).
-      tasks = await Task.find({ verificationStatus: { $ne: 'pending' }, status: { $ne: 'completed' } })
+      // Check query parameters
+      const includeCompleted = req.query.includeCompleted === 'true';
+      const onlyCompleted = req.query.onlyCompleted === 'true';
+      
+      // Build base query
+      let query = { verificationStatus: { $ne: 'pending' } };
+      
+      // Add status filter based on parameters
+      if (onlyCompleted) {
+        // Show only completed tasks
+        query.status = 'completed';
+      } else if (!includeCompleted) {
+        // Default behavior: exclude completed tasks
+        query.status = { $ne: 'completed' };
+      }
+      // If includeCompleted is true and onlyCompleted is false, show all tasks
+      
+      tasks = await Task.find(query)
         .populate({ path: 'assignedTo', select: 'firstName lastName photo team' })
         .populate({ path: 'assignedBy', select: 'firstName lastName photo team' })
         .populate('verificationAssignedTo', 'firstName lastName photo')
