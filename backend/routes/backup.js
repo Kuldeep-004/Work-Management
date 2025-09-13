@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { protect } from '../middleware/authMiddleware.js';
 import admin from '../middleware/admin.js';
 import ActivityLogger from '../utils/activityLogger.js';
+import { createAndUploadBackup, logBackupActivity } from '../utils/backupUtils.js';
 import Task from '../models/Task.js';
 import User from '../models/User.js';
 import Priority from '../models/Priority.js';
@@ -346,6 +347,38 @@ router.get('/all-data', protect, admin, async (req, res) => {
     res.status(500).json({ 
       message: 'Error fetching all data', 
       error: error.message 
+    });
+  }
+});
+
+// Test route for pCloud backup functionality (Admin only)
+router.post('/test-pcloud', protect, admin, async (req, res) => {
+  try {
+    console.log('[BackupTest] Testing pCloud backup functionality');
+    
+    const result = await createAndUploadBackup();
+    await logBackupActivity(result, null, req.user._id);
+    
+    res.json({
+      success: true,
+      message: 'pCloud backup test completed successfully',
+      data: {
+        fileName: result.fileName,
+        fileSize: result.fileSizeMB + ' MB',
+        pcloudFileId: result.pcloudFileId,
+        duration: result.duration + ' seconds',
+        timestamp: result.timestamp
+      }
+    });
+    
+  } catch (error) {
+    await logBackupActivity(null, error, req.user._id);
+    console.error('[BackupTest] pCloud backup test failed:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      message: 'pCloud backup test failed',
+      error: error.message
     });
   }
 });

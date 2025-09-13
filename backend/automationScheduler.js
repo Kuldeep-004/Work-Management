@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import Automation from './models/Automation.js';
 import Task from './models/Task.js';
 import { sendTimesheetReminder } from './utils/pushNotificationService.js';
+import { createAndUploadBackup, logBackupActivity } from './utils/backupUtils.js';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -29,6 +30,21 @@ cron.schedule('0 10-19 * * 1-5', async () => {
   } catch (error) {
     console.error('[TimesheetScheduler] Error sending timesheet reminders:', error);
   }
+});
+
+// Run database backup daily at 9:00 AM IST
+cron.schedule('0 9 * * *', async () => {
+  console.log('[BackupScheduler] Running daily database backup job');
+  try {
+    const result = await createAndUploadBackup();
+    await logBackupActivity(result, null, 'system');
+    console.log(`[BackupScheduler] Daily backup completed: ${result.fileName} (${result.fileSizeMB} MB) uploaded to pCloud`);
+  } catch (error) {
+    await logBackupActivity(null, error, 'system');
+    console.error('[BackupScheduler] Daily backup failed:', error.message);
+  }
+}, {
+  timezone: 'Asia/Kolkata'
 });
 
 // Function to check and process automations
