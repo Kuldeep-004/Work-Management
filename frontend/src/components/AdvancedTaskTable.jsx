@@ -166,7 +166,7 @@ const AdvancedTaskTable = React.memo(({
     handleDeleteTask, handleNoColumnLeftClick, handleNoColumnRightClick,
     handleDeleteFromDropdown, handleConfirmDelete, handleCancelDelete, closeDeleteDropdown,
     groupTasksBy, handleRowDragStart, handleRowDragOver, handleRowDrop, handleRowDragEnd,
-    handleGroupDrop, saveOrder, saveGroupOrder, getAssignedVerifierIds, getGroupKey, loadMoreTasks,
+    handleGroupDrop, startAutoScroll, updateAutoScroll, stopAutoScroll, saveOrder, saveGroupOrder, getAssignedVerifierIds, getGroupKey, loadMoreTasks,
     shouldShowLoadMore, groupField, shouldGroup, groupedTasks, renderGroupedTasks, user,
     groupOrder, groupOrderLoaded, isGroupedModeLoading, taskTransitions, hiddenTaskIds,
     startTaskTransition, completeTaskTransition, updateTaskWithTransition
@@ -379,12 +379,14 @@ const AdvancedTaskTable = React.memo(({
                         setDraggedGroup(group);
                         e.dataTransfer.setData('text/plain', group);
                         e.dataTransfer.effectAllowed = 'move';
+                        startAutoScroll(e);
                       }}
                       onDragOver={(e) => {
                         e.preventDefault();
                         if (draggedGroup && draggedGroup !== group) {
                           setDragOverGroup(group);
                         }
+                        updateAutoScroll(e);
                       }}
                       onDragLeave={() => {
                         if (dragOverGroup === group) {
@@ -393,6 +395,7 @@ const AdvancedTaskTable = React.memo(({
                       }}
                       onDrop={(e) => {
                         e.preventDefault();
+                        stopAutoScroll();
                         if (draggedGroup && draggedGroup !== group) {
                           handleGroupDrop(draggedGroup, group);
                         }
@@ -400,6 +403,7 @@ const AdvancedTaskTable = React.memo(({
                         setDragOverGroup(null);
                       }}
                       onDragEnd={() => {
+                        stopAutoScroll();
                         setDraggedGroup(null);
                         setDragOverGroup(null);
                       }}

@@ -1,4 +1,6 @@
 // mongorestore --gzip --archive=database-backup.gz --nsFrom='Work.*' --nsTo='test11.*' "mongodb+srv://kuldeep:@cluster0.vnqof.mongodb.net"
+// THIS WILL DROP ALL DATA IN test11 DATABASE AND REPLACE IT WITH DATA FROM Work DATABASE IN THE BACKUP FILE mongorestore --gzip --archive=Backup-Name-Here.gz --drop --uri="mongodb+srv://kuldeep:@cluster0.vnqof.mongodb.net"
+
 
 // Options -MultiViews
 // RewriteEngine On

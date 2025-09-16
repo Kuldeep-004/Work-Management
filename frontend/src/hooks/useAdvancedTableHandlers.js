@@ -31,18 +31,21 @@ export const useAdvancedTableHandlers = (props) => {
     setEditModalOpen(true);
   }, []);
 
-  const handleTaskSubmit = useCallback(async (updatedOrCreated) => {
+  const handleTaskSubmit = useCallback(async (updatedOrCreated, isEdit = false) => {
     setEditModalOpen(false);
+    const wasEdit = editTask !== null;
     setEditTask(null);
+    
     if (updatedOrCreated && updatedOrCreated._id) {
       if (onTaskUpdate) {
         onTaskUpdate(updatedOrCreated._id, () => updatedOrCreated);
       }
-      if (refetchTasks) {
+      // Only refetch tasks for new task creation, not for updates
+      if (refetchTasks && !wasEdit) {
         setTimeout(() => refetchTasks(), 200);
       }
     }
-  }, [onTaskUpdate, refetchTasks]);
+  }, [onTaskUpdate, refetchTasks, editTask]);
 
   return {
     // States

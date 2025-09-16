@@ -25,6 +25,7 @@ const FilterPopup = ({
     { value: 'clientName', label: 'Client Name', options: clientNames },
     { value: 'clientGroup', label: 'Client Group', options: clientGroups },
     { value: 'workType', label: 'Work Type', options: workTypes },
+    { value: 'dueDate', label: 'Due Date', type: 'date' },
   ];
 
   // Add custom columns to filterable columns
@@ -41,11 +42,42 @@ const FilterPopup = ({
   // Combine base and custom columns
   const filterableColumns = [...baseFilterableColumns, ...customFilterableColumns];
 
+  const getOperatorsForColumn = (column) => {
+    const selectedColumn = filterableColumns.find(c => c.value === column);
+    
+    if (selectedColumn && selectedColumn.type === 'date') {
+      return [
+        { value: 'is', label: 'Is' },
+        { value: 'is_not', label: 'Is Not' },
+        { value: 'before', label: 'Before' },
+        { value: 'after', label: 'After' },
+        { value: 'on_or_before', label: 'On or Before' },
+        { value: 'on_or_after', label: 'On or After' },
+        { value: 'is_empty', label: 'Is Empty' },
+        { value: 'is_not_empty', label: 'Is Not Empty' },
+      ];
+    }
+    
+    return [
+      { value: 'is', label: 'Is' },
+      { value: 'is_not', label: 'Is Not' },
+      { value: 'contains', label: 'Contains' },
+      { value: 'does_not_contain', label: 'Does Not Contain' },
+      { value: 'is_empty', label: 'Is Empty' },
+      { value: 'is_not_empty', label: 'Is Not Empty' },
+      { value: 'any_of', label: 'Any of' },
+    ];
+  };
+
   const operators = [
     { value: 'is', label: 'Is' },
     { value: 'is_not', label: 'Is Not' },
     { value: 'contains', label: 'Contains' },
     { value: 'does_not_contain', label: 'Does Not Contain' },
+    { value: 'before', label: 'Before' },
+    { value: 'after', label: 'After' },
+    { value: 'on_or_before', label: 'On or Before' },
+    { value: 'on_or_after', label: 'On or After' },
     { value: 'is_empty', label: 'Is Empty' },
     { value: 'is_not_empty', label: 'Is Not Empty' },
     { value: 'any_of', label: 'Any of' },
@@ -92,6 +124,8 @@ const FilterPopup = ({
       const selectedColumn = filterableColumns.find(c => c.value === value);
       if (selectedColumn && selectedColumn.type === 'checkbox') {
         newFilters[index].operator = 'is';
+      } else if (selectedColumn && selectedColumn.type === 'date') {
+        newFilters[index].operator = 'is';
       }
     }
     newFilters[index].saved = false; // Mark as unsaved if changed
@@ -102,6 +136,18 @@ const FilterPopup = ({
     const selectedColumn = filterableColumns.find(c => c.value === filter.column);
     if (!selectedColumn || filter.operator === 'is_empty' || filter.operator === 'is_not_empty') {
       return <div className="flex-1"></div>;
+    }
+
+    // For date columns, show date input
+    if (selectedColumn.type === 'date') {
+      return (
+        <input
+          type="date"
+          value={filter.value}
+          onChange={(e) => handleFilterChange(index, 'value', e.target.value)}
+          className="flex-1 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+        />
+      );
     }
 
     // For contains and does_not_contain, always show text input regardless of column type
@@ -225,7 +271,7 @@ const FilterPopup = ({
               onChange={(e) => handleFilterChange(index, 'operator', e.target.value)}
               className="w-full sm:w-40 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             >
-              {operators.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+              {getOperatorsForColumn(filter.column).map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
             </select>
             {renderValueInput(filter, index)}
             <div className="flex justify-end sm:justify-start gap-2">

@@ -537,6 +537,14 @@ const AssignedTasks = () => {
             case 'is':
               if (column === 'assignedTo' || column === 'assignedBy') {
                 filterResult = taskValue._id === value;
+              } else if (column === 'dueDate') {
+                if (!taskValue || !value) {
+                  filterResult = false;
+                } else {
+                  const taskDate = new Date(taskValue).toDateString();
+                  const filterDate = new Date(value).toDateString();
+                  filterResult = taskDate === filterDate;
+                }
               } else {
                 filterResult = String(taskValue) === String(value);
               }
@@ -544,8 +552,60 @@ const AssignedTasks = () => {
             case 'is_not':
               if (column === 'assignedTo' || column === 'assignedBy') {
                 filterResult = taskValue._id !== value;
+              } else if (column === 'dueDate') {
+                if (!taskValue || !value) {
+                  filterResult = true;
+                } else {
+                  const taskDate = new Date(taskValue).toDateString();
+                  const filterDate = new Date(value).toDateString();
+                  filterResult = taskDate !== filterDate;
+                }
               } else {
                 filterResult = String(taskValue) !== String(value);
+              }
+              break;
+            case 'before':
+              if (column === 'dueDate') {
+                if (!taskValue || !value) {
+                  filterResult = false;
+                } else {
+                  filterResult = new Date(taskValue) < new Date(value);
+                }
+              } else {
+                filterResult = false;
+              }
+              break;
+            case 'after':
+              if (column === 'dueDate') {
+                if (!taskValue || !value) {
+                  filterResult = false;
+                } else {
+                  filterResult = new Date(taskValue) > new Date(value);
+                }
+              } else {
+                filterResult = false;
+              }
+              break;
+            case 'on_or_before':
+              if (column === 'dueDate') {
+                if (!taskValue || !value) {
+                  filterResult = false;
+                } else {
+                  filterResult = new Date(taskValue) <= new Date(value);
+                }
+              } else {
+                filterResult = false;
+              }
+              break;
+            case 'on_or_after':
+              if (column === 'dueDate') {
+                if (!taskValue || !value) {
+                  filterResult = false;
+                } else {
+                  filterResult = new Date(taskValue) >= new Date(value);
+                }
+              } else {
+                filterResult = false;
               }
               break;
             case 'contains':

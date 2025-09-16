@@ -1152,15 +1152,16 @@ router.patch('/:taskId/priority', protect, async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // Allow assignee or any verifier to update the task priority
+    // Allow assignee, verifiers, Admin, or Team Head to update the task priority
     const isAssignee = task.assignedTo._id.toString() === req.user._id.toString();
     const isFirstVerifier = task.verificationAssignedTo && task.verificationAssignedTo._id && task.verificationAssignedTo._id.toString() === req.user._id.toString();
     const isSecondVerifier = task.secondVerificationAssignedTo && task.secondVerificationAssignedTo._id && task.secondVerificationAssignedTo._id.toString() === req.user._id.toString();
     const isThirdVerifier = task.thirdVerificationAssignedTo && task.thirdVerificationAssignedTo._id && task.thirdVerificationAssignedTo._id.toString() === req.user._id.toString();
     const isFourthVerifier = task.fourthVerificationAssignedTo && task.fourthVerificationAssignedTo._id && task.fourthVerificationAssignedTo._id.toString() === req.user._id.toString();
     const isFifthVerifier = task.fifthVerificationAssignedTo && task.fifthVerificationAssignedTo._id && task.fifthVerificationAssignedTo._id.toString() === req.user._id.toString();
+    const isAdminOrTeamHead = ['Admin', 'Team Head'].includes(req.user.role);
 
-    if (!isAssignee && !isFirstVerifier && !isSecondVerifier && !isThirdVerifier && !isFourthVerifier && !isFifthVerifier) {
+    if (!isAssignee && !isFirstVerifier && !isSecondVerifier && !isThirdVerifier && !isFourthVerifier && !isFifthVerifier && !isAdminOrTeamHead) {
       return res.status(403).json({ message: 'Not authorized to update task priority' });
     }
 

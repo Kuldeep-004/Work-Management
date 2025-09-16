@@ -299,6 +299,10 @@ export const useAdvancedTaskTableLogic = (props) => {
   
     const tableRef = useRef(null);
   
+    // Auto-scroll state for drag and drop
+    const [autoScrollInterval, setAutoScrollInterval] = useState(null);
+    const autoScrollIntervalRef = useRef(null);
+  
     // Modal state
     const [selectedTask, setSelectedTask] = useState(null);
     const [showFileUpload, setShowFileUpload] = useState(false);
@@ -395,6 +399,13 @@ export const useAdvancedTaskTableLogic = (props) => {
         };
       }
     }, [showDeleteDropdown]);
+
+    // Cleanup auto-scroll on unmount or drag interruption
+    useEffect(() => {
+      return () => {
+        stopAutoScroll();
+      };
+    }, []);
   
     // Row drag-and-drop state
     const [draggedTaskId, setDraggedTaskId] = useState(null);
@@ -532,7 +543,102 @@ export const useAdvancedTaskTableLogic = (props) => {
       );
       return entry ? entry.totalHours : 0;
     };
-  
+
+    // Auto-scroll functionality for drag and drop
+    const startAutoScroll = (e) => {
+      // Clear any existing interval
+      stopAutoScroll();
+      
+      const SCROLL_ZONE_SIZE = 100; // pixels from edge to trigger scroll
+      const MAX_SCROLL_SPEED = 20; // maximum pixels per scroll step
+      const MIN_SCROLL_SPEED = 4; // minimum pixels per scroll step
+      
+      // Cache the scroll container for performance
+      const scrollContainer = document.querySelector('main.overflow-y-auto') || 
+                           document.querySelector('main') ||
+                           document.querySelector('.overflow-y-auto') ||
+                           document.documentElement;
+      
+      if (!scrollContainer) return;
+      
+      let isActive = true;
+      let currentSpeed = 0;
+      
+      const performScroll = () => {
+        if (!isActive) return;
+        
+        const clientY = window.lastMouseY;
+        if (clientY === undefined) {
+          autoScrollIntervalRef.current = requestAnimationFrame(performScroll);
+          return;
+        }
+        
+        const viewportHeight = window.innerHeight;
+        let targetSpeed = 0;
+        
+        // Calculate target scroll speed based on mouse position
+        if (clientY < SCROLL_ZONE_SIZE) {
+          const proximity = Math.max(0, Math.min(1, (SCROLL_ZONE_SIZE - clientY) / SCROLL_ZONE_SIZE));
+          targetSpeed = -(MIN_SCROLL_SPEED + (MAX_SCROLL_SPEED - MIN_SCROLL_SPEED) * proximity);
+        } else if (clientY > viewportHeight - SCROLL_ZONE_SIZE) {
+          const proximity = Math.max(0, Math.min(1, (clientY - (viewportHeight - SCROLL_ZONE_SIZE)) / SCROLL_ZONE_SIZE));
+          targetSpeed = MIN_SCROLL_SPEED + (MAX_SCROLL_SPEED - MIN_SCROLL_SPEED) * proximity;
+        }
+        
+        // Smooth speed transition for less jittery scrolling
+        currentSpeed = currentSpeed * 0.8 + targetSpeed * 0.2;
+        
+        // Only scroll if speed is significant
+        if (Math.abs(currentSpeed) > 0.5) {
+          scrollContainer.scrollTop += currentSpeed;
+        }
+        
+        // Continue the animation loop
+        autoScrollIntervalRef.current = requestAnimationFrame(performScroll);
+      };
+      
+      // Track mouse position efficiently
+      const trackMouse = (e) => {
+        window.lastMouseY = e.clientY;
+      };
+      
+      // Add event listeners
+      document.addEventListener('dragover', trackMouse, { passive: true });
+      document.addEventListener('drag', trackMouse, { passive: true });
+      
+      // Start the animation loop
+      isActive = true;
+      autoScrollIntervalRef.current = requestAnimationFrame(performScroll);
+      
+      // Store cleanup function and state
+      autoScrollIntervalRef.cleanupTracking = () => {
+        isActive = false;
+        document.removeEventListener('dragover', trackMouse);
+        document.removeEventListener('drag', trackMouse);
+      };
+    };
+    
+    const updateAutoScroll = (e) => {
+      // Update mouse position for auto-scroll
+      window.lastMouseY = e.clientY;
+    };
+    
+    const stopAutoScroll = () => {
+      if (autoScrollIntervalRef.current) {
+        cancelAnimationFrame(autoScrollIntervalRef.current);
+        autoScrollIntervalRef.current = null;
+      }
+      
+      // Cleanup mouse tracking if it exists
+      if (autoScrollIntervalRef.cleanupTracking) {
+        autoScrollIntervalRef.cleanupTracking();
+        autoScrollIntervalRef.cleanupTracking = null;
+      }
+      
+      // Clear global mouse position
+      delete window.lastMouseY;
+    };
+
     // Drag and drop handlers
     const handleDragStart = (e, columnId) => {
       setDraggedColumn(columnId);
@@ -1654,7 +1760,25 @@ export const useAdvancedTaskTableLogic = (props) => {
       }
       // eslint-disable-next-line
     }, [tasks, shouldGroup, groupField, tabKey, tabId, isUpdatingTaskProperties]);
-  
+
+    // Save initial group order when groups are first created
+    useEffect(() => {
+      // Only run if we're in grouped mode, order is loaded, and no group order is saved
+      if (!shouldGroup || !groupOrderLoaded || !orderLoaded || groupOrder.length > 0 || !groupedTasks) return;
+      
+      // Get the natural order of groups from groupedTasks
+      const naturalGroupOrder = Object.keys(groupedTasks);
+      
+      // Only save if there are groups to save
+      if (naturalGroupOrder.length > 0) {
+        // Set the group order state
+        setGroupOrder(naturalGroupOrder);
+        
+        // Save to backend
+        saveGroupOrder(naturalGroupOrder);
+      }
+    }, [shouldGroup, groupOrderLoaded, orderLoaded, groupOrder.length, groupedTasks]);
+
     // Save order to backend
     const saveOrder = async (newOrder, newGroupOrder = null) => {
       try {
@@ -1748,15 +1872,18 @@ export const useAdvancedTaskTableLogic = (props) => {
       setDraggedTaskId(taskId);
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', taskId);
+      startAutoScroll(e);
     };
     const handleRowDragOver = (e, overTaskId) => {
       e.preventDefault();
       if (draggedTaskId) {
         setDragOverTaskId(overTaskId);
+        updateAutoScroll(e);
       }
     };
     const handleRowDrop = (e, dropTaskId) => {
       e.preventDefault();
+      stopAutoScroll();
       if (!draggedTaskId) return;
       let newOrder = [];
       const idxFrom = orderedTasks.findIndex(t => t._id === draggedTaskId);
@@ -1819,6 +1946,7 @@ export const useAdvancedTaskTableLogic = (props) => {
       setDragOverTaskId(null);
     };
     const handleRowDragEnd = () => {
+      stopAutoScroll();
       setDraggedTaskId(null);
       setDragOverTaskId(null);
     };
@@ -2130,6 +2258,9 @@ export const useAdvancedTaskTableLogic = (props) => {
     handleRowDrop,
     handleRowDragEnd,
     handleGroupDrop,
+    startAutoScroll,
+    updateAutoScroll,
+    stopAutoScroll,
     saveOrder,
     saveGroupOrder,
     getAssignedVerifierIds,
