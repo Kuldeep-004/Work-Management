@@ -21,7 +21,7 @@ function normalizeTimesheetTasks(ts) {
 
 // Helper functions for special task types
 const isSpecialTaskType = (taskId) => {
-  return ['other', 'permission', 'billing', 'lunch'].includes(taskId);
+  return ['other', 'permission', 'billing', 'lunch', 'infrastructure-issues'].includes(taskId);
 };
 
 const getSpecialTaskName = (taskId) => {
@@ -29,13 +29,14 @@ const getSpecialTaskName = (taskId) => {
     'other': 'Other',
     'permission': 'Permission', 
     'billing': 'Billing',
-    'lunch': 'Lunch'
+    'lunch': 'Lunch',
+    'infrastructure-issues': 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR'
   };
   return taskNames[taskId] || '';
 };
 
 const isSpecialTaskEntry = (entry) => {
-  const specialTaskNames = ['Other', 'Permission', 'Billing', 'Lunch'];
+  const specialTaskNames = ['Other', 'Permission', 'Billing', 'Lunch', 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR'];
   return isSpecialTaskType(entry.task) || specialTaskNames.includes(entry.manualTaskName);
 };
 
@@ -81,7 +82,8 @@ const Timesheets = () => {
     };
     fetchHighlightDates();
   }, [user, isAuthenticated]);
-  // For react-datepicker: highlight submitted (green) and incomplete (red) dates
+  // For react-datepicker: highlight submitted (green) and all other working days (red)
+  // Green = submitted timesheets, Red = all days except Sundays and submitted dates, White = Sundays
   const getDayClassName = date => {
     const ymd = date.getFullYear() + '-' +
       String(date.getMonth() + 1).padStart(2, '0') + '-' +
@@ -888,6 +890,7 @@ const Timesheets = () => {
                         <option value="permission">Permission</option>
                         <option value="billing">Billing</option>
                         <option value="lunch">Lunch</option>
+                        <option value="infrastructure-issues">INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR</option>
                         {tasks.map(task => (
                           <option key={task._id} value={task._id}>
                             {task.title}
@@ -978,7 +981,8 @@ const Timesheets = () => {
                   'Other': 'other',
                   'Permission': 'permission',
                   'Billing': 'billing',
-                  'Lunch': 'lunch'
+                  'Lunch': 'lunch',
+                  'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR': 'infrastructure-issues'
                 };
                 taskValue = specialTaskNames[entry?.manualTaskName] || 'other';
                 taskDisplayName = entry?.manualTaskName || 'Other';
@@ -1142,6 +1146,7 @@ const Timesheets = () => {
                         <option value="permission">Permission</option>
                         <option value="billing">Billing</option>
                         <option value="lunch">Lunch</option>
+                        <option value="infrastructure-issues">INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR</option>
                         {/* Build dropdown options: all allowed tasks, plus the selected one if missing */}
                         {(() => {
                           const selectedTaskId = taskValue;

@@ -8,16 +8,43 @@ import ActivityLogger from '../utils/activityLogger.js';
 
 const router = express.Router();
 
-// Get all timesheet dates with entries and isCompleted false (for red highlight)
+// Get all dates that should be red (all days except submitted and Sundays)
 router.get('/incomplete-dates', protect, async (req, res) => {
   try {
-    const timesheets = await Timesheet.find({
+    // Get all submitted timesheet dates
+    const submittedTimesheets = await Timesheet.find({
       user: req.user._id,
-      isCompleted: false,
-      'entries.0': { $exists: true }
+      isCompleted: true
     }).select('date -_id');
-    const dates = timesheets.map(ts => ts.date.toISOString().split('T')[0]);
-    res.json({ dates });
+    const submittedDates = submittedTimesheets.map(ts => ts.date.toISOString().split('T')[0]);
+    
+    // Generate dates from user's join date or 3 months ago (whichever is more recent) to today
+    const user = await User.findById(req.user._id).select('createdAt');
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 3); // 3 months ago
+    
+    const userJoinDate = new Date(user.createdAt);
+    const fromDate = userJoinDate > startDate ? userJoinDate : startDate;
+    
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+    
+    const redDates = [];
+    const currentDate = new Date(fromDate);
+    
+    while (currentDate <= today) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      
+      // Skip Sundays (day 0) and submitted dates
+      if (dayOfWeek !== 0 && !submittedDates.includes(dateStr)) {
+        redDates.push(dateStr);
+      }
+      
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    res.json({ dates: redDates });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -282,6 +309,9 @@ router.post('/add-entry', protect, async (req, res) => {
       } else if (taskId === 'lunch') {
         taskField = null;
         manualTaskNameField = 'Lunch';
+      } else if (taskId === 'infrastructure-issues') {
+        taskField = null;
+        manualTaskNameField = 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR';
       } else if (taskId === 'internal-works') {
         taskField = null;
         manualTaskNameField = 'Internal Works';
@@ -971,6 +1001,9 @@ router.patch('/entry/:entryId', protect, async (req, res) => {
       } else if (taskId === 'lunch') {
         taskField = null;
         manualTaskNameField = 'Lunch';
+      } else if (taskId === 'infrastructure-issues') {
+        taskField = null;
+        manualTaskNameField = 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR';
       } else if (taskId === 'internal-works') {
         taskField = null;
         manualTaskNameField = 'Internal Works';

@@ -124,11 +124,7 @@ const SubordinateTimesheets = () => {
       const data = await res.json();
       let timesheetsArr = Array.isArray(data.timesheets) ? data.timesheets : [];
 
-      // Show only submitted timesheets (isCompleted === true)
-      timesheetsArr = timesheetsArr.filter(ts => ts && ts.isCompleted);
-
       // If Team Head, All Users selected, fetch own timesheet using /date/:date endpoint
-      // Include own timesheet only if it's submitted
       if (user.role === 'Team Head' && !selectedUser) {
         let ownUrl = `${API_BASE_URL}/api/timesheets/date/${selectedDate}`;
         const ownRes = await fetch(ownUrl, {
@@ -136,12 +132,15 @@ const SubordinateTimesheets = () => {
         });
         if (ownRes.ok) {
           const ownData = await ownRes.json();
-          if (ownData && ownData.user && ownData.isCompleted) {
+          if (ownData && ownData.user) {
             // Remove any duplicate of own timesheet (by user._id) and prepend own
             timesheetsArr = [ownData, ...timesheetsArr.filter(ts => ts.user && ts.user._id !== user._id)];
           }
         }
       }
+
+      // Only keep timesheets with at least one entry
+      timesheetsArr = timesheetsArr.filter(ts => Array.isArray(ts.entries) && ts.entries.length > 0);
 
       setTimesheets(timesheetsArr);
       const grouped = timesheetsArr.reduce((acc, ts) => {

@@ -65,6 +65,7 @@ router.get('/user/:userId', protect, async (req, res) => {
         lunchHours: 0,
         billingHours: 0,
         otherHours: 0,
+        infrastructureHours: 0,
         totalDays: 0,
         workingHours: 0,       // For backward compatibility
         totalSalary: 0
@@ -89,6 +90,7 @@ router.get('/user/:userId', protect, async (req, res) => {
       let dailyLunch = 0;
       let dailyBilling = 0;
       let dailyOther = 0;
+      let dailyInfrastructure = 0;
 
       timesheet.entries.forEach(entry => {
         const minutes = getMinutesBetween(entry.startTime, entry.endTime);
@@ -108,6 +110,10 @@ router.get('/user/:userId', protect, async (req, res) => {
         } else if (entry.manualTaskName === 'Other' || entry.task === 'other') {
           dailyOther += minutes;
           analytics.summary.otherHours += minutes;
+          analytics.summary.totalWorkingHours += minutes;
+        } else if (entry.manualTaskName === 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR' || entry.task === 'infrastructure-issues') {
+          dailyInfrastructure += minutes;
+          analytics.summary.infrastructureHours += minutes;
           analytics.summary.totalWorkingHours += minutes;
         } else if (
           entry.task && typeof entry.task === 'object' && entry.task._id && entry.task.title && entry.manualTaskName === ''
@@ -134,7 +140,7 @@ router.get('/user/:userId', protect, async (req, res) => {
       });
 
       // Daily breakdown
-      const totalDaily = dailyWorking + dailyBilling + dailyOther;
+      const totalDaily = dailyWorking + dailyBilling + dailyOther + dailyInfrastructure;
       analytics.dailyBreakdown.push({
         date: dateStr,
         workingHours: totalDaily,
@@ -142,6 +148,7 @@ router.get('/user/:userId', protect, async (req, res) => {
         lunchHours: dailyLunch,
         billingHours: dailyBilling,
         otherHours: dailyOther,
+        infrastructureHours: dailyInfrastructure,
         totalEntries: timesheet.entries.length
       });
 

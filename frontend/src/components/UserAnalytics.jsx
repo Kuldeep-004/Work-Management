@@ -412,6 +412,21 @@ const UserAnalytics = ({ userId, userName, onClose }) => {
               </div>
             </div>
             
+            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-3 sm:p-4 border-l-4 border-indigo-500 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="text-indigo-700 text-xs font-semibold uppercase tracking-wide">INFRASTRUCTURE</div>
+                  <div className="text-xl sm:text-2xl font-bold text-indigo-900 mt-1">{formatTime(analytics.summary.infrastructureHours || 0)}</div>
+                  <div className="text-indigo-600 text-xs mt-1">{formatTimeDecimal(analytics.summary.infrastructureHours || 0)}h decimal</div>
+                </div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-indigo-500 flex items-center justify-center rounded flex-shrink-0">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            
             <div className="bg-gradient-to-br from-pink-50 to-pink-100 p-3 sm:p-4 border-l-4 border-pink-500 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
