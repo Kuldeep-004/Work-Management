@@ -21,7 +21,7 @@ function normalizeTimesheetTasks(ts) {
 
 // Helper functions for special task types
 const isSpecialTaskType = (taskId) => {
-  return ['other', 'permission', 'billing', 'lunch', 'infrastructure-issues'].includes(taskId);
+  return ['other', 'permission', 'billing', 'lunch', 'infrastructure-issues', 'discussion-with-vivek'].includes(taskId);
 };
 
 const getSpecialTaskName = (taskId) => {
@@ -30,13 +30,14 @@ const getSpecialTaskName = (taskId) => {
     'permission': 'Permission', 
     'billing': 'Billing',
     'lunch': 'Lunch',
-    'infrastructure-issues': 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR'
+    'infrastructure-issues': 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR',
+    'discussion-with-vivek': 'DISCUSSION WITH VIVEK SIR'
   };
   return taskNames[taskId] || '';
 };
 
 const isSpecialTaskEntry = (entry) => {
-  const specialTaskNames = ['Other', 'Permission', 'Billing', 'Lunch', 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR'];
+  const specialTaskNames = ['Other', 'Permission', 'Billing', 'Lunch', 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR', 'DISCUSSION WITH VIVEK SIR'];
   return isSpecialTaskType(entry.task) || specialTaskNames.includes(entry.manualTaskName);
 };
 
@@ -890,7 +891,8 @@ const Timesheets = () => {
                         <option value="permission">Permission</option>
                         <option value="billing">Billing</option>
                         <option value="lunch">Lunch</option>
-                        <option value="infrastructure-issues">INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR</option>
+                        <option value="infrastructure-issues">Infrastructure Issues</option>
+                        <option value="discussion-with-vivek">Discussion With Vivek Sir</option>
                         {tasks.map(task => (
                           <option key={task._id} value={task._id}>
                             {task.title}
@@ -982,7 +984,8 @@ const Timesheets = () => {
                   'Permission': 'permission',
                   'Billing': 'billing',
                   'Lunch': 'lunch',
-                  'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR': 'infrastructure-issues'
+                  'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR': 'infrastructure-issues',
+                  'DISCUSSION WITH VIVEK SIR': 'discussion-with-vivek'
                 };
                 taskValue = specialTaskNames[entry?.manualTaskName] || 'other';
                 taskDisplayName = entry?.manualTaskName || 'Other';
@@ -1147,6 +1150,7 @@ const Timesheets = () => {
                         <option value="billing">Billing</option>
                         <option value="lunch">Lunch</option>
                         <option value="infrastructure-issues">INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR</option>
+                        <option value="discussion-with-vivek">DISCUSSION WITH VIVEK SIR</option>
                         {/* Build dropdown options: all allowed tasks, plus the selected one if missing */}
                         {(() => {
                           const selectedTaskId = taskValue;

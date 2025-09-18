@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import { 
@@ -16,6 +16,7 @@ const SubordinateTimesheets = () => {
   const [timesheets, setTimesheets] = useState([]);
   const [groupedTimesheets, setGroupedTimesheets] = useState({});
   const [subordinates, setSubordinates] = useState([]);
+  const [subordinatesStatus, setSubordinatesStatus] = useState([]); // New state for submission status
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -31,6 +32,10 @@ const SubordinateTimesheets = () => {
   const [searchTerm, setSearchTerm] = useState('');
   // Font size for PDF
   const [pdfFontSize, setPdfFontSize] = useState(12);
+  // Custom dropdown state
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const dropdownRef = useRef(null);
 
   // Filtered subordinates for search
   const filteredSubordinates = subordinates.filter(sub => {
@@ -83,8 +88,23 @@ const SubordinateTimesheets = () => {
   useEffect(() => {
     if (isAuthenticated() && user) {
       fetchTimesheets(1); // Reset to page 1 on filter change
+      fetchSubordinatesStatus(); // Fetch status when date changes
     }
   }, [user, isAuthenticated, selectedUser, selectedDate]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowUserDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const fetchSubordinates = async () => {
     try {
@@ -96,6 +116,26 @@ const SubordinateTimesheets = () => {
       setSubordinates(data);
     } catch (error) {
       toast.error('Failed to fetch subordinates');
+    }
+  };
+
+  const fetchSubordinatesStatus = async () => {
+    if (!selectedDate) return;
+    
+    setLoadingStatus(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/timesheets/subordinates-status/${selectedDate}`, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch subordinates status');
+      const data = await res.json();
+      setSubordinatesStatus(data);
+    } catch (error) {
+      console.error('Failed to fetch subordinates status:', error);
+      // Don't show error toast as this is supplementary information
+      setSubordinatesStatus([]);
+    } finally {
+      setLoadingStatus(false);
     }
   };
 
@@ -199,6 +239,30 @@ const SubordinateTimesheets = () => {
       case 'Fresher': return 'bg-green-100 text-green-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  // Helper function to get background color for dropdown options based on submission status
+  const getSubmissionStatusColor = (userId) => {
+    const userStatus = subordinatesStatus.find(status => status.userId === userId);
+    if (!userStatus) return ''; // No color if status not found
+    return userStatus.hasSubmitted ? 'bg-green-100' : 'bg-red-100';
+  };
+
+  // Helper function to get selected user display name
+  const getSelectedUserDisplayName = () => {
+    if (!selectedUser) return 'All Users';
+    if (selectedUser === 'ALL_TEAM_HEADS') return 'All Team Heads';
+    if (selectedUser === 'ALL_SENIORS') return 'All Seniors';
+    if (selectedUser === 'ALL_FRESHERS') return 'All Freshers';
+    
+    const user = subordinates.find(sub => sub._id === selectedUser);
+    return user ? `${user.firstName} ${user.lastName} (${user.role})` : 'Select User';
+  };
+
+  // Handle user selection from dropdown
+  const handleUserSelect = (userId) => {
+    setSelectedUser(userId);
+    setShowUserDropdown(false);
   };
 
   const getHierarchyInfo = () => {
@@ -407,29 +471,64 @@ const SubordinateTimesheets = () => {
               <UserIcon className="w-4 h-4 inline mr-1" />
               Select User
             </label>
-            <select
-              value={selectedUser}
-              onChange={(e) => setSelectedUser(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            >
-              <option value="">All Users</option>
-              {/* Admin-only role-based filter options */}
-              {user.role === 'Admin' && (
-                <>
-                  <option value="ALL_TEAM_HEADS">All Team Heads</option>
-                  <option value="ALL_SENIORS">All Seniors</option>
-                  <option value="ALL_FRESHERS">All Freshers</option>
-                </>
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowUserDropdown(!showUserDropdown)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left bg-white flex items-center justify-between"
+              >
+                <span>{getSelectedUserDisplayName()}</span>
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {showUserDropdown && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  <div
+                    onClick={() => handleUserSelect('')}
+                    className="px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                  >
+                    All Users
+                  </div>
+                  
+                  {/* Admin-only role-based filter options */}
+                  {user.role === 'Admin' && (
+                    <>
+                      <div
+                        onClick={() => handleUserSelect('ALL_TEAM_HEADS')}
+                        className="px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                      >
+                        All Team Heads
+                      </div>
+                      <div
+                        onClick={() => handleUserSelect('ALL_SENIORS')}
+                        className="px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                      >
+                        All Seniors
+                      </div>
+                      <div
+                        onClick={() => handleUserSelect('ALL_FRESHERS')}
+                        className="px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                      >
+                        All Freshers
+                      </div>
+                    </>
+                  )}
+                  
+                  {subordinates.map((sub) => (
+                    <div
+                      key={sub._id}
+                      onClick={() => handleUserSelect(sub._id)}
+                      className={`px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm ${getSubmissionStatusColor(sub._id)}`}
+                    >
+                      {sub.firstName} {sub.lastName} ({sub.role})
+                    </div>
+                  ))}
+                </div>
               )}
-              {(() => {
-                // TimeSheet Verifiers, Team Heads, and Admins: show subordinates as returned by backend
-                return subordinates.map((sub) => (
-                  <option key={sub._id} value={sub._id}>
-                    {sub.firstName} {sub.lastName} ({sub.role})
-                  </option>
-                ));
-              })()}
-            </select>
+            </div>
+            
           </div>
 
           <div>

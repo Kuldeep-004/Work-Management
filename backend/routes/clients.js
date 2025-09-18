@@ -17,7 +17,7 @@ const checkRole = (roles) => {
   };
 };
 
-// Get all clients
+// Get all clients (allow all authenticated users, including Senior)
 router.get('/', protect, async (req, res) => {
   try {
     const clients = await Client.find()

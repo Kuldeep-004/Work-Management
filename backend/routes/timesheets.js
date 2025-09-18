@@ -312,6 +312,9 @@ router.post('/add-entry', protect, async (req, res) => {
       } else if (taskId === 'infrastructure-issues') {
         taskField = null;
         manualTaskNameField = 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR';
+      } else if (taskId === 'discussion-with-vivek') {
+        taskField = null;
+        manualTaskNameField = 'DISCUSSION WITH VIVEK SIR';
       } else if (taskId === 'internal-works') {
         taskField = null;
         manualTaskNameField = 'Internal Works';
@@ -595,12 +598,13 @@ router.get('/subordinates-list', protect, async (req, res) => {
       if (!req.user.team) {
         return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
       }
-      // All users in the same team (excluding self for Team Head)
+      // All users in the same team (excluding self and Admins for Team Head)
       subordinates = await User.find({
         ...query,
         team: req.user.team,
         isEmailVerified: true,
-        _id: { $ne: req.user._id }
+        _id: { $ne: req.user._id },
+        role: { $ne: 'Admin' }
       }).select('_id firstName lastName email role team');
     } else if (isTimeSheetVerifier) {
       // TimeSheet Verifiers: show only their team members (excluding team head, admin, and themselves)
@@ -623,6 +627,103 @@ router.get('/subordinates-list', protect, async (req, res) => {
       subordinates = [];
     }
     res.json(subordinates);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get timesheet submission status for subordinates on a specific date
+router.get('/subordinates-status/:date', protect, async (req, res) => {
+  try {
+    const { date } = req.params;
+    
+    // Check if user has permission to view subordinates
+    let isTimeSheetVerifier = false;
+    if (Array.isArray(req.user.role2)) {
+      isTimeSheetVerifier = req.user.role2.includes('TimeSheet Verifier');
+    } else {
+      isTimeSheetVerifier = req.user.role2 === 'TimeSheet Verifier';
+    }
+    const isAdmin = req.user.role === 'Admin';
+    const isTeamHead = req.user.role === 'Team Head';
+    const isSenior = req.user.role === 'Senior';
+    
+    if (!(isAdmin || isTimeSheetVerifier || isTeamHead || isSenior)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Parse and validate date
+    const targetDate = new Date(date);
+    if (isNaN(targetDate.getTime())) {
+      return res.status(400).json({ message: 'Invalid date format' });
+    }
+    
+    targetDate.setUTCHours(0, 0, 0, 0);
+    const nextDate = new Date(targetDate);
+    nextDate.setUTCDate(targetDate.getUTCDate() + 1);
+
+    // Get subordinates based on role
+    let query = { status: { $ne: 'rejected' } };
+    let subordinates;
+    
+    if (isTeamHead) {
+      if (!req.user.team) {
+        return res.status(400).json({ message: 'Team Head user does not have a team assigned' });
+      }
+      // Exclude self and Admins for Team Head
+      subordinates = await User.find({
+        ...query,
+        team: req.user.team,
+        isEmailVerified: true,
+        _id: { $ne: req.user._id },
+        role: { $ne: 'Admin' }
+      }).select('_id firstName lastName email role team');
+    } else if (isTimeSheetVerifier) {
+      if (req.user.team) {
+        subordinates = await User.find({
+          ...query,
+          team: req.user.team,
+          role: { $nin: ['Team Head', 'Admin'] },
+          isEmailVerified: true,
+          _id: { $ne: req.user._id }
+        }).select('_id firstName lastName email role team');
+      } else {
+        subordinates = [];
+      }
+    } else if (isSenior) {
+      subordinates = await User.find({
+        ...query,
+        role: 'Team Head',
+        isEmailVerified: true
+      }).select('_id firstName lastName email role team');
+    } else if (isAdmin) {
+      subordinates = await User.find(query).select('_id firstName lastName email role team');
+    } else {
+      subordinates = [];
+    }
+
+    const subordinateIds = subordinates.map(sub => sub._id);
+    
+    // Get timesheets for the specific date
+    const timesheets = await Timesheet.find({
+      user: { $in: subordinateIds },
+      date: {
+        $gte: targetDate,
+        $lt: nextDate
+      }
+    }).select('user').lean();
+
+    // Create submission status map
+    const submittedUserIds = new Set(timesheets.map(ts => ts.user.toString()));
+    const submissionStatus = subordinates.map(sub => ({
+      userId: sub._id,
+      firstName: sub.firstName,
+      lastName: sub.lastName,
+      role: sub.role,
+      hasSubmitted: submittedUserIds.has(sub._id.toString())
+    }));
+
+    res.json(submissionStatus);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -1004,6 +1105,9 @@ router.patch('/entry/:entryId', protect, async (req, res) => {
       } else if (taskId === 'infrastructure-issues') {
         taskField = null;
         manualTaskNameField = 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR';
+      } else if (taskId === 'discussion-with-vivek') {
+        taskField = null;
+        manualTaskNameField = 'DISCUSSION WITH VIVEK SIR';
       } else if (taskId === 'internal-works') {
         taskField = null;
         manualTaskNameField = 'Internal Works';

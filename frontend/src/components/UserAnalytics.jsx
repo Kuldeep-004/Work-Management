@@ -108,7 +108,7 @@ const UserAnalytics = ({ userId, userName, onClose }) => {
 
   // Chart configurations
   const timeBreakdownData = {
-    labels: ['Task Hours', 'Permission', 'Lunch', 'Billing', 'Other'],
+    labels: ['Task Hours', 'Permission', 'Lunch', 'Billing', 'Other', 'Infrastructure', 'Discussion w/ Vivek'],
     datasets: [{
       label: 'Hours',
       data: [
@@ -116,14 +116,18 @@ const UserAnalytics = ({ userId, userName, onClose }) => {
         analytics.summary.permissionHours / 60,
         analytics.summary.lunchHours / 60,
         analytics.summary.billingHours / 60,
-        analytics.summary.otherHours / 60
+        analytics.summary.otherHours / 60,
+        (analytics.summary.infrastructureHours || 0) / 60,
+        (analytics.summary.discussionWithVivekHours || 0) / 60
       ],
       backgroundColor: [
         '#10B981', // Task Hours - Green
         '#EF4444', // Permission - Red
         '#F59E0B', // Lunch - Yellow
         '#3B82F6', // Billing - Blue
-        '#8B5CF6'  // Other - Purple
+        '#8B5CF6', // Other - Purple
+        '#6366F1', // Infrastructure - Indigo
+        '#10D9B4'  // Discussion with Vivek - Emerald
       ],
       borderWidth: 0
     }]
@@ -422,6 +426,21 @@ const UserAnalytics = ({ userId, userName, onClose }) => {
                 <div className="w-8 h-8 sm:w-10 sm:h-10 bg-indigo-500 flex items-center justify-center rounded flex-shrink-0">
                   <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 p-3 sm:p-4 border-l-4 border-emerald-500 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="text-emerald-700 text-xs font-semibold uppercase tracking-wide">DISCUSSION WITH VIVEK</div>
+                  <div className="text-xl sm:text-2xl font-bold text-emerald-900 mt-1">{formatTime(analytics.summary.discussionWithVivekHours || 0)}</div>
+                  <div className="text-emerald-600 text-xs mt-1">{formatTimeDecimal(analytics.summary.discussionWithVivekHours || 0)}h decimal</div>
+                </div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-500 flex items-center justify-center rounded flex-shrink-0">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
               </div>
