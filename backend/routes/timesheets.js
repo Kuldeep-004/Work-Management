@@ -711,10 +711,14 @@ router.get('/subordinates-status/:date', protect, async (req, res) => {
         $gte: targetDate,
         $lt: nextDate
       }
-    }).select('user').lean();
+    }).select('user isCompleted').lean();
 
-    // Create submission status map
-    const submittedUserIds = new Set(timesheets.map(ts => ts.user.toString()));
+    // Create submission status map - only consider completed timesheets
+    const submittedUserIds = new Set(
+      timesheets
+        .filter(ts => ts.isCompleted === true)
+        .map(ts => ts.user.toString())
+    );
     const submissionStatus = subordinates.map(sub => ({
       userId: sub._id,
       firstName: sub.firstName,
