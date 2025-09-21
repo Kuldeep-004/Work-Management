@@ -151,14 +151,6 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
         2: { cellWidth: colDesc },
         3: { cellWidth: colTimeSpent, halign: 'right' },
         4: { cellWidth: colStatus, halign: 'center' }
-      },
-      didDrawPage: (data) => {
-        // Add footer page numbers - fix by calculating total pages after all content is added
-        doc.setFontSize(bodyFontSize - 2);
-        doc.setTextColor(120);
-        // Use data.pageNumber and calculate total pages dynamically
-        const totalPages = doc.internal.getNumberOfPages();
-        doc.text(`Page ${data.pageNumber} of ${totalPages}`, pageWidth - margin, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
       }
     });
 
@@ -196,6 +188,15 @@ export default function generateTimesheetPdf({ dateStr, timesheets, fileLabel = 
     }
     addUserSection(ts);
   });
+
+  // Add page numbers to all pages after content is complete
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(bodyFontSize - 2);
+    doc.setTextColor(120);
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
+  }
 
   // File name
   const label = fileLabel || 'timesheets';

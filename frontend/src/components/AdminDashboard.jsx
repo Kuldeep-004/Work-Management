@@ -50,7 +50,7 @@ function formatDateTime(date) {
 }
 
 const ALL_COLUMNS = [
-  { id: 'title', label: 'Title', defaultWidth: 256 },
+  { id: 'title', label: 'Client Name & Work In Brief', defaultWidth: 256 },
   { id: 'description', label: 'Status', defaultWidth: 180 },
   { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
   { id: 'clientGroup', label: 'Client Group', defaultWidth: 150 },
@@ -127,6 +127,7 @@ const AdminDashboard = () => {
   const columnsDropdownRef = useRef(null);
   const groupByDropdownRef = useRef(null);
   const tableRef = useRef(null);
+  const bulkStatusDropdownRef = useRef(null);
   const [showPDFColumnSelector, setShowPDFColumnSelector] = useState(false);
   const [showITRColumnSelector, setShowITRColumnSelector] = useState(false);
   const [editingDescriptionTaskId, setEditingDescriptionTaskId] = useState(null);
@@ -150,6 +151,14 @@ const AdminDashboard = () => {
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [showCheckboxes, setShowCheckboxes] = useState(false);
+  // Bulk status update states
+  const [showBulkStatusDropdown, setShowBulkStatusDropdown] = useState(false);
+  const [taskStatuses, setTaskStatuses] = useState([]);
+  const [bulkStatusLoading, setBulkStatusLoading] = useState(false);
+  // Bulk priority update states
+  const [showBulkPriorityDropdown, setShowBulkPriorityDropdown] = useState(false);
+  const [bulkPriorityLoading, setBulkPriorityLoading] = useState(false);
+  const bulkPriorityDropdownRef = useRef(null);
   // State for showing completed tasks temporarily
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   // Handler for Automation submit
@@ -172,6 +181,30 @@ const AdminDashboard = () => {
       }
     })();
   }, [selectedAutomation, user, API_BASE_URL]);
+
+  // Fetch task statuses for bulk update
+  useEffect(() => {
+    const fetchTaskStatuses = async () => {
+      if (!user?.token) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/task-statuses`, {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          },
+        });
+
+        if (response.ok) {
+          const statusList = await response.json();
+          setTaskStatuses(statusList);
+        }
+      } catch (error) {
+        console.error('Error fetching task statuses:', error);
+      }
+    };
+
+    fetchTaskStatuses();
+  }, [user, API_BASE_URL]);
+
   // 8. Remove columnWidths, columnOrder, setColumnWidths, setColumnOrder from top-level state (move to per-tab)
   // const [columnWidths, setColumnWidths] = useState({});
   // const [columnOrder, setColumnOrder] = useState(() => ALL_COLUMNS.map(col => col.id));
@@ -354,6 +387,16 @@ const AdminDashboard = () => {
       if (groupByDropdownRef.current && !groupByDropdownRef.current.contains(event.target)) {
         setShowGroupByDropdown(false);
       }
+      
+      // Handle bulk status dropdown
+      if (bulkStatusDropdownRef.current && !bulkStatusDropdownRef.current.contains(event.target)) {
+        setShowBulkStatusDropdown(false);
+      }
+      
+      // Handle bulk priority dropdown
+      if (bulkPriorityDropdownRef.current && !bulkPriorityDropdownRef.current.contains(event.target)) {
+        setShowBulkPriorityDropdown(false);
+      }
     };
 
     const handleKeyDown = (event) => {
@@ -362,6 +405,8 @@ const AdminDashboard = () => {
         setIsFilterPopupOpen(false);
         setShowColumnDropdown(false);
         setShowGroupByDropdown(false);
+        setShowBulkStatusDropdown(false);
+        setShowBulkPriorityDropdown(false);
       }
     };
     
@@ -717,6 +762,20 @@ const AdminDashboard = () => {
   }, [priorities, activeTabObj.filters, activeTabObj.searchTerm, activeTabObj.sortBy, activeTabObj.sortOrder]);
 
   const getStatusColor = (status) => {
+    // Find the status in taskStatuses first for dynamic colors
+    const statusObj = taskStatuses.find(s => s.name === status);
+    if (statusObj) {
+      // If it's a Tailwind class, return it directly
+      if (statusObj.color && !statusObj.color.startsWith('#')) {
+        return statusObj.color;
+      }
+      // If it's a hex color, return null to use inline styles
+      if (statusObj.color && statusObj.color.startsWith('#')) {
+        return null;
+      }
+    }
+    
+    // Fallback to hardcoded colors for default statuses
     switch (status) {
       case 'completed':
         return 'bg-green-100 text-green-800';
@@ -731,12 +790,38 @@ const AdminDashboard = () => {
     }
   };
 
+  // Get inline styles for status colors (only for hex colors)
+  const getStatusStyles = (status) => {
+    const statusObj = taskStatuses.find(s => s.name === status);
+    if (statusObj && statusObj.color && statusObj.color.startsWith('#')) {
+      const hex = statusObj.color;
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+      const textColor = brightness > 128 ? '#000000' : '#FFFFFF';
+      
+      return {
+        backgroundColor: hex,
+        color: textColor
+      };
+    }
+    return null;
+  };
+
   const getPriorityColor = (priority) => {
     // Find the priority in the priorities list to get its color
     if (priorities.length > 0) {
       const foundPriority = priorities.find(p => p.name === priority);
-      if (foundPriority && foundPriority.color) {
-        return foundPriority.color;
+      if (foundPriority) {
+        // If it's a Tailwind class, return it directly
+        if (foundPriority.color && !foundPriority.color.startsWith('#')) {
+          return foundPriority.color;
+        }
+        // If it's a hex color, return null to use inline styles
+        if (foundPriority.color && foundPriority.color.startsWith('#')) {
+          return null;
+        }
       }
     }
     
@@ -763,6 +848,26 @@ const AdminDashboard = () => {
       default:
         return 'bg-gray-100 text-gray-800 border border-gray-200';
     }
+  };
+
+  // Get inline styles for priority colors (only for hex colors)
+  const getPriorityStyles = (priority) => {
+    const priorityObj = priorities.find(p => p.name === priority);
+    if (priorityObj && priorityObj.color && priorityObj.color.startsWith('#')) {
+      const hex = priorityObj.color;
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+      const textColor = brightness > 128 ? '#000000' : '#FFFFFF';
+      
+      return {
+        backgroundColor: hex,
+        color: textColor,
+        border: `1px solid ${hex}`
+      };
+    }
+    return null;
   };
 
   // Calculate statistics - memoized for performance
@@ -944,6 +1049,125 @@ const AdminDashboard = () => {
     } catch (error) {
       toast.error('Failed to delete selected tasks');
       console.error('Bulk delete error:', error);
+    }
+  };
+
+  const handleBulkStatusUpdate = async (newStatus) => {
+    if (selectedTasks.length === 0) return;
+
+    // Check if trying to set status to "completed" and verify self verification
+    if (newStatus === 'completed') {
+      const selectedTaskObjects = tasks.filter(task => selectedTasks.includes(task._id));
+      const tasksWithoutSelfVerification = selectedTaskObjects.filter(task => !task.selfVerification);
+      
+      if (tasksWithoutSelfVerification.length > 0) {
+        toast.error(`Cannot set status to Completed. ${tasksWithoutSelfVerification.length} task${tasksWithoutSelfVerification.length > 1 ? 's' : ''} do not have self verification checked.`);
+        return;
+      }
+    }
+
+    setBulkStatusLoading(true);
+    try {
+      const updatePromises = selectedTasks.map(taskId =>
+        fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+          method: 'PUT',
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${user.token}` 
+          },
+          body: JSON.stringify({ status: newStatus })
+        })
+      );
+
+      const responses = await Promise.all(updatePromises);
+      const failedUpdates = responses.filter(response => !response.ok);
+
+      if (failedUpdates.length > 0) {
+        toast.error(`Failed to update ${failedUpdates.length} task${failedUpdates.length > 1 ? 's' : ''}`);
+      } else {
+        // Format status name for display
+        const statusDisplay = taskStatuses.find(status => status.name === newStatus);
+        const formattedStatus = statusDisplay 
+          ? statusDisplay.name.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+          : newStatus;
+        
+        toast.success(`Successfully updated ${selectedTasks.length} task${selectedTasks.length > 1 ? 's' : ''} to ${formattedStatus}`);
+
+        // Update tasks state directly instead of fetching to avoid page reload
+        setTasks(prevTasks => 
+          prevTasks.map(task => 
+            selectedTasks.includes(task._id) 
+              ? { ...task, status: newStatus }
+              : task
+          )
+        );
+      }
+
+      // Clear selection and close dropdown - also disable selection mode
+      setSelectedTasks([]);
+      setIsAllSelected(false);
+      setShowBulkActions(false);
+      setShowBulkStatusDropdown(false);
+      setShowCheckboxes(false); // Disable selection mode after bulk status update
+    } catch (error) {
+      toast.error('Failed to update selected tasks');
+      console.error('Bulk status update error:', error);
+    } finally {
+      setBulkStatusLoading(false);
+    }
+  };
+
+  const handleBulkPriorityUpdate = async (newPriority) => {
+    if (selectedTasks.length === 0) return;
+
+    setBulkPriorityLoading(true);
+    try {
+      const updatePromises = selectedTasks.map(taskId =>
+        fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+          method: 'PUT',
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${user.token}` 
+          },
+          body: JSON.stringify({ priority: newPriority })
+        })
+      );
+
+      const responses = await Promise.all(updatePromises);
+      const failedUpdates = responses.filter(response => !response.ok);
+
+      if (failedUpdates.length > 0) {
+        toast.error(`Failed to update ${failedUpdates.length} task${failedUpdates.length > 1 ? 's' : ''}`);
+      } else {
+        // Format priority name for display
+        const priorityDisplay = priorities.find(priority => priority.name === newPriority);
+        const formattedPriority = priorityDisplay 
+          ? priorityDisplay.name.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+          : newPriority;
+        
+        toast.success(`Successfully updated ${selectedTasks.length} task${selectedTasks.length > 1 ? 's' : ''} to ${formattedPriority} priority`);
+
+        // Update tasks state directly instead of fetching to avoid page reload
+        setTasks(prevTasks => 
+          prevTasks.map(task => 
+            selectedTasks.includes(task._id) 
+              ? { ...task, priority: newPriority }
+              : task
+          )
+        );
+      }
+
+      // Clear selection and close dropdown - also disable selection mode
+      setSelectedTasks([]);
+      setIsAllSelected(false);
+      setShowBulkActions(false);
+      setShowBulkPriorityDropdown(false);
+      setShowCheckboxes(false); // Disable selection mode after bulk priority update
+    } catch (error) {
+      toast.error('Failed to update selected task priorities');
+      console.error('Bulk priority update error:', error);
+    } finally {
+      setBulkPriorityLoading(false);
     }
   };
 
@@ -2065,6 +2289,130 @@ const AdminDashboard = () => {
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            {/* Bulk Status Update Dropdown */}
+            <div className="relative" ref={bulkStatusDropdownRef}>
+              <button
+                onClick={() => setShowBulkStatusDropdown(!showBulkStatusDropdown)}
+                disabled={bulkStatusLoading}
+                className="inline-flex items-center px-4 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {bulkStatusLoading ? 'Updating...' : 'Update Stages'}
+                <svg className="h-4 w-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {showBulkStatusDropdown && !bulkStatusLoading && (
+                <div className="absolute right-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-64 max-h-64 overflow-y-auto animate-fade-in">
+                  <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">
+                    Update Status for {selectedTasks.length} Task{selectedTasks.length > 1 ? 's' : ''}
+                  </div>
+                  {taskStatuses.map(status => {
+                    const formattedName = status.name.replace(/_/g, ' ')
+                      .split(' ')
+                      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                      .join(' ');
+                    
+                    // Check if this is "completed" status and if any selected tasks don't have self verification
+                    const isCompletedStatus = status.name === 'completed';
+                    const selectedTaskObjects = tasks.filter(task => selectedTasks.includes(task._id));
+                    const tasksWithoutSelfVerification = selectedTaskObjects.filter(task => !task.selfVerification);
+                    const isDisabled = isCompletedStatus && tasksWithoutSelfVerification.length > 0;
+                    
+                    // Use the helper functions for consistent color handling
+                    const statusColor = getStatusColor(status.name);
+                    const statusStyles = getStatusStyles(status.name);
+                    
+                    return (
+                      <div key={status._id} className="relative">
+                        <button 
+                          className={`block w-full text-left px-4 py-2 transition-colors ${
+                            isDisabled 
+                              ? 'opacity-50 cursor-not-allowed bg-gray-50' 
+                              : 'hover:bg-blue-50 text-gray-700'
+                          }`}
+                          onClick={() => !isDisabled && handleBulkStatusUpdate(status.name)}
+                          disabled={isDisabled}
+                        >
+                          <span 
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor || ''}`}
+                            style={statusStyles || {}}
+                          >
+                            {formattedName}
+                          </span>
+                          {isDisabled && (
+                            <span className="ml-2 text-xs text-red-600">
+                              (Self verification required)
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {taskStatuses.length === 0 && (
+                    <div className="px-4 py-2 text-gray-500 text-sm">No statuses available</div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Bulk Priority Update Dropdown */}
+            <div className="relative" ref={bulkPriorityDropdownRef}>
+              <button
+                onClick={() => setShowBulkPriorityDropdown(!showBulkPriorityDropdown)}
+                disabled={bulkPriorityLoading}
+                className="inline-flex items-center px-4 py-2 border border-green-300 rounded-md shadow-sm text-sm font-medium text-green-700 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                {bulkPriorityLoading ? 'Updating...' : 'Update Priority'}
+                <svg className="h-4 w-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {showBulkPriorityDropdown && !bulkPriorityLoading && (
+                <div className="absolute right-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-64 max-h-64 overflow-y-auto animate-fade-in">
+                  <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">
+                    Update Priority for {selectedTasks.length} Task{selectedTasks.length > 1 ? 's' : ''}
+                  </div>
+                  {priorities.map(priority => {
+                    const formattedName = priority.name.replace(/_/g, ' ')
+                      .split(' ')
+                      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                      .join(' ');
+                    
+                    // Use the helper functions for consistent color handling
+                    const priorityColor = getPriorityColor(priority.name);
+                    const priorityStyles = getPriorityStyles(priority.name);
+                    
+                    return (
+                      <div key={priority._id} className="relative">
+                        <button 
+                          className="block w-full text-left px-4 py-2 transition-colors hover:bg-green-50 text-gray-700"
+                          onClick={() => handleBulkPriorityUpdate(priority.name)}
+                        >
+                          <span 
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${priorityColor || ''}`}
+                            style={priorityStyles || {}}
+                          >
+                            {formattedName}
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {priorities.length === 0 && (
+                    <div className="px-4 py-2 text-gray-500 text-sm">No priorities available</div>
+                  )}
+                </div>
+              )}
+            </div>
+            
             <button
               onClick={() => setShowDeleteConfirmation(true)}
               className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all hover:shadow-md"
@@ -2098,6 +2446,15 @@ const AdminDashboard = () => {
               return;
             }
             
+            // Check if trying to set status to "completed" and verify self verification
+            if (newStatus === 'completed') {
+              const task = tasks.find(t => t._id === taskId);
+              if (task && !task.selfVerification) {
+                toast.error('Cannot set status to Completed. Self verification must be checked first.');
+                return;
+              }
+            }
+            
             try {
               const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
                 method: 'PATCH',
@@ -2112,8 +2469,45 @@ const AdminDashboard = () => {
               setTasks(prevTasks => prevTasks.map(task =>
                 task._id === taskId ? updatedTask : task
               ));
+              toast.success('Status updated successfully');
+              
+              // Disable selection mode after individual status change
+              if (showCheckboxes) {
+                setShowCheckboxes(false);
+                setSelectedTasks([]);
+                setIsAllSelected(false);
+                setShowBulkActions(false);
+              }
             } catch (err) {
               toast.error('Failed to update status');
+            }
+          }}
+          onPriorityChange={async (taskId, newPriority) => {
+            try {
+              const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${user.token}`,
+                },
+                body: JSON.stringify({ priority: newPriority }),
+              });
+              if (!response.ok) throw new Error('Failed to update priority');
+              const updatedTask = await response.json();
+              setTasks(prevTasks => prevTasks.map(task =>
+                task._id === taskId ? updatedTask : task
+              ));
+              toast.success('Priority updated successfully');
+              
+              // Disable selection mode after individual priority change
+              if (showCheckboxes) {
+                setShowCheckboxes(false);
+                setSelectedTasks([]);
+                setIsAllSelected(false);
+                setShowBulkActions(false);
+              }
+            } catch (err) {
+              toast.error('Failed to update priority');
             }
           }}
           shouldDisableActions={() => false}

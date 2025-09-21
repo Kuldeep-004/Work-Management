@@ -558,7 +558,7 @@ const TaskListAssigned = ({ viewType = 'assigned' }) => {
                 {/* Task details */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <h3 className="font-medium text-gray-700">Title</h3>
+                    <h3 className="font-medium text-gray-700">Client Name & Work In Brief</h3>
                     <p className="text-gray-900">{selectedTask.title}</p>
                   </div>
                   <div>

@@ -21,7 +21,7 @@ import { API_BASE_URL, fetchTabState, saveTabState } from '../../apiConfig';
 
 // All columns including verification - this will be used for dropdown and column management
 const ALL_COLUMNS = [
-  { id: 'title', label: 'Title' },
+  { id: 'title', label: 'Client Name & Work In Brief' },
   { id: 'description', label: 'Status' },
   { id: 'clientName', label: 'Client Name' },
   { id: 'clientGroup', label: 'Client Group' },
@@ -125,6 +125,7 @@ const ReceivedTasks = () => {
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
   const [showUsersDropdown, setShowUsersDropdown] = useState(false);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
 
   // Custom columns state
   const [customColumns, setCustomColumns] = useState([]);
@@ -132,6 +133,13 @@ const ReceivedTasks = () => {
 
   // Get active tab object (defensive) - use empty array for customColumns as fallback
   const activeTabObj = tabs.find(tab => tab.id === activeTabId) || tabs[0] || DEFAULT_TAB('execution', customColumnsLoaded ? customColumns : []);
+
+  // Filter users based on search term
+  const filteredUsers = users.filter(user => {
+    if (!userSearchTerm) return true;
+    const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
+    return fullName.includes(userSearchTerm.toLowerCase());
+  });
 
   // Get extended columns including custom columns
   const getExtendedColumns = () => {
@@ -936,7 +944,10 @@ const ReceivedTasks = () => {
   }, [showColumnDropdown]);
 
   useEffect(() => {
-    if (!showUsersDropdown) return;
+    if (!showUsersDropdown) {
+      setUserSearchTerm(''); // Clear search when dropdown closes
+      return;
+    }
     function handleClickOutside(event) {
       if (usersDropdownRef.current && !usersDropdownRef.current.contains(event.target)) {
         setShowUsersDropdown(false);
@@ -1203,27 +1214,45 @@ const ReceivedTasks = () => {
               {showUsersDropdown && (
                 <div ref={usersDropdownRef} className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-48 animate-fade-in max-h-64 overflow-y-auto">
                   <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">View Tasks For</div>
+                  
+                  {/* Search input */}
+                  <div className="px-3 pb-2">
+                    <input
+                      type="text"
+                      placeholder="Search users..."
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  
                   <button 
                     className={`block w-full text-left px-4 py-2 rounded ${!activeTabObj.selectedUserId ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
                     onClick={() => { 
                       updateActiveTab({ selectedUserId: null }); 
                       setShowUsersDropdown(false); 
+                      setUserSearchTerm('');
                     }}
                   >
                     None (My Tasks)
                   </button>
-                  {users.map(user => (
+                  {filteredUsers.map(user => (
                     <button 
                       key={user._id}
                       className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.selectedUserId === user._id ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
                       onClick={() => { 
                         updateActiveTab({ selectedUserId: user._id }); 
                         setShowUsersDropdown(false); 
+                        setUserSearchTerm('');
                       }}
                     >
                       {user.firstName} {user.lastName}
                     </button>
                   ))}
+                  {filteredUsers.length === 0 && userSearchTerm && (
+                    <div className="px-4 py-2 text-gray-500 text-sm">No users found</div>
+                  )}
                 </div>
               )}
             </div>

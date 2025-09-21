@@ -993,7 +993,7 @@ const CreateTask = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Task Title <span className="text-red-500">*</span>
+                    Client Name & Work In Brief  <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"

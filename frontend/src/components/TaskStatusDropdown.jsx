@@ -100,6 +100,55 @@ const TaskStatusDropdown = ({
                .join(' ');
   };
 
+  // Helper function to get status color classes for consistent styling
+  const getStatusColor = (statusName) => {
+    // Find the status in statuses first for dynamic colors
+    const statusObj = statuses.find(s => s.name === statusName);
+    if (statusObj) {
+      // If it's a Tailwind class, return it directly
+      if (statusObj.color && !statusObj.color.startsWith('#')) {
+        return statusObj.color;
+      }
+      // If it's a hex color, return null to use inline styles
+      if (statusObj.color && statusObj.color.startsWith('#')) {
+        return null;
+      }
+    }
+    
+    // Fallback to hardcoded colors for default statuses
+    switch (statusName) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'in_progress':
+        return 'bg-blue-100 text-blue-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'yet_to_start':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Get inline styles for status colors (only for hex colors)
+  const getStatusStyles = (statusName) => {
+    const statusObj = statuses.find(s => s.name === statusName);
+    if (statusObj && statusObj.color && statusObj.color.startsWith('#')) {
+      const hex = statusObj.color;
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+      const textColor = brightness > 128 ? '#000000' : '#FFFFFF';
+      
+      return {
+        backgroundColor: hex,
+        color: textColor
+      };
+    }
+    return null;
+  };
+
   // Get selected status display
   const selectedStatus = statuses.find(status => status.name === value);
   const selectedStatusDisplay = selectedStatus 
@@ -173,7 +222,10 @@ const TaskStatusDropdown = ({
         >
           <div className="flex items-center gap-2">
             {selectedStatus ? (
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedStatus.color}`}>
+              <span 
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedStatus.name) || ''}`}
+                style={getStatusStyles(selectedStatus.name) || {}}
+              >
                 {formatStatusName(selectedStatus.name)}
               </span>
             ) : (
@@ -228,7 +280,10 @@ const TaskStatusDropdown = ({
                     value === status.name ? 'bg-blue-50' : ''
                   }`}
                 >
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.color}`}>
+                  <span 
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(status.name) || ''}`}
+                    style={getStatusStyles(status.name) || {}}
+                  >
                     {formatStatusName(status.name)}
                   </span>
                   {value === status.name && (

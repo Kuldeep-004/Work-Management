@@ -668,13 +668,23 @@ const SubordinateTimesheets = () => {
                           >
                             Accept All
                           </button>
-                          <button
-                            onClick={() => handleReturnTimesheet(timesheet._id)}
-                            className="bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600 text-sm font-medium"
-                            title="Return timesheet for editing"
-                          >
-                            Return
-                          </button>
+                          {timesheet.isCompleted ? (
+                            <button
+                              onClick={() => handleReturnTimesheet(timesheet._id)}
+                              className="bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600 text-sm font-medium"
+                              title="Return timesheet for editing"
+                            >
+                              Return
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              className="bg-gray-300 text-gray-500 px-3 py-1 rounded-lg text-sm font-medium cursor-not-allowed"
+                              title="Can only return submitted timesheet"
+                            >
+                              Return
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -715,7 +725,11 @@ const SubordinateTimesheets = () => {
                                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-800">
                                     {entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : 'N/A'}
                                   </td>
-                                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{entry.task ? entry.task.title : (entry.manualTaskName || 'N/A')}</td>
+                                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{
+                                    entry.task
+                                      ? (entry.task.title === 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR' ? 'INFRASTRUCTURE ISSUES' : entry.task.title)
+                                      : (entry.manualTaskName === 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR' ? 'INFRASTRUCTURE ISSUES' : (entry.manualTaskName || 'N/A'))
+                                  }</td>
                                   <td className="px-4 py-3 text-sm text-gray-700 break-words min-w-[200px] max-w-[400px]" style={{ whiteSpace: 'pre-wrap' }}>{entry.workDescription || 'N/A'}</td>
                                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">{formatTime(getMinutesBetween(entry.startTime, entry.endTime))}</td>
                                   <td className={`px-4 py-3 whitespace-nowrap text-sm ${statusColor}`}>{
@@ -820,7 +834,9 @@ const SubordinateTimesheets = () => {
                   <div key={index} className="bg-gray-50 rounded-lg p-4">
                     <div className="flex justify-between items-start mb-3">
                       <h4 className="font-medium text-gray-900">
-                        {entry.task ? entry.task.title : entry.manualTaskName || 'Manual Task'}
+                        {entry.task
+                          ? (entry.task.title === 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR' ? 'INFRASTRUCTURE ISSUES' : entry.task.title)
+                          : (entry.manualTaskName === 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR' ? 'INFRASTRUCTURE ISSUES' : (entry.manualTaskName || 'Manual Task'))}
                       </h4>
                       <span className="text-sm font-medium text-blue-600">
                         {formatTime(getMinutesBetween(entry.startTime, entry.endTime))}

@@ -109,6 +109,9 @@ const TaskVerification = () => {
       if (!res.ok) throw new Error('Failed to update task');
       toast.success(`Task ${action === 'approve' ? 'approved' : 'rejected'} successfully`);
       setTasks(prev => prev.filter(t => t._id !== taskId));
+      
+      // Notify sidebar to update pending task count
+      window.dispatchEvent(new CustomEvent('taskVerificationUpdate'));
     } catch (err) {
       toast.error(err.message);
     }
@@ -177,6 +180,9 @@ const TaskVerification = () => {
           })).filter(automation => automation.taskTemplate.length > 0)
         );
         toast.success(`Template ${action === 'approve' ? 'approved' : 'rejected'} successfully`);
+        
+        // Notify sidebar to update pending task count
+        window.dispatchEvent(new CustomEvent('taskVerificationUpdate'));
       } else {
         toast.error('Error verifying template');
       }

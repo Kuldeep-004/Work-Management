@@ -695,6 +695,15 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
   // Update the handleStatusChange function to be independent of verification status
   const handleStatusChange = async (taskId, newStatus) => {
     try {
+      // Check if trying to set status to "completed" and verify self verification
+      if (newStatus === 'completed') {
+        const task = displayTasks.find(t => t._id === taskId);
+        if (task && !task.selfVerification) {
+          toast.error('Cannot set status to Completed. Self verification must be checked first.');
+          return;
+        }
+      }
+      
       const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
         method: 'PATCH',
         headers: {
@@ -999,7 +1008,7 @@ const TaskList = ({ viewType, taskType, tasks: externalTasks, showControls = tru
                   {/* Task details */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <h3 className="font-medium text-gray-700">Title</h3>
+                      <h3 className="font-medium text-gray-700">Client Name & Work In Brief</h3>
                       <p className="text-gray-900">{selectedTask.title}</p>
                     </div>
                     <div>

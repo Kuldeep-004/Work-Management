@@ -514,7 +514,7 @@ router.get('/subordinates', protect, async (req, res) => {
       };
     }
     const timesheets = await Timesheet.find(timesheetQuery)
-      .populate('user', 'firstName lastName email role team')
+      .populate('user', 'firstName lastName email role team photo')
       .populate('entries.task', 'title description clientName clientGroup workType')
       .sort({ date: -1, 'user.firstName': 1 })
       .limit(limit * 1)
@@ -572,7 +572,7 @@ router.get('/subordinate/:userId/:date', protect, async (req, res) => {
         $gte: targetDate,
         $lt: nextDate
       }
-    }).populate('user', 'firstName lastName email role team')
+    }).populate('user', 'firstName lastName email role team photo')
       .populate('entries.task', 'title description clientName clientGroup workType');
     
     if (!timesheet) {

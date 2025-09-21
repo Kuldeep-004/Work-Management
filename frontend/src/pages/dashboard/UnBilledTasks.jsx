@@ -7,7 +7,7 @@ import ErrorBoundary from '../../components/ErrorBoundary';
 import AdvancedTaskTable from '../../components/AdvancedTaskTable';
 
 const ALL_COLUMNS = [
-  { id: 'title', label: 'Title', defaultWidth: 256 },
+  { id: 'title', label: 'Client Name & Work In Brief', defaultWidth: 256 },
   { id: 'description', label: 'Description', defaultWidth: 180 },
   { id: 'clientName', label: 'Client Name', defaultWidth: 150 },
   { id: 'clientGroup', label: 'Client Group', defaultWidth: 150 },

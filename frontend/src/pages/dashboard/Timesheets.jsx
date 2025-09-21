@@ -1149,8 +1149,8 @@ const Timesheets = () => {
                         <option value="permission">Permission</option>
                         <option value="billing">Billing</option>
                         <option value="lunch">Lunch</option>
-                        <option value="infrastructure-issues">INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR</option>
-                        <option value="discussion-with-vivek">DISCUSSION WITH VIVEK SIR</option>
+                        <option value="infrastructure-issues">Infrastructure Issues</option>
+                        <option value="discussion-with-vivek">Discussion With Vivek Sir</option>
                         {/* Build dropdown options: all allowed tasks, plus the selected one if missing */}
                         {(() => {
                           const selectedTaskId = taskValue;

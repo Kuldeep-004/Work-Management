@@ -323,7 +323,7 @@ const ColumnManagement = () => {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <h3 className="text-md font-medium text-blue-800 mb-2">Default Columns</h3>
         <p className="text-sm text-blue-700">
-          The following columns are built-in and cannot be modified: Title, Description, Client Name, Client Group, 
+          The following columns are built-in and cannot be modified: Client Name & Work In Brief, Description, Client Name, Client Group, 
           Work Type, Internal Works, Task Status, Priority, Verifications, Self Verification, Inward Entry Date, 
           Due Date, Target Date, Assigned By, Assigned To, Verifiers, Guide, Files, Comments.
         </p>

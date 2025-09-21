@@ -1216,6 +1216,16 @@ export const useAdvancedTaskTableLogic = (props) => {
       setStatusLoading(true);
       
       try {
+        // Check if trying to set status to "completed" and verify self verification
+        if (newStatus === 'completed') {
+          if (!task.selfVerification) {
+            toast.error('Cannot complete task without self verification.');
+            setStatusLoading(false);
+            setEditingStatusTaskId(null);
+            return;
+          }
+        }
+        
         await updateTaskWithTransition(
           task._id,
           task,
@@ -1235,13 +1245,13 @@ export const useAdvancedTaskTableLogic = (props) => {
               if (!response.ok) throw new Error('Failed to reject task');
               updatedTask = await response.json();
               
-              // Update local state first
+              // Update local state with server response
               setOrderedTasks(prev => prev.map(t => t._id === task._id ? { ...t, ...updatedTask } : t));
               
               if (onTaskUpdate) onTaskUpdate(task._id, () => updatedTask);
             } else {
               await onStatusChange(task._id, newStatus);
-              // Optimistically update local state
+              // Only update local state after successful backend call
               setOrderedTasks(prev => prev.map(t => t._id === task._id ? { ...t, status: newStatus } : t));
             }
           },

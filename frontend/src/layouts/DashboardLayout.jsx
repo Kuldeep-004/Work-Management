@@ -17,13 +17,55 @@ import {
   ClipboardDocumentCheckIcon, // Activity logs icon
 } from '@heroicons/react/24/outline';
 import TopBar from '../components/TopBar';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../apiConfig';
 
 const DashboardLayout = ({ children }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hasPendingTasks, setHasPendingTasks] = useState(false);
+
+  // Check for pending tasks
+  useEffect(() => {
+    const checkPendingTasks = async () => {
+      if (!user || !user.token) return;
+      
+      const isTaskVerifier = Array.isArray(user.role2) 
+        ? user.role2.includes('Task Verifier') 
+        : user.role2 === 'Task Verifier';
+      
+      if (!isTaskVerifier && user.role !== 'Admin') return;
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/tasks/for-verification`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (res.ok) {
+          const tasks = await res.json();
+          setHasPendingTasks(tasks.length > 0);
+        }
+      } catch (error) {
+        console.error('Error checking pending tasks:', error);
+      }
+    };
+
+    checkPendingTasks();
+    const interval = setInterval(checkPendingTasks, 30000);
+    
+    // Listen for task updates
+    const handleTaskUpdate = () => {
+      checkPendingTasks();
+    };
+    
+    window.addEventListener('taskVerificationUpdate', handleTaskUpdate);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('taskVerificationUpdate', handleTaskUpdate);
+    };
+  }, [user]);
 
   const menuItems = [];
 
@@ -174,6 +216,11 @@ const DashboardLayout = ({ children }) => {
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = getCurrentPath() === item.id;
+                const isPendingTasksItem = item.id === 'task-verification';
+                const iconColor = isPendingTasksItem && hasPendingTasks 
+                  ? 'text-green-400' 
+                  : isActive ? 'text-white' : 'text-gray-600 group-hover:text-gray-900';
+                
                 return (
                   <button
                     key={item.id}
@@ -185,7 +232,7 @@ const DashboardLayout = ({ children }) => {
                     }`}
                     style={{marginTop: 0, marginBottom: 0}}
                   >
-                    <Icon className={`flex-shrink-0 w-5 h-5 ${isActive ? 'text-white' : 'text-gray-600 group-hover:text-gray-900'}`} />
+                    <Icon className={`flex-shrink-0 w-5 h-5 ${iconColor}`} />
                     <span className="ml-3 truncate">{item.label}</span>
                   </button>
                 );

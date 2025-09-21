@@ -20,7 +20,7 @@ import {
 import { API_BASE_URL } from '../../apiConfig';
 
 const ALL_COLUMNS = [
-  { id: 'title', label: 'Title' },
+  { id: 'title', label: 'Client Name & Work In Brief' },
   { id: 'description', label: 'Description' },
   { id: 'clientName', label: 'Client Name' },
   { id: 'clientGroup', label: 'Client Group' },
