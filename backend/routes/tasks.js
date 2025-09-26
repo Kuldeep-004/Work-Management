@@ -2178,6 +2178,7 @@ router.get('/analytics/data', protect, async (req, res) => {
 
     // Total tasks assigned to current user (exclude completed tasks)
     const totalTasks = allTasks.filter(task => 
+      task.assignedTo && task.assignedTo._id && 
       task.assignedTo._id.toString() === userId.toString() &&
       task.status !== 'completed'
     ).length;
@@ -2186,6 +2187,7 @@ router.get('/analytics/data', protect, async (req, res) => {
     // Rule 2 (new): tasks assigned to current user with verification accepted and status not completed
     // These rules work as "OR" to each other
     const executionTasks = allTasks.filter(task => 
+      task.assignedTo && task.assignedTo._id && 
       task.assignedTo._id.toString() === userId.toString() &&
       task.status !== 'completed' &&
       (
@@ -2208,7 +2210,7 @@ router.get('/analytics/data', protect, async (req, res) => {
         task.thirdVerificationAssignedTo,
         task.secondVerificationAssignedTo,
         task.verificationAssignedTo
-      ].filter(v => v); // Remove null/undefined values
+      ].filter(v => v && v._id); // Remove null/undefined values and ensure _id exists
 
       if (verifiers.length === 0) return false;
       
@@ -2227,6 +2229,7 @@ router.get('/analytics/data', protect, async (req, res) => {
     // Issued for verification: tasks assigned to current user with verifiers, status not completed
     // AND verification is not accepted
     const issuedForVerificationTasks = allTasks.filter(task => 
+      task.assignedTo && task.assignedTo._id && 
       task.assignedTo._id.toString() === userId.toString() &&
       task.status !== 'completed' &&
       task.verification !== 'accepted' && // Don't count tasks with verification accepted
@@ -2239,6 +2242,7 @@ router.get('/analytics/data', protect, async (req, res) => {
 
     // Priority distribution for tasks assigned to current user (exclude completed tasks)
     const userTasks = allTasks.filter(task => 
+      task.assignedTo && task.assignedTo._id && 
       task.assignedTo._id.toString() === userId.toString() &&
       task.status !== 'completed'
     );
@@ -2263,7 +2267,11 @@ router.get('/analytics/data', protect, async (req, res) => {
     res.json(analyticsData);
   } catch (error) {
     console.error('Error fetching analytics data:', error);
-    res.status(500).json({ message: error.message });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Failed to fetch analytics data',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 });
 
