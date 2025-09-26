@@ -1,5 +1,6 @@
 import ActivityLog from '../models/ActivityLog.js';
 import User from '../models/User.js';
+import mongoose from 'mongoose';
 
 /**
  * Comprehensive Activity Logger Utility
@@ -39,6 +40,78 @@ class ActivityLogger {
     req = null
   }) {
     try {
+      // Debug log to help identify issues
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ActivityLogger.log called with:', {
+          userId: typeof userId,
+          entityId: typeof entityId,
+          targetUserId: typeof targetUserId,
+          userIdValue: userId,
+          entityIdValue: entityId
+        });
+      }
+
+      // Validate and convert userId to ObjectId if it's a valid string
+      let validUserId = null;
+      if (userId) {
+        if (typeof userId === 'string' && mongoose.Types.ObjectId.isValid(userId)) {
+          validUserId = new mongoose.Types.ObjectId(userId);
+        } else if (userId instanceof mongoose.Types.ObjectId) {
+          validUserId = userId;
+        } else {
+          console.error('Invalid userId provided to ActivityLogger:', userId, typeof userId);
+          return; // Skip logging if userId is invalid
+        }
+      }
+
+      // Validate and convert entityId to ObjectId if it's a valid string
+      let validEntityId = null;
+      if (entityId) {
+        if (typeof entityId === 'string' && mongoose.Types.ObjectId.isValid(entityId)) {
+          validEntityId = new mongoose.Types.ObjectId(entityId);
+        } else if (entityId instanceof mongoose.Types.ObjectId) {
+          validEntityId = entityId;
+        } else {
+          console.error('Invalid entityId provided to ActivityLogger:', entityId, typeof entityId);
+          // For system entities, entityId might be optional, so we can set it to null
+          validEntityId = null;
+        }
+      }
+
+      // Validate and convert targetUserId to ObjectId if it's a valid string
+      let validTargetUserId = null;
+      if (targetUserId) {
+        if (typeof targetUserId === 'string' && mongoose.Types.ObjectId.isValid(targetUserId)) {
+          validTargetUserId = new mongoose.Types.ObjectId(targetUserId);
+        } else if (targetUserId instanceof mongoose.Types.ObjectId) {
+          validTargetUserId = targetUserId;
+        } else {
+          console.error('Invalid targetUserId provided to ActivityLogger:', targetUserId, typeof targetUserId);
+          validTargetUserId = null;
+        }
+      }
+
+      // Validate and convert relatedEntities ObjectIds
+      const validRelatedEntities = relatedEntities.map(entity => {
+        if (entity.entityId) {
+          if (typeof entity.entityId === 'string' && mongoose.Types.ObjectId.isValid(entity.entityId)) {
+            return {
+              ...entity,
+              entityId: new mongoose.Types.ObjectId(entity.entityId)
+            };
+          } else if (entity.entityId instanceof mongoose.Types.ObjectId) {
+            return entity;
+          } else {
+            console.error('Invalid entityId in relatedEntities:', entity.entityId);
+            return {
+              ...entity,
+              entityId: null
+            };
+          }
+        }
+        return entity;
+      });
+
       // Extract metadata from request if provided
       if (req) {
         metadata.ip = req.ip || req.connection.remoteAddress;
@@ -48,17 +121,17 @@ class ActivityLogger {
       }
 
       const activityLog = new ActivityLog({
-        user: userId,
+        user: validUserId,
         action,
         entity,
-        entityId,
+        entityId: validEntityId,
         description,
         oldValues,
         newValues,
         metadata,
         severity,
-        targetUser: targetUserId,
-        relatedEntities
+        targetUser: validTargetUserId,
+        relatedEntities: validRelatedEntities
       });
 
       await activityLog.save();
