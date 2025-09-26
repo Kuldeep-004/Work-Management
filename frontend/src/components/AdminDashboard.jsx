@@ -952,7 +952,10 @@ const AdminDashboard = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${user.token}`,
         },
-        body: JSON.stringify({ taskTemplate: updatedTemplates }),
+        body: JSON.stringify({ 
+          taskTemplate: updatedTemplates,
+          allowTemplateUpdate: true  // Flag to allow template updates
+        }),
       });
 
       if (!response.ok) {
@@ -2668,7 +2671,10 @@ const AdminDashboard = () => {
                                   'Content-Type': 'application/json',
                                   Authorization: `Bearer ${user.token}`,
                                 },
-                                body: JSON.stringify({ taskTemplate: updatedTemplates }),
+                                body: JSON.stringify({ 
+                                  taskTemplate: updatedTemplates,
+                                  allowTemplateUpdate: true  // Flag to allow template updates
+                                }),
                               });
                               
                               if (!response.ok) {

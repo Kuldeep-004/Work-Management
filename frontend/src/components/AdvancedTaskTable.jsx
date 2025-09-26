@@ -896,10 +896,10 @@ const AdvancedTaskTable = React.memo(({
                               return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 120) + 'px', minWidth: (columnWidths[colId] || 120) + 'px', maxWidth: (columnWidths[colId] || 120) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><span>{formatDate(task.targetDate)}</span></div></td>;
                           
                             case 'assignedBy':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedBy.photo?.url || defaultProfile} alt={task.assignedBy.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedBy.firstName} {task.assignedBy.lastName}</span></div></div></td>;
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedBy?.photo?.url || defaultProfile} alt={task.assignedBy?.firstName || 'User'} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedBy?.firstName || 'Unknown'} {task.assignedBy?.lastName || 'User'}</span></div></div></td>;
                           
                             case 'assignedTo':
-                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedTo.photo?.url || defaultProfile} alt={task.assignedTo.firstName} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedTo.firstName} {task.assignedTo.lastName}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.assignedTo._id)}h</span></span></div></div></td>;
+                              return <td key={colId} className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? 'border-r border-gray-200' : ''}`} style={{width: (columnWidths[colId] || 150) + 'px', minWidth: (columnWidths[colId] || 150) + 'px', maxWidth: (columnWidths[colId] || 150) + 'px', background: 'white', overflow: 'hidden'}}><div className="overflow-x-auto whitespace-nowrap" style={{width: '100%', maxWidth: '100%'}}><div className="flex items-center"><img src={task.assignedTo?.photo?.url || defaultProfile} alt={task.assignedTo?.firstName || 'User'} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} /><span className="ml-2">{task.assignedTo?.firstName || 'Unknown'} {task.assignedTo?.lastName || 'User'}<span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">{getUserTaskHours(task._id, task.assignedTo?._id)}</span></span></div></div></td>;
                           
                             case 'verificationAssignedTo':
                             case 'secondVerificationAssignedTo':
@@ -1038,15 +1038,15 @@ const AdvancedTaskTable = React.memo(({
                                         {task[colId] ? (
                                           <>
                                             <img
-                                              src={task[colId].photo?.url || defaultProfile}
-                                              alt={`${task[colId].firstName} ${task[colId].lastName}`}
+                                              src={task[colId]?.photo?.url || defaultProfile}
+                                              alt={`${task[colId]?.firstName || 'User'} ${task[colId]?.lastName || ''}`}
                                               className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
                                               onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
                                             />
                                             <span className="ml-2">
-                                              {task[colId].firstName} {task[colId].lastName}
+                                              {task[colId]?.firstName || 'Unknown'} {task[colId]?.lastName || 'User'}
                                               <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                                                {getUserTaskHours(task._id, task[colId]._id)}h
+                                                {getUserTaskHours(task._id, task[colId]?._id)}h
                                               </span>
                                             </span>
                                           </>

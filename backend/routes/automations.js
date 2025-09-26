@@ -131,11 +131,37 @@ router.put('/:id', protect, async (req, res) => {
     const automation = await Automation.findById(req.params.id);
     if (!automation) return res.status(404).json({ message: 'Automation not found' });
     
-    // Only allow updating certain fields
-    const { name, description, triggerType, dayOfMonth, monthOfYear, specificDate, specificTime, taskTemplate, quarterlyMonths, halfYearlyMonths } = req.body;
+    // Only allow updating certain fields - excludes taskTemplate to prevent accidental template overwrites
+    const { name, description, triggerType, dayOfMonth, monthOfYear, specificDate, specificTime, quarterlyMonths, halfYearlyMonths, clearTemplateHistory } = req.body;
+    
+    // Don't allow updating task templates directly through this route for safety
+    // Templates should be updated through the specific template routes
+    if (req.body.taskTemplate !== undefined) {
+      // Special exception: Allow template updates if explicitly requested with a flag
+      // This is used by AdminDashboard for template editing
+      if (req.body.allowTemplateUpdate === true) {
+        automation.taskTemplate = req.body.taskTemplate;
+        
+        // Reset automation run status when templates are updated
+        if (['dayOfMonth', 'quarterly', 'halfYearly', 'yearly'].includes(automation.triggerType)) {
+          automation.lastRunDate = undefined;
+          automation.lastRunMonth = undefined;
+          automation.lastRunYear = undefined;
+          console.log(`[AutomationUpdate] Reset run status for automation ${automation._id} due to template update`);
+        }
+      } else {
+        return res.status(400).json({ 
+          message: 'Task templates cannot be updated through this route without the allowTemplateUpdate flag. Use template-specific endpoints for safer updates.' 
+        });
+      }
+    }
     
     if (name !== undefined) automation.name = name;
     if (description !== undefined) automation.description = description;
+    
+    // Store old trigger type for comparison
+    const oldTriggerType = automation.triggerType;
+    
     if (triggerType !== undefined) automation.triggerType = triggerType;
     
     // Update trigger-specific fields based on trigger type
@@ -175,24 +201,32 @@ router.put('/:id', protect, async (req, res) => {
       }
     }
     
-    if (taskTemplate !== undefined) {
-      automation.taskTemplate = taskTemplate;
-      
-      // IMPORTANT: Reset automation run status when templates are updated
-      // This allows the automation to run again with the updated templates
-      if (['dayOfMonth', 'quarterly', 'halfYearly', 'yearly'].includes(automation.triggerType)) {
-        automation.lastRunDate = undefined;
-        automation.lastRunMonth = undefined;
-        automation.lastRunYear = undefined;
-        console.log(`[AutomationUpdate] Reset run status for automation ${automation._id} due to template update`);
-      }
+    // Reset automation run status if trigger type changed
+    // This allows the automation to run again with the new trigger settings
+    if (triggerType && triggerType !== oldTriggerType && 
+        ['dayOfMonth', 'quarterly', 'halfYearly', 'yearly'].includes(triggerType)) {
+      automation.lastRunDate = undefined;
+      automation.lastRunMonth = undefined;
+      automation.lastRunYear = undefined;
+      console.log(`[AutomationUpdate] Reset run status for automation ${automation._id} due to trigger type change from ${oldTriggerType} to ${triggerType}`);
+    }
+
+    // Clear all template run history if requested
+    if (clearTemplateHistory === true && automation.taskTemplate && Array.isArray(automation.taskTemplate)) {
+      automation.taskTemplate.forEach(template => {
+        template.lastProcessedDate = undefined;
+        template.lastProcessedMonth = undefined;
+        template.lastProcessedYear = undefined;
+        template.createdTaskIds = [];
+      });
+      console.log(`[AutomationUpdate] Cleared template run history for automation ${automation._id} with ${automation.taskTemplate.length} templates`);
     }
     
     // Store old values for logging
     const oldValues = {
       name: automation.name,
       description: automation.description,
-      triggerType: automation.triggerType,
+      triggerType: oldTriggerType,
       dayOfMonth: automation.dayOfMonth,
       monthOfYear: automation.monthOfYear,
       specificDate: automation.specificDate,
@@ -202,11 +236,15 @@ router.put('/:id', protect, async (req, res) => {
     await automation.save();
     
     // Log automation update
+    const logMessage = clearTemplateHistory ? 
+      `Updated automation "${automation.name}" and cleared all template run history` :
+      `Updated automation "${automation.name}"`;
+      
     await ActivityLogger.logSystemActivity(
       req.user._id,
       'automation_updated',
       automation._id,
-      `Updated automation "${automation.name}"`,
+      logMessage,
       oldValues,
       { 
         name, 
@@ -215,7 +253,8 @@ router.put('/:id', protect, async (req, res) => {
         dayOfMonth, 
         monthOfYear, 
         specificDate, 
-        specificTime 
+        specificTime,
+        templateHistoryCleared: clearTemplateHistory || false
       },
       req
     );

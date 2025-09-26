@@ -485,13 +485,23 @@ const SubordinateTimesheets = () => {
               
               {showUserDropdown && (
                 <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {/* Search input inside dropdown */}
+                  <div className="px-3 py-2 sticky top-0 bg-white z-10">
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      placeholder="Search user..."
+                      className="w-full px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoFocus
+                    />
+                  </div>
                   <div
                     onClick={() => handleUserSelect('')}
                     className="px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
                   >
                     All Users
                   </div>
-                  
                   {/* Admin-only role-based filter options */}
                   {user.role === 'Admin' && (
                     <>
@@ -515,8 +525,11 @@ const SubordinateTimesheets = () => {
                       </div>
                     </>
                   )}
-                  
-                  {subordinates.map((sub) => (
+                  {subordinates.filter(sub => {
+                    if (!searchTerm) return true;
+                    const name = `${sub.firstName || ''} ${sub.lastName || ''}`.toLowerCase();
+                    return name.includes(searchTerm.toLowerCase());
+                  }).map((sub) => (
                     <div
                       key={sub._id}
                       onClick={() => handleUserSelect(sub._id)}

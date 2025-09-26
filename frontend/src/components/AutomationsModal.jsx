@@ -36,6 +36,8 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
   const [automations, setAutomations] = useState([]);
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editingAutomation, setEditingAutomation] = useState(null);
   const [showTriggerSelect, setShowTriggerSelect] = useState(true); // New state for trigger type selection
   const [triggerType, setTriggerType] = useState(''); // dayOfMonth or dateAndTime
   const [newAutomation, setNewAutomation] = useState({ 
@@ -261,6 +263,99 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
     }
   };
 
+  // Handle editing an existing automation - start with trigger selection
+  const handleEditAutomation = (automation) => {
+    setEditingAutomation(automation);
+    // Reset to trigger selection first, just like create flow
+    setTriggerType('');
+    setShowTriggerSelect(true);
+    setNewAutomation({
+      name: automation.name || '',
+      description: automation.description || '',
+      triggerType: automation.triggerType,
+      dayOfMonth: automation.dayOfMonth || '',
+      specificDate: automation.specificDate ? new Date(automation.specificDate).toISOString().split('T')[0] : '',
+      specificTime: automation.specificTime || '',
+      monthOfYear: automation.monthOfYear || '',
+      quarterlyMonths: automation.quarterlyMonths || [],
+      halfYearlyMonths: automation.halfYearlyMonths || [],
+      hours: '12',
+      minutes: '00',
+      period: 'AM'
+    });
+    setShowEdit(true);
+  };
+
+  // Handle updating an automation
+  const handleUpdateAutomation = async () => {
+    if (!editingAutomation) return;
+    
+    setLoading(true);
+    setError('');
+    try {
+      const automationData = { 
+        ...newAutomation,
+        clearTemplateHistory: true  // Flag to clear all template run history
+      };
+      
+      // Validate before sending
+      if (automationData.triggerType === 'dayOfMonth' && !automationData.dayOfMonth) {
+        throw new Error('Day of month is required');
+      }
+      
+      if (automationData.triggerType === 'dateAndTime') {
+        if (!automationData.specificDate || !automationData.specificTime) {
+          throw new Error('Both date and time are required');
+        }
+        
+        // Validate date is in the future (only for one-time automations)
+        const selectedDateTime = new Date(`${automationData.specificDate}T${automationData.specificTime}`);
+        const now = new Date();
+        
+        if (selectedDateTime <= now) {
+          throw new Error('The date and time must be in the future');
+        }
+      }
+      
+      const res = await fetch(`${API_BASE_URL}/api/automations/${editingAutomation._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify(automationData),
+      });
+      if (!res.ok) throw new Error('Failed to update automation');
+      const updated = await res.json();
+      
+      // Update the automations list
+      setAutomations(automations.map(auto => auto._id === updated._id ? updated : auto));
+      
+      // Reset form
+      setShowEdit(false);
+      setEditingAutomation(null);
+      setShowTriggerSelect(true);
+      setTriggerType('');
+      setNewAutomation({
+        name: '', 
+        description: '', 
+        triggerType: '',
+        dayOfMonth: '',
+        specificDate: '',
+        specificTime: '',
+        hours: '12',
+        minutes: '00',
+        period: 'AM',
+        quarterlyMonths: [1, 4, 7, 10],
+        halfYearlyMonths: [1, 7]
+      });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -309,11 +404,13 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
             </svg>
           </button>
         </div>
-        {showCreate ? (
+        {(showCreate || showEdit) ? (
           <div className="flex flex-col gap-4 p-6 overflow-y-auto">
             {showTriggerSelect ? (
               <div className="flex flex-col gap-4">
-                <h3 className="text-base font-medium text-gray-800 mb-6">Select Trigger Type</h3>
+                <h3 className="text-base font-medium text-gray-800 mb-6">
+                  {showEdit ? 'Change Trigger Type' : 'Select Trigger Type'}
+                </h3>
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                   <button
                     onClick={() => handleTriggerSelect('dateAndTime')}
@@ -392,7 +489,16 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                 </div>
                 <div className="flex justify-end mt-6">
                   <button
-                    onClick={() => setShowCreate(false)}
+                    onClick={() => {
+                      if (showEdit) {
+                        setShowEdit(false);
+                        setEditingAutomation(null);
+                      } else {
+                        setShowCreate(false);
+                      }
+                      setShowTriggerSelect(true);
+                      setTriggerType('');
+                    }}
                     className="px-4 py-2 text-sm text-gray-600 font-medium border border-gray-200 rounded hover:bg-gray-50 transition-colors"
                   >
                     Cancel
@@ -411,6 +517,7 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                     </svg>
                   </button>
                   <h3 className="text-lg font-semibold text-gray-800">
+                    {showEdit ? 'Edit ' : ''}
                     {triggerType === 'dateAndTime' && 'One-time Automation'}
                     {triggerType === 'dayOfMonth' && 'Monthly Automation'}
                     {triggerType === 'quarterly' && 'Quarterly Automation'}
@@ -794,7 +901,7 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                   disabled={loading}
                 >Back</button>
                 <button
-                  onClick={handleCreateAutomation}
+                  onClick={showEdit ? handleUpdateAutomation : handleCreateAutomation}
                   className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg py-3 font-medium hover:from-blue-600 hover:to-blue-700 transition-colors shadow-sm flex items-center justify-center"
                   disabled={
                     loading || 
@@ -806,10 +913,10 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                   {loading ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white mr-2"></div>
-                      Creating...
+                      {showEdit ? 'Updating...' : 'Creating...'}
                     </>
                   ) : (
-                    <>Create Automation</>
+                    <>{showEdit ? 'Update Automation' : 'Create Automation'}</>
                   )}
                 </button>
               </div>
@@ -863,8 +970,9 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                     <div
                       key={auto._id}
                       onClick={(e) => {
-                        // Don't trigger card click if the delete button was clicked
-                        if (e.target.closest('button[data-action="delete"]')) {
+                        // Don't trigger card click if the edit or delete button was clicked
+                        if (e.target.closest('button[data-action="delete"]') || 
+                            e.target.closest('button[data-action="edit"]')) {
                           e.preventDefault();
                           e.stopPropagation();
                           return;
@@ -920,7 +1028,7 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                         )}
                       </div>
                       
-                      {/* Footer with task count and delete button */}
+                      {/* Footer with task count, edit and delete buttons */}
                       <div className="mt-1.5 flex items-center justify-between">
                         <div className="flex items-center">
                           {/* Always show task count, even if 0 */}
@@ -932,22 +1040,42 @@ const AutomationsModal = ({ isOpen, onClose, onSelectAutomation, user, API_BASE_
                           </div>
                         </div>
                         
-                        {/* Delete button styled like a badge, now on the very right */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation(); // Prevent triggering the card click
-                            e.preventDefault(); // Prevent default behavior
-                            handleConfirmDelete(e, auto);
-                          }}
-                          className="bg-red-50 text-red-700 text-xs font-medium px-2 py-0.5 rounded flex items-center hover:bg-red-100 transition-colors ml-auto"
-                          aria-label="Delete automation"
-                          data-action="delete" // Add attribute for event delegation
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          Delete
-                        </button>
+                        {/* Action buttons container */}
+                        <div className="flex items-center gap-1">
+                          {/* Edit button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handleEditAutomation(auto);
+                            }}
+                            className="bg-gray-50 text-gray-700 text-xs font-medium px-2 py-0.5 rounded flex items-center hover:bg-gray-100 transition-colors"
+                            aria-label="Edit automation"
+                            data-action="edit"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit
+                          </button>
+                          
+                          {/* Delete button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handleConfirmDelete(e, auto);
+                            }}
+                            className="bg-red-50 text-red-700 text-xs font-medium px-2 py-0.5 rounded flex items-center hover:bg-red-100 transition-colors"
+                            aria-label="Delete automation"
+                            data-action="delete"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}

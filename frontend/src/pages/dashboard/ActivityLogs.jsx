@@ -11,7 +11,7 @@ const ActivityLogs = () => {
   const [pagination, setPagination] = useState({});
   const [filters, setFilters] = useState({
     page: 1,
-    limit: 25,
+    limit: 500,
     search: '',
     entity: '',
     action: '',
@@ -133,7 +133,7 @@ const ActivityLogs = () => {
   const clearFilters = () => {
     setFilters({
       page: 1,
-      limit: 25,
+      limit: 500,
       search: '',
       entity: '',
       action: '',
