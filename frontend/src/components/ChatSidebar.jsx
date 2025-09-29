@@ -116,22 +116,25 @@ const ChatSidebar = ({
   });
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-200 bg-white">
+    <div className="flex flex-col h-full bg-white">
+      {/* Header - WhatsApp style */}
+      <div className="bg-gray-400 text-white p-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Chats</h2>
+          <h2 className="text-xl font-semibold">Chats</h2>
           <div className="flex items-center space-x-2">
-            <button
-              onClick={onNewGroup}
-              className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-              title="New Group"
-            >
-              <UserGroupIcon className="h-5 w-5" />
-            </button>
+            {/* Only show New Group button for system admins */}
+            {user?.role === 'Admin' && (
+              <button
+                onClick={onNewGroup}
+                className="p-2 text-white hover:bg-green-700 rounded-full transition-colors"
+                title="New Group"
+              >
+                <UserGroupIcon className="h-5 w-5" />
+              </button>
+            )}
             <button
               onClick={onClose}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 text-white hover:bg-green-700 rounded-full transition-colors"
               title="Close"
             >
               <XMarkIcon className="h-5 w-5" />
@@ -147,7 +150,7 @@ const ChatSidebar = ({
             placeholder="Search chats..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            className="w-full pl-10 pr-3 py-2.5 bg-white border-0 rounded-lg text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-300"
           />
         </div>
       </div>
@@ -192,61 +195,67 @@ const ChatSidebar = ({
                 <div
                   key={item._id}
                   onClick={() => item.isUser ? onUserSelect(item.user) : onChatSelect(item)}
-                  className={`p-4 cursor-pointer transition-colors ${
+                  className={`px-4 py-3 cursor-pointer transition-colors border-b border-gray-50 ${
                     isActive 
-                      ? 'bg-green-50 border-r-2 border-green-500' 
+                      ? 'bg-gray-100' 
                       : 'hover:bg-gray-50'
                   }`}
                 >
                   <div className="flex items-center space-x-3">
-                    {/* Avatar */}
+                    {/* Avatar - WhatsApp style */}
                     <div className="relative flex-shrink-0">
                       {avatar ? (
                         <img
                           src={avatar}
                           alt={name}
-                          className="h-12 w-12 rounded-full object-cover"
+                          className="h-12 w-12 rounded-full object-cover ring-2 ring-gray-100"
                         />
                       ) : (
                         <div className="h-12 w-12 bg-gray-200 rounded-full flex items-center justify-center">
                           {item.type === 'group' ? (
                             <UserGroupIcon className="h-6 w-6 text-gray-500" />
                           ) : (
-                            <UserIcon className="h-6 w-6 text-gray-500" />
+                            name.charAt(0).toUpperCase()
                           )}
                         </div>
                       )}
                       
                       {/* Online indicator for private chats */}
                       {(item.type === 'private' || item.isUser) && isOnline && (
-                        <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-green-500 rounded-full border-2 border-white"></div>
+                        <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 bg-green-500 rounded-full border-2 border-white"></div>
                       )}
                     </div>
 
                     {/* Chat Info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-gray-900 truncate">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-semibold text-gray-900 truncate">
                           {name}
                         </p>
-                        {/* Only show time for actual chats with messages, not for users without chats */}
+                        {/* Time for actual chats with messages */}
                         {!item.isUser && item.lastMessage && item.lastActivity && (
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-gray-500 font-medium">
                             {formatTime(item.lastActivity)}
                           </span>
                         )}
                       </div>
                       
-                      <div className="flex items-center justify-between mt-1">
-                        <p className="text-xs text-gray-500 truncate">
-                          {item.isUser ? subtitle : getLastMessagePreview(item)}
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-gray-600 truncate max-w-[200px]">
+                          {item.isUser ? (
+                            <span className={`${isOnline ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                              {subtitle}
+                            </span>
+                          ) : (
+                            getLastMessagePreview(item)
+                          )}
                         </p>
                         
-                        {/* Unread count */}
+                        {/* Unread count - WhatsApp style */}
                         {!item.isUser && item.unreadCount > 0 && (
-                          <span className="bg-green-500 text-white text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center">
+                          <div className="bg-green-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] flex items-center justify-center font-medium shadow-sm">
                             {item.unreadCount > 99 ? '99+' : item.unreadCount}
-                          </span>
+                          </div>
                         )}
                       </div>
                     </div>

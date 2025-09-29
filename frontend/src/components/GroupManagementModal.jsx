@@ -6,10 +6,12 @@ import {
   PencilIcon,
   PhotoIcon,
   StarIcon,
-  UserIcon
+  UserIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../apiConfig';
+import ConfirmationModal from './ConfirmationModal';
 
 const GroupManagementModal = ({ isOpen, onClose, chat, allUsers, onChatUpdate }) => {
   const [groupName, setGroupName] = useState(chat?.name || '');
@@ -17,13 +19,82 @@ const GroupManagementModal = ({ isOpen, onClose, chat, allUsers, onChatUpdate })
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [showAddMembers, setShowAddMembers] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // Confirmation modal states
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'danger',
+    onConfirm: null,
+    confirmText: 'Confirm',
+    cancelText: 'Cancel'
+  });
+  
   const { user } = useAuth();
   const fileInputRef = useRef(null);
 
   if (!isOpen || !chat) return null;
 
+  // Helper function to show confirmation modal
+  const showConfirmation = (config) => {
+    setConfirmModal({
+      isOpen: true,
+      title: config.title,
+      message: config.message,
+      type: config.type || 'danger',
+      onConfirm: config.onConfirm,
+      confirmText: config.confirmText || 'Confirm',
+      cancelText: config.cancelText || 'Cancel'
+    });
+  };
+
+  const closeConfirmation = () => {
+    setConfirmModal({
+      isOpen: false,
+      title: '',
+      message: '',
+      type: 'danger',
+      onConfirm: null,
+      confirmText: 'Confirm',
+      cancelText: 'Cancel'
+    });
+  };
+
+  const handleConfirmAction = () => {
+    if (confirmModal.onConfirm) {
+      confirmModal.onConfirm();
+    }
+    // Don't automatically close here - let the onConfirm function handle it
+  };
+
+  // Only allow system admins to manage groups
+  const isSystemAdmin = user?.role === 'Admin';
   const isAdmin = chat.participants?.find(p => p.user._id === user._id)?.role === 'admin';
   const isCreator = chat.createdBy === user._id;
+
+  // If user is not a system admin, don't show management features
+  if (!isSystemAdmin) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black bg-opacity-50" onClick={onClose}></div>
+        <div className="relative bg-white rounded-lg shadow-xl max-w-md mx-4 p-6">
+          <div className="text-center">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Access Denied</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Only system administrators can manage group settings.
+            </p>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Get available users (not already in group)
   const availableUsers = allUsers.filter(u => 
@@ -122,29 +193,38 @@ const GroupManagementModal = ({ isOpen, onClose, chat, allUsers, onChatUpdate })
   };
 
   const handleRemoveMember = async (userId) => {
-    if (!window.confirm('Are you sure you want to remove this member?')) return;
+    const memberToRemove = chat.participants.find(p => p.user._id === userId);
+    const memberName = memberToRemove?.user?.name || 'this member';
+    
+    showConfirmation({
+      title: 'Remove Member',
+      message: `Are you sure you want to remove "${memberName}" from the group?\n\nThey will no longer have access to this group chat.`,
+      type: 'warning',
+      confirmText: 'Remove',
+      onConfirm: async () => {
+        try {
+          setLoading(true);
+          const response = await fetch(`${API_BASE_URL}/api/chats/${chat._id}/members/${userId}`, {
+            method: 'DELETE',
+            headers: {
+              Authorization: `Bearer ${user.token}`
+            }
+          });
 
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/chats/${chat._id}/members/${userId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${user.token}`
+          if (response.ok) {
+            const updatedChat = await response.json();
+            onChatUpdate(updatedChat);
+          } else {
+            throw new Error('Failed to remove member');
+          }
+        } catch (error) {
+          console.error('Error removing member:', error);
+          alert('Failed to remove member');
+        } finally {
+          setLoading(false);
         }
-      });
-
-      if (response.ok) {
-        const updatedChat = await response.json();
-        onChatUpdate(updatedChat);
-      } else {
-        throw new Error('Failed to remove member');
       }
-    } catch (error) {
-      console.error('Error removing member:', error);
-      alert('Failed to remove member');
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const handleMakeAdmin = async (userId) => {
@@ -171,6 +251,63 @@ const GroupManagementModal = ({ isOpen, onClose, chat, allUsers, onChatUpdate })
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDeleteGroup = async () => {
+    // First confirmation
+    showConfirmation({
+      title: 'Delete Group',
+      message: `Are you sure you want to delete the group "${chat.name}"?\n\nThis action will:\n• Delete the entire group\n• Delete all messages in the group\n• Remove all members\n\nThis action cannot be undone.`,
+      type: 'danger',
+      confirmText: 'Continue',
+      onConfirm: () => {
+        // Close the first confirmation and show second confirmation
+        closeConfirmation();
+        setTimeout(() => {
+          showConfirmation({
+            title: 'FINAL CONFIRMATION',
+            message: 'This will permanently delete the group and all its data.\n\nAre you absolutely sure you want to proceed?',
+            type: 'danger',
+            confirmText: 'Delete Forever',
+            onConfirm: async () => {
+              closeConfirmation();
+              try {
+                setLoading(true);
+                console.log('Attempting to delete group:', chat._id);
+                
+                const response = await fetch(`${API_BASE_URL}/api/chats/${chat._id}`, {
+                  method: 'DELETE',
+                  headers: {
+                    Authorization: `Bearer ${user.token}`
+                  }
+                });
+
+                console.log('Delete response status:', response.status);
+                
+                if (response.ok) {
+                  console.log('Group deleted successfully');
+                  // Close the modal and notify parent
+                  onClose();
+                  if (onChatUpdate) {
+                    // Refresh the chat list or redirect
+                    window.location.reload(); // Simple refresh for now
+                  }
+                } else {
+                  const errorText = await response.text();
+                  console.error('Delete failed with response:', errorText);
+                  throw new Error('Failed to delete group');
+                }
+              } catch (error) {
+                console.error('Error deleting group:', error);
+                alert('Failed to delete group: ' + error.message);
+              } finally {
+                setLoading(false);
+              }
+            }
+          });
+        }, 100); // Small delay to ensure proper modal transition
+      }
+    });
   };
 
   return (
@@ -260,7 +397,7 @@ const GroupManagementModal = ({ isOpen, onClose, chat, allUsers, onChatUpdate })
           <div className="mb-4">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-medium text-gray-900">Members</h4>
-              {(isAdmin || isCreator) && (
+              {isSystemAdmin && (
                 <button
                   onClick={() => setShowAddMembers(!showAddMembers)}
                   className="p-1 text-green-600 hover:text-green-700"
@@ -271,7 +408,7 @@ const GroupManagementModal = ({ isOpen, onClose, chat, allUsers, onChatUpdate })
             </div>
 
             {/* Add Members Section */}
-            {showAddMembers && (isAdmin || isCreator) && (
+            {showAddMembers && isSystemAdmin && (
               <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                 <div className="mb-2">
                   <h5 className="text-sm font-medium text-gray-700 mb-2">Add Members</h5>
@@ -353,7 +490,7 @@ const GroupManagementModal = ({ isOpen, onClose, chat, allUsers, onChatUpdate })
                   </div>
 
                   {/* Member Actions */}
-                  {(isAdmin || isCreator) && participant.user._id !== user._id && (
+                  {isSystemAdmin && participant.user._id !== user._id && (
                     <div className="flex space-x-1">
                       {participant.role !== 'admin' && (
                         <button
@@ -379,6 +516,26 @@ const GroupManagementModal = ({ isOpen, onClose, chat, allUsers, onChatUpdate })
               ))}
             </div>
           </div>
+
+          {/* Danger Zone - Delete Group */}
+          {isSystemAdmin && (
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-red-800 mb-2">Danger Zone</h4>
+                <p className="text-sm text-red-600 mb-3">
+                  Permanently delete this group and all its messages. This action cannot be undone.
+                </p>
+                <button
+                  onClick={handleDeleteGroup}
+                  disabled={loading}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2 text-sm font-medium"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  <span>Delete Group Permanently</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Hidden file input */}
@@ -395,6 +552,18 @@ const GroupManagementModal = ({ isOpen, onClose, chat, allUsers, onChatUpdate })
           }}
         />
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirmation}
+        onConfirm={handleConfirmAction}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+      />
     </div>
   );
 };

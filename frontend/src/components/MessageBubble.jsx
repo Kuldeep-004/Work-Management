@@ -14,6 +14,62 @@ const MessageBubble = ({ message, isOwn, showAvatar, showTimestamp }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioRef, setAudioRef] = useState(null);
 
+  // Generate consistent color for user based on their ID
+  const getUserColor = (userId) => {
+    const colors = [
+      'from-blue-400 to-blue-600',
+      'from-purple-400 to-purple-600', 
+      'from-pink-400 to-pink-600',
+      'from-red-400 to-red-600',
+      'from-orange-400 to-orange-600',
+      'from-yellow-400 to-yellow-600',
+      'from-teal-400 to-teal-600',
+      'from-indigo-400 to-indigo-600',
+      'from-cyan-400 to-cyan-600',
+      'from-emerald-400 to-emerald-600'
+    ];
+    
+    if (!userId) return colors[0];
+    
+    // Create a simple hash from the userId to get consistent color
+    let hash = 0;
+    for (let i = 0; i < userId.length; i++) {
+      const char = userId.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  // Get text color for user names
+  const getUserTextColor = (userId) => {
+    const textColors = [
+      'text-blue-600',
+      'text-purple-600', 
+      'text-pink-600',
+      'text-red-600',
+      'text-orange-600',
+      'text-yellow-600',
+      'text-teal-600',
+      'text-indigo-600',
+      'text-cyan-600',
+      'text-emerald-600'
+    ];
+    
+    if (!userId) return textColors[0];
+    
+    // Create a simple hash from the userId to get consistent color
+    let hash = 0;
+    for (let i = 0; i < userId.length; i++) {
+      const char = userId.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    return textColors[Math.abs(hash) % textColors.length];
+  };
+
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -155,22 +211,37 @@ const MessageBubble = ({ message, isOwn, showAvatar, showTimestamp }) => {
   };
 
   return (
-    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-0.5`}>
-      <div className={`flex items-end space-x-1 max-w-[75%] ${isOwn ? 'flex-row-reverse space-x-reverse' : ''}`}>
-        {/* Avatar */}
-        {showAvatar && !isOwn && (
-          <div className="flex-shrink-0">
+    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-1`}>
+      <div className={`flex items-end space-x-2 max-w-[80%] ${isOwn ? 'flex-row-reverse space-x-reverse' : ''}`}>
+        {/* Avatar for group chats - always show for non-own messages in groups */}
+        {!isOwn && message.chat?.type === 'group' && (
+          <div className="flex-shrink-0 mb-1">
             {message.sender.photo?.url ? (
               <img
                 src={message.sender.photo.url}
                 alt={`${message.sender.firstName} ${message.sender.lastName}`}
-                className="h-6 w-6 rounded-full object-cover"
+                className="h-8 w-8 rounded-full object-cover ring-2 ring-white shadow-sm"
               />
             ) : (
-              <div className="h-6 w-6 bg-gray-300 rounded-full flex items-center justify-center">
-                <span className="text-xs text-gray-600">
-                  {message.sender.firstName?.[0]?.toUpperCase()}
-                </span>
+              <div className={`h-8 w-8 bg-gray-400 ${getUserColor(message.sender._id)} rounded-full flex items-center justify-center text-white font-semibold text-xs shadow-sm`}>
+                {message.sender.firstName?.[0]?.toUpperCase() || '?'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Avatar for other cases (private chats) - only when showAvatar is true */}
+        {showAvatar && !isOwn && message.chat?.type !== 'group' && (
+          <div className="flex-shrink-0 mb-1">
+            {message.sender.photo?.url ? (
+              <img
+                src={message.sender.photo.url}
+                alt={`${message.sender.firstName} ${message.sender.lastName}`}
+                className="h-8 w-8 rounded-full object-cover ring-2 ring-white shadow-sm"
+              />
+            ) : (
+              <div className={`h-8 w-8 bg-gray-400 ${getUserColor(message.sender._id)} rounded-full flex items-center justify-center text-white font-semibold text-xs shadow-sm`}>
+                {message.sender.firstName?.[0]?.toUpperCase() || '?'}
               </div>
             )}
           </div>
@@ -178,51 +249,49 @@ const MessageBubble = ({ message, isOwn, showAvatar, showTimestamp }) => {
 
         {/* Message bubble */}
         <div
-          className={`relative px-2.5 py-1.5 rounded-lg ${
+          className={`relative px-3 py-2 rounded-2xl shadow-sm ${
             isOwn
-              ? 'bg-green-500 text-white'
-              : 'bg-white text-gray-900 border border-gray-200'
-          } ${
-            isOwn 
-              ? 'rounded-br-sm' 
-              : 'rounded-bl-sm'
-          } shadow-sm max-w-full`}
+              ? 'bg-green-500 text-white rounded-br-md'
+              : 'bg-white text-gray-900 border border-gray-100 rounded-bl-md'
+          } max-w-full`}
         >
           {/* Sender name for group chats */}
-          {!isOwn && message.chat?.type === 'group' && showAvatar && (
-            <div className="text-xs font-medium text-gray-500 mb-1">
+          {!isOwn && message.chat?.type === 'group' && (
+            <div className={`text-xs font-semibold mb-1 ${getUserTextColor(message.sender._id)}`}>
               {message.sender.firstName} {message.sender.lastName}
             </div>
           )}
 
-          {/* Message content - WhatsApp style with smart layout */}
+          {/* Message content */}
           <div className="text-sm leading-relaxed">
             <div className="relative">
-              <div className="pr-16">
+              <div className="pr-14">
                 {renderMessageContent()}
               </div>
               
               {/* Time and status - positioned absolutely at bottom right */}
               <div className={`absolute bottom-0 right-0 flex items-center space-x-1 text-xs ${
-                isOwn ? 'text-green-100 opacity-80' : 'text-gray-400'
-              }`}>
+                isOwn ? 'text-green-100' : 'text-gray-400'
+              } mt-1`}>
                 {message.isEdited && (
-                  <span className="opacity-75">edited</span>
+                  <span className="opacity-75 text-xs">edited</span>
                 )}
                 <span className="whitespace-nowrap">
                   {formatTime(message.createdAt)}
                 </span>
-                <span className="inline-flex">
-                  {getMessageStatus()}
-                </span>
+                {isOwn && (
+                  <span className="inline-flex">
+                    {getMessageStatus()}
+                  </span>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Placeholder for alignment when no avatar */}
-        {!showAvatar && !isOwn && (
-          <div className="w-6"></div>
+        {/* Spacer for alignment when no avatar - only for private chats */}
+        {!isOwn && message.chat?.type !== 'group' && !showAvatar && (
+          <div className="w-8"></div>
         )}
       </div>
     </div>

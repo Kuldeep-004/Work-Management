@@ -139,19 +139,19 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop }) => {
   };
 
   return (
-    <div className="px-4 py-0 bg-white border-t border-gray-200">
+    <div className="px-4 py-2 bg-white border-t border-gray-200">
       {/* Recording indicator */}
       {isRecording && (
-        <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+        <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-xl">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3">
               <div className="h-3 w-3 bg-red-500 rounded-full animate-pulse"></div>
               <span className="text-red-700 text-sm font-medium">Recording...</span>
-              <span className="text-red-600 text-sm">{formatRecordingTime(recordingTime)}</span>
+              <span className="text-red-600 text-sm font-mono">{formatRecordingTime(recordingTime)}</span>
             </div>
             <button
               onClick={stopRecording}
-              className="px-3 py-1 bg-red-500 text-white text-sm rounded-full hover:bg-red-600 transition-colors"
+              className="px-4 py-2 bg-red-500 text-white text-sm rounded-full hover:bg-red-600 transition-colors font-medium"
             >
               Stop & Send
             </button>
@@ -161,13 +161,13 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop }) => {
 
       {/* Emoji Picker */}
       {showEmojiPicker && (
-        <div className="mb-3 p-3 bg-gray-50 rounded-lg">
-          <div className="grid grid-cols-6 gap-3">
+        <div className="mb-3 p-4 bg-gray-50 rounded-xl shadow-sm">
+          <div className="grid grid-cols-8 gap-2">
             {emojis.map((emoji, index) => (
               <button
                 key={index}
                 onClick={() => insertEmoji(emoji)}
-                className="text-xl hover:bg-gray-200 rounded p-2 transition-colors"
+                className="text-xl hover:bg-gray-200 rounded-lg p-2 transition-colors"
               >
                 {emoji}
               </button>
@@ -176,70 +176,70 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop }) => {
         </div>
       )}
 
-      <div className="flex items-center space-x-3">
-        {/* Action buttons */}
+      {/* Message Input Row */}
+      <div className="flex items-end space-x-3">
+        {/* Action buttons - left side */}
         <div className="flex space-x-1">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-full transition-colors"
+            className="py-3 px-1 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-full transition-colors"
             title="Attach file"
             disabled={isRecording}
           >
             <PaperClipIcon className="h-5 w-5" />
           </button>
-          
-          <button
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            className="p-2.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-full transition-colors"
-            title="Emoji"
-            disabled={isRecording}
-          >
-            <FaceSmileIcon className="h-5 w-5" />
-          </button>
         </div>
 
-        {/* Message input container */}
-        <div className="flex-1 flex items-center self-center justify-center space-x-2">
-          {/* Text input */}
-          <div className="flex-1 flex justify-center items-center self-center relative">
-            <textarea
-              value={message}
-              onChange={handleInputChange}
-              onKeyPress={handleKeyPress}
-              placeholder="Type a message..."
-              className="w-full px-4 py-1 pr-12 border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent  max-h-[33px] text-sm leading-5"
-              rows={1}
-              disabled={isRecording}
-              style={{ 
-                scrollbarWidth: 'none',
-                msOverflowStyle: 'none',
-                lineHeight: '1.4',
-                wordWrap: 'break-word',
-                whiteSpace: 'pre-wrap'
-              }}
-              onInput={(e) => {
-                // Auto-resize textarea
-                e.target.style.height = 'auto';
-                e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
-              }}
-            />
-            
-            {/* Send button inside input */}
-            {message.trim() && !isRecording && (
+        {/* Message input container - WhatsApp style */}
+        <div className="flex-1 flex items-end space-x-2">
+          <div className="flex-1 relative">
+            <div className="flex items-center bg-gray-50 rounded-2xl border border-gray-200 focus-within:border-green-500 transition-colors">
               <button
-                onClick={handleSend}
-                className="absolute flex right-2 top-1/2 transform -translate-y-1/2 p-2 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors"
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className="p-3 text-gray-500 hover:text-green-600 transition-colors"
+                title="Emoji"
+                disabled={isRecording}
               >
-                <PaperAirplaneIcon className="h-4 w-4" />
+                <FaceSmileIcon className="h-5 w-5" />
               </button>
-            )}
+              
+              <textarea
+                value={message}
+                onChange={handleInputChange}
+                onKeyPress={handleKeyPress}
+                placeholder="Type a message..."
+                className="flex-1 px-2 py-3 bg-transparent border-0 resize-none focus:outline-none placeholder-gray-500 text-sm leading-5 max-h-[120px]"
+                rows={1}
+                disabled={isRecording}
+                style={{ 
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                  lineHeight: '1.4',
+                  wordWrap: 'break-word',
+                  whiteSpace: 'pre-wrap'
+                }}
+                onInput={(e) => {
+                  // Auto-resize textarea
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                }}
+              />
+            </div>
           </div>
 
-          {/* Audio recording button */}
-          {!message.trim() && (
+          {/* Send/Record button - WhatsApp style */}
+          {message.trim() ? (
+            <button
+              onClick={handleSend}
+              className="p-3 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors shadow-md"
+              title="Send message"
+            >
+              <PaperAirplaneIcon className="h-5 w-5" />
+            </button>
+          ) : (
             <button
               onClick={isRecording ? stopRecording : startRecording}
-              className={`p-2 rounded-full transition-colors ${
+              className={`p-3 rounded-full transition-colors shadow-md ${
                 isRecording 
                   ? 'bg-red-500 text-white hover:bg-red-600' 
                   : 'bg-green-500 text-white hover:bg-green-600'

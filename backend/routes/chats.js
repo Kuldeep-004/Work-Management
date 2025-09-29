@@ -101,11 +101,16 @@ router.post('/private', protect, async (req, res) => {
   }
 });
 
-// Create a new group chat
+// Create a new group chat (Admin only)
 router.post('/group', protect, async (req, res) => {
   try {
     const { name, description, participantIds } = req.body;
     const userId = req.user.id;
+
+    // Check if user is system admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Access denied. Only system admins can create groups.' });
+    }
 
     if (!name || !participantIds || participantIds.length < 1) {
       return res.status(400).json({ message: 'Group name and at least one participant required' });
@@ -196,21 +201,25 @@ router.put('/:chatId', protect, async (req, res) => {
   }
 });
 
-// Add participant to group
+// Add participant to group (System Admin only)
 router.post('/:chatId/participants', protect, async (req, res) => {
   try {
     const { chatId } = req.params;
     const { participantIds } = req.body;
     const userId = req.user.id;
 
+    // Check if user is system admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Access denied. Only system admins can add participants to groups.' });
+    }
+
     const chat = await Chat.findOne({
       _id: chatId,
-      type: 'group',
-      'participants': { $elemMatch: { user: userId, role: 'admin' } }
+      type: 'group'
     });
 
     if (!chat) {
-      return res.status(404).json({ message: 'Group not found or insufficient permissions' });
+      return res.status(404).json({ message: 'Group not found' });
     }
 
     // Verify participants exist and aren't already in the group
@@ -240,26 +249,27 @@ router.post('/:chatId/participants', protect, async (req, res) => {
   }
 });
 
-// Remove participant from group
+// Remove participant from group (System Admin only)
 router.delete('/:chatId/participants/:participantId', protect, async (req, res) => {
   try {
     const { chatId, participantId } = req.params;
     const userId = req.user.id;
 
+    // Check if user is system admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Access denied. Only system admins can remove participants from groups.' });
+    }
+
     const chat = await Chat.findOne({
       _id: chatId,
-      type: 'group',
-      'participants': { $elemMatch: { user: userId, role: 'admin' } }
+      type: 'group'
     });
 
     if (!chat) {
-      return res.status(404).json({ message: 'Group not found or insufficient permissions' });
+      return res.status(404).json({ message: 'Group not found' });
     }
 
-    // Don't allow removing the creator
-    if (chat.createdBy.toString() === participantId) {
-      return res.status(400).json({ message: 'Cannot remove group creator' });
-    }
+    // Admins have full control - can remove anyone including creators
 
     // Remove participant
     chat.participants = chat.participants.filter(p => p.user.toString() !== participantId);
@@ -323,7 +333,7 @@ router.post('/:chatId/leave', protect, async (req, res) => {
   }
 });
 
-// Update group name
+// Update group name (System Admin only)
 router.put('/:chatId/name', protect, async (req, res) => {
   try {
     const { chatId } = req.params;
@@ -334,17 +344,18 @@ router.put('/:chatId/name', protect, async (req, res) => {
       return res.status(400).json({ message: 'Group name is required' });
     }
 
+    // Check if user is system admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Access denied. Only system admins can update group names.' });
+    }
+
     const chat = await Chat.findOne({
       _id: chatId,
-      type: 'group',
-      $or: [
-        { 'participants': { $elemMatch: { user: userId, role: 'admin' } } },
-        { createdBy: userId }
-      ]
+      type: 'group'
     });
 
     if (!chat) {
-      return res.status(404).json({ message: 'Group not found or insufficient permissions' });
+      return res.status(404).json({ message: 'Group not found' });
     }
 
     chat.name = name.trim();
@@ -360,19 +371,20 @@ router.put('/:chatId/name', protect, async (req, res) => {
   }
 });
 
-// Update group avatar
+// Update group avatar (System Admin only)
 router.put('/:chatId/avatar', protect, uploadChatAvatarMiddleware, async (req, res) => {
   try {
     const { chatId } = req.params;
     const userId = req.user.id;
 
+    // Check if user is system admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Access denied. Only system admins can update group avatars.' });
+    }
+
     const chat = await Chat.findOne({
       _id: chatId,
-      type: 'group',
-      $or: [
-        { 'participants': { $elemMatch: { user: userId, role: 'admin' } } },
-        { createdBy: userId }
-      ]
+      type: 'group'
     });
 
     if (!chat) {
@@ -400,24 +412,25 @@ router.put('/:chatId/avatar', protect, uploadChatAvatarMiddleware, async (req, r
   }
 });
 
-// Add members to group
+// Add members to group (System Admin only)
 router.post('/:chatId/members', protect, async (req, res) => {
   try {
     const { chatId } = req.params;
     const { userIds } = req.body;
     const userId = req.user.id;
 
+    // Check if user is system admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Access denied. Only system admins can add members to groups.' });
+    }
+
     const chat = await Chat.findOne({
       _id: chatId,
-      type: 'group',
-      $or: [
-        { 'participants': { $elemMatch: { user: userId, role: 'admin' } } },
-        { createdBy: userId }
-      ]
+      type: 'group'
     });
 
     if (!chat) {
-      return res.status(404).json({ message: 'Group not found or insufficient permissions' });
+      return res.status(404).json({ message: 'Group not found' });
     }
 
     // Verify users exist and aren't already in the group
@@ -447,29 +460,28 @@ router.post('/:chatId/members', protect, async (req, res) => {
   }
 });
 
-// Remove member from group
+// Remove member from group (System Admin only)
 router.delete('/:chatId/members/:memberId', protect, async (req, res) => {
   try {
     const { chatId, memberId } = req.params;
     const userId = req.user.id;
 
+    // Check if user is system admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Access denied. Only system admins can remove members from groups.' });
+    }
+
     const chat = await Chat.findOne({
       _id: chatId,
-      type: 'group',
-      $or: [
-        { 'participants': { $elemMatch: { user: userId, role: 'admin' } } },
-        { createdBy: userId }
-      ]
+      type: 'group'
     });
 
     if (!chat) {
-      return res.status(404).json({ message: 'Group not found or insufficient permissions' });
+      return res.status(404).json({ message: 'Group not found' });
     }
 
-    // Don't allow removing the creator
-    if (chat.createdBy.toString() === memberId) {
-      return res.status(400).json({ message: 'Cannot remove group creator' });
-    }
+    // Don't allow removing the creator (but admin can remove creator if needed)
+    // Admins have full control over groups
 
     // Remove participant
     chat.participants = chat.participants.filter(p => p.user.toString() !== memberId);
@@ -485,24 +497,25 @@ router.delete('/:chatId/members/:memberId', protect, async (req, res) => {
   }
 });
 
-// Promote/demote member admin status
+// Promote/demote member admin status (System Admin only)
 router.put('/:chatId/admin', protect, async (req, res) => {
   try {
     const { chatId } = req.params;
     const { userId: targetUserId, action } = req.body; // action: 'promote' or 'demote'
     const userId = req.user.id;
 
+    // Check if user is system admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Access denied. Only system admins can manage group admin status.' });
+    }
+
     const chat = await Chat.findOne({
       _id: chatId,
-      type: 'group',
-      $or: [
-        { 'participants': { $elemMatch: { user: userId, role: 'admin' } } },
-        { createdBy: userId }
-      ]
+      type: 'group'
     });
 
     if (!chat) {
-      return res.status(404).json({ message: 'Group not found or insufficient permissions' });
+      return res.status(404).json({ message: 'Group not found' });
     }
 
     const targetParticipant = chat.participants.find(p => p.user.toString() === targetUserId);
@@ -513,10 +526,7 @@ router.put('/:chatId/admin', protect, async (req, res) => {
     if (action === 'promote') {
       targetParticipant.role = 'admin';
     } else if (action === 'demote') {
-      // Don't allow demoting the creator
-      if (chat.createdBy.toString() === targetUserId) {
-        return res.status(400).json({ message: 'Cannot demote group creator' });
-      }
+      // System admins can demote anyone, including creators
       targetParticipant.role = 'member';
     } else {
       return res.status(400).json({ message: 'Invalid action' });
@@ -546,6 +556,41 @@ router.get('/users/all', protect, async (req, res) => {
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ message: 'Error fetching users' });
+  }
+});
+
+// Delete entire group (System Admin only)
+router.delete('/:chatId', protect, async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const userId = req.user.id;
+
+    // Check if user is system admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Access denied. Only system admins can delete groups.' });
+    }
+
+    // Find the group chat
+    const chat = await Chat.findOne({
+      _id: chatId,
+      type: 'group'
+    });
+
+    if (!chat) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    // Delete all messages in this chat
+    const Message = (await import('../models/Message.js')).default;
+    await Message.deleteMany({ chat: chatId });
+
+    // Delete the chat itself
+    await Chat.findByIdAndDelete(chatId);
+
+    res.json({ message: 'Group and all messages deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting group:', error);
+    res.status(500).json({ message: 'Error deleting group' });
   }
 });
 

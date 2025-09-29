@@ -14,6 +14,11 @@ const NewGroupModal = ({ isOpen, onClose, allUsers, onCreateGroup }) => {
   const [isCreating, setIsCreating] = useState(false);
   const { user } = useAuth();
 
+  // Only allow system admins to create groups
+  if (!user || user.role !== 'Admin') {
+    return null;
+  }
+
   const handleUserToggle = (selectedUser) => {
     setSelectedUsers(prev => {
       const isSelected = prev.some(u => u._id === selectedUser._id);

@@ -276,12 +276,19 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
     }
   };
 
-  const handleChatUpdate = (updatedChat, isNewChat = false) => {
-    if (isNewChat) {
+  const handleChatUpdate = (updatedChat, isDeletedOrNewChat = false) => {
+    if (isDeletedOrNewChat && !updatedChat) {
+      // Group was deleted - remove from chats and clear active chat if it was selected
+      if (activeChat) {
+        setChats(prev => prev.filter(chat => chat._id !== activeChat._id));
+        setActiveChat(null);
+        setShowMobileChat(false);
+      }
+    } else if (isDeletedOrNewChat && updatedChat) {
       // Add new chat to the top of the list
       setChats(prev => [updatedChat, ...prev]);
       setActiveChat(updatedChat);
-    } else {
+    } else if (updatedChat) {
       // Update existing chat and move to top (WhatsApp behavior)
       setChats(prev => {
         const filteredChats = prev.filter(chat => chat._id !== updatedChat._id);
@@ -319,7 +326,11 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
             activeChat={activeChat}
             onChatSelect={handleChatSelect}
             onUserSelect={handleUserSelect}
-            onNewGroup={() => setIsNewGroupModalOpen(true)}
+            onNewGroup={() => {
+              if (user?.role === 'Admin') {
+                setIsNewGroupModalOpen(true);
+              }
+            }}
             loading={loading}
             onlineUsers={onlineUsers}
             onClose={onClose}

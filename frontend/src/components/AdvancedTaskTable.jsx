@@ -1127,7 +1127,7 @@ const AdvancedTaskTable = React.memo(({
                                                 onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
                                                 onMouseLeave={e => e.currentTarget.style.background = (task[colId] && task[colId]._id === u._id) ? '#f3f4f6' : 'transparent'}
                                               >
-                                                <img src={u.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
+                                                <img src={u?.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
                                                 <span style={{fontSize: '14px'}}>{u.firstName} {u.lastName}</span>
                                                 {task[colId] && task[colId]._id === u._id && (
                                                   <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
@@ -1149,7 +1149,7 @@ const AdvancedTaskTable = React.memo(({
                                   <div className="overflow-x-auto whitespace-nowrap flex items-center" style={{width: '100%', maxWidth: '100%'}}>
                                     {task[colId] ? (
                                       <>
-                                        <img src={task[colId].photo?.url || defaultProfile} alt={`${task[colId].firstName} ${task[colId].lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
+                                        <img src={task[colId]?.photo?.url || defaultProfile} alt={`${task[colId].firstName} ${task[colId].lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
                                         <span className="ml-2">
                                           {task[colId].firstName} {task[colId].lastName}
                                           <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
@@ -1178,7 +1178,7 @@ const AdvancedTaskTable = React.memo(({
                                     {Array.isArray(task.guides) && task.guides.length > 0 ? (
                                       task.guides.map(u => (
                                         <span key={u._id} className="flex items-center bg-blue-100 text-blue-800 rounded-full px-2 py-0.5 text-xs font-medium mr-1">
-                                          <img src={u.photo?.url || defaultProfile} alt={u.firstName} className="w-5 h-5 rounded-full object-cover mr-1" style={{minWidth: 20, minHeight: 20}} onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} />
+                                          <img src={u?.photo?.url || defaultProfile} alt={u.firstName} className="w-5 h-5 rounded-full object-cover mr-1" style={{minWidth: 20, minHeight: 20}} onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} />
                                           {u.firstName} {u.lastName}
                                           {viewType === 'received' && (
                                             <button
@@ -1289,7 +1289,7 @@ const AdvancedTaskTable = React.memo(({
                                               }
                                             }}
                                           >
-                                            <img src={u.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
+                                            <img src={u?.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
                                             <span style={{fontSize: '14px'}}>{u.firstName} {u.lastName}</span>
                                           </div>
                                         ))
@@ -2113,7 +2113,7 @@ const AdvancedTaskTable = React.memo(({
                                   {task[colId] ? (
                                     <>
                                       <img
-                                        src={task[colId].photo?.url || defaultProfile}
+                                        src={task[colId]?.photo?.url || defaultProfile}
                                         alt={`${task[colId].firstName} ${task[colId].lastName}`}
                                         className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm"
                                         onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }}
@@ -2202,7 +2202,7 @@ const AdvancedTaskTable = React.memo(({
                                           onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
                                           onMouseLeave={e => e.currentTarget.style.background = (task[colId] && task[colId]._id === u._id) ? '#f3f4f6' : 'transparent'}
                                         >
-                                          <img src={u.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
+                                          <img src={u?.photo?.url || defaultProfile} alt={`${u.firstName} ${u.lastName}`} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" style={{minWidth: 24, minHeight: 24, maxWidth: 24, maxHeight: 24}} />
                                           <span style={{fontSize: '14px'}}>{u.firstName} {u.lastName}</span>
                                           {task[colId] && task[colId]._id === u._id && (
                                             <svg width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
@@ -2224,7 +2224,7 @@ const AdvancedTaskTable = React.memo(({
                             <div className="overflow-x-auto whitespace-nowrap flex items-center" style={{width: '100%', maxWidth: '100%'}}>
                               {task[colId] ? (
                                 <>
-                                  <img src={task[colId].photo?.url || defaultProfile} alt={`${task[colId].firstName} ${task[colId].lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
+                                  <img src={task[colId]?.photo?.url || defaultProfile} alt={`${task[colId].firstName} ${task[colId].lastName}`} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" />
                                   <span className="ml-2">
                                     {task[colId].firstName} {task[colId].lastName}
                                     <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
@@ -2251,7 +2251,7 @@ const AdvancedTaskTable = React.memo(({
                               {Array.isArray(task.guides) && task.guides.length > 0 ? (
                                 task.guides.map(u => (
                                   <span key={u._id} className="flex items-center bg-blue-100 text-blue-800 rounded-full px-2 py-0.5 text-xs font-medium mr-1">
-                                    <img src={u.photo?.url || defaultProfile} alt={u.firstName} className="w-5 h-5 rounded-full object-cover mr-1" style={{minWidth: 20, minHeight: 20}} onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} />
+                                    <img src={u?.photo?.url || defaultProfile} alt={u.firstName} className="w-5 h-5 rounded-full object-cover mr-1" style={{minWidth: 20, minHeight: 20}} onError={e => { e.target.onerror = null; e.target.src = defaultProfile; }} />
                                     {u.firstName} {u.lastName}
                                     {viewType === 'received' && (
                                       <button

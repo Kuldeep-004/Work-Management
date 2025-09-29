@@ -8,7 +8,8 @@ import {
   UserGroupIcon,
   UserIcon,
   CogIcon,
-  UserPlusIcon
+  UserPlusIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 import { API_BASE_URL } from '../apiConfig';
 import MessageBubble from './MessageBubble';
@@ -378,58 +379,84 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
 
   const isGroupAdmin = () => {
     if (chat.type !== 'group') return false;
-    const participant = chat.participants?.find(p => p.user._id === user._id);
-    return participant?.role === 'admin' || chat.createdBy === user._id;
+    // Only system admins can manage groups
+    return user?.role === 'Admin';
   };
 
   return (
-    <div className="flex flex-col h-full bg-white">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-200 bg-white">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+    <div className="flex flex-col h-full bg-gray-50">
+      {/* Header - WhatsApp style */}
+      <div className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center space-x-3 flex-1">
             {/* Back button - only visible on mobile */}
             <button
               onClick={onBack}
-              className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
               title="Back to chats"
             >
               <ArrowLeftIcon className="h-5 w-5" />
             </button>
             
+            {/* Chat Avatar */}
             <div className="relative flex-shrink-0">
               {chatDisplayInfo.avatar ? (
                 <img
                   src={chatDisplayInfo.avatar}
                   alt={chatDisplayInfo.name}
-                  className="h-10 w-10 rounded-full object-cover"
+                  className="h-10 w-10 rounded-full object-cover ring-2 ring-gray-100"
                 />
               ) : (
                 <div className="h-10 w-10 bg-gray-200 rounded-full flex items-center justify-center">
                   {chat.type === 'group' ? (
-                    <UserGroupIcon className="h-5 w-5 text-gray-500" />
+                    <UserGroupIcon className="h-5 w-5" />
                   ) : (
-                    <UserIcon className="h-5 w-5 text-gray-500" />
+                    chatDisplayInfo.name.charAt(0).toUpperCase()
                   )}
                 </div>
               )}
               
+              {/* Online indicator for private chats */}
               {chat.type === 'private' && onlineUsers.has(chat.participants?.find(p => p.user._id !== user._id)?.user._id) && (
                 <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-green-500 rounded-full border-2 border-white"></div>
               )}
             </div>
             
+            {/* Chat Info */}
             <div className="min-w-0 flex-1">
-              <p className="text-base font-medium text-gray-900 truncate">{chatDisplayInfo.name}</p>
-              <p className="text-sm text-gray-500 truncate">{chatDisplayInfo.subtitle}</p>
+              <p className="text-base font-semibold text-gray-900 truncate">{chatDisplayInfo.name}</p>
+              <p className="text-sm text-gray-500 truncate">
+                {chat.type === 'group' ? (
+                  <span className="flex items-center">
+                    <UserGroupIcon className="h-3 w-3 mr-1" />
+                    {chatDisplayInfo.subtitle}
+                  </span>
+                ) : (
+                  <span className={`${chatDisplayInfo.subtitle === 'Online' ? 'text-green-600 font-medium' : ''}`}>
+                    {chatDisplayInfo.subtitle}
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          {/* Actions */}
+          <div className="flex items-center space-x-1">
+            {/* Group info button */}
+            {chat.type === 'group' && (
+              <button
+                onClick={() => setShowGroupManagement(true)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                title="Group Info"
+              >
+                <UserGroupIcon className="h-5 w-5" />
+              </button>
+            )}
+            
             <div className="relative" ref={dropdownRef}>
               <button 
                 onClick={() => setShowDropdown(!showDropdown)}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
               >
                 <EllipsisVerticalIcon className="h-5 w-5" />
               </button>
@@ -468,20 +495,20 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
         </div>
       </div>
 
-      {/* Messages */}
+      {/* Messages Container - WhatsApp style */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3"
+        className="flex-1 overflow-y-auto px-4 py-2 bg-gray-50"
         onScroll={handleScroll}
         style={{ 
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f3f4f6' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23f3f4f6' fill-opacity='0.03' fill-rule='evenodd'%3E%3Cpath d='m0 40l40-40h-40v40zm40 0v-40h-40l40 40z'/%3E%3C/g%3E%3C/svg%3E")`,
           backgroundRepeat: 'repeat'
         }}
       >
         {/* Loading more indicator */}
         {loadingMore && (
           <div className="flex justify-center items-center py-4">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-500"></div>
             <span className="ml-2 text-sm text-gray-500">Loading more messages...</span>
           </div>
         )}
@@ -491,25 +518,26 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
-            <div className="text-4xl mb-2">👋</div>
-            <p className="text-sm text-center">
-              Say hello to start the conversation!
+          <div className="flex flex-col items-center justify-center h-full text-gray-500 px-8">
+            <div className="text-6xl mb-4">�</div>
+            <p className="text-lg font-medium mb-2 text-center">
+              {chat?.type === 'group' ? 'Start the conversation' : 'Say hello!'}
+            </p>
+            <p className="text-sm text-center opacity-75">
+              {chat?.type === 'group' 
+                ? 'Send a message to get the group chat started' 
+                : 'Send a message to start your conversation'
+              }
             </p>
           </div>
         ) : (
-          <>
+          <div className="space-y-1">
             {messages.map((message, index) => (
               <MessageBubble
                 key={message._id}
                 message={message}
                 isOwn={message.sender._id === user?._id}
-                showAvatar={
-                  chat?.type === 'group' && (
-                    index === 0 || 
-                    messages[index - 1].sender._id !== message.sender._id
-                  )
-                }
+                showAvatar={chat?.type === 'group'} // Always show avatar in group chats
                 showTimestamp={
                   index === messages.length - 1 || 
                   messages[index + 1]?.sender._id !== message.sender._id ||
@@ -531,7 +559,7 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
             )}
             
             <div ref={messagesEndRef} />
-          </>
+          </div>
         )}
       </div>
 

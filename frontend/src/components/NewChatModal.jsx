@@ -92,6 +92,12 @@ const NewChatModal = ({ onClose, onChatCreated }) => {
 
   const createGroupChat = async () => {
     if (!groupName.trim() || selectedUsers.length === 0) return;
+    
+    // Check if user is system admin
+    if (user?.role !== 'Admin') {
+      alert('Only system administrators can create groups.');
+      return;
+    }
 
     try {
       setCreateLoading(true);
@@ -147,17 +153,20 @@ const NewChatModal = ({ onClose, onChatCreated }) => {
               <UserIcon className="h-4 w-4 inline mr-1" />
               Private Chat
             </button>
-            <button
-              onClick={() => setActiveTab('group')}
-              className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
-                activeTab === 'group'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <UserGroupIcon className="h-4 w-4 inline mr-1" />
-              Group Chat
-            </button>
+            {/* Only show Group Chat tab for system admins */}
+            {user?.role === 'Admin' && (
+              <button
+                onClick={() => setActiveTab('group')}
+                className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+                  activeTab === 'group'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <UserGroupIcon className="h-4 w-4 inline mr-1" />
+                Group Chat
+              </button>
+            )}
           </div>
 
           {/* Search */}
