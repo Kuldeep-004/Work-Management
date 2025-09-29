@@ -44,6 +44,7 @@ import analyticsRoutes from './routes/analytics.js';
 import { activityLoggerMiddleware } from './middleware/activityLoggerMiddleware.js';
 import Team from './models/Team.js';
 import User from './models/User.js';
+import Chat from './models/Chat.js';
 import './models/UserTabState.js';
 // Import automation scheduler to ensure it runs when the server starts
 import './automationScheduler.js';
@@ -123,8 +124,9 @@ app.use('/api/backup', backupRoutes);
 app.use('/api/bulk-update', bulkUpdateRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
-// Socket.IO for real-time chat
+// Socket.IO for real-time chat - WhatsApp level optimization
 const connectedUsers = new Map();
+const userTypingState = new Map(); // Track typing states to prevent spam
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -133,17 +135,17 @@ io.on('connection', (socket) => {
   socket.on('authenticate', async (token) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.id);
+      const user = await User.findById(decoded.id).select('_id firstName lastName').lean();
       
       if (user) {
         socket.userId = user._id.toString();
         connectedUsers.set(user._id.toString(), socket.id);
         
-        // Update user online status
+        // Update user online status efficiently
         await User.findByIdAndUpdate(user._id, { 
           isOnline: true,
           lastSeen: new Date()
-        });
+        }, { lean: true });
         
         socket.join(user._id.toString());
         console.log(`User ${user.firstName} ${user.lastName} authenticated`);
@@ -172,26 +174,50 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.userId} left chat ${chatId}`);
   });
 
-  // Handle sending messages
+  // Handle sending messages - Optimized for batch operations
   socket.on('send_message', (data) => {
+    // Emit to chat room immediately for real-time feel
     socket.to(data.chatId).emit('new_message', data.message);
+    
+    // Update unread counts for users in the chat (async for performance)
+    updateUnreadCountsAsync(data.chatId, data.message.sender._id);
   });
 
-  // Handle typing indicators
+  // Handle typing indicators with throttling to prevent spam
   socket.on('typing_start', (data) => {
-    socket.to(data.chatId).emit('user_typing', {
-      userId: socket.userId,
-      chatId: data.chatId,
-      isTyping: true
-    });
+    const typingKey = `${socket.userId}_${data.chatId}`;
+    if (!userTypingState.has(typingKey)) {
+      userTypingState.set(typingKey, true);
+      socket.to(data.chatId).emit('user_typing', {
+        userId: socket.userId,
+        chatId: data.chatId,
+        isTyping: true
+      });
+      
+      // Auto-stop typing after 3 seconds
+      setTimeout(() => {
+        if (userTypingState.get(typingKey)) {
+          userTypingState.delete(typingKey);
+          socket.to(data.chatId).emit('user_typing', {
+            userId: socket.userId,
+            chatId: data.chatId,
+            isTyping: false
+          });
+        }
+      }, 3000);
+    }
   });
 
   socket.on('typing_stop', (data) => {
-    socket.to(data.chatId).emit('user_typing', {
-      userId: socket.userId,
-      chatId: data.chatId,
-      isTyping: false
-    });
+    const typingKey = `${socket.userId}_${data.chatId}`;
+    if (userTypingState.has(typingKey)) {
+      userTypingState.delete(typingKey);
+      socket.to(data.chatId).emit('user_typing', {
+        userId: socket.userId,
+        chatId: data.chatId,
+        isTyping: false
+      });
+    }
   });
 
   // Handle message read status
@@ -220,11 +246,18 @@ io.on('connection', (socket) => {
     if (socket.userId) {
       connectedUsers.delete(socket.userId);
       
-      // Update user offline status
+      // Clear typing states for this user
+      for (const [key, value] of userTypingState.entries()) {
+        if (key.startsWith(socket.userId)) {
+          userTypingState.delete(key);
+        }
+      }
+      
+      // Update user offline status efficiently
       await User.findByIdAndUpdate(socket.userId, { 
         isOnline: false,
         lastSeen: new Date()
-      });
+      }, { lean: true });
       
       // Notify contacts about offline status
       socket.broadcast.emit('user_online', {
@@ -244,6 +277,50 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/haacas13'
     console.log('Connected to MongoDB');
   })
   .catch((err) => console.error('MongoDB connection error:', err));
+
+// Async function to update unread counts without blocking socket response
+async function updateUnreadCountsAsync(chatId, senderId) {
+  try {
+    const chat = await Chat.findById(chatId).select('participants').lean();
+    if (!chat) return;
+
+    const otherParticipants = chat.participants
+      .filter(p => p.user.toString() !== senderId)
+      .map(p => p.user);
+
+    if (otherParticipants.length > 0) {
+      const bulkOps = otherParticipants.map(participantId => ({
+        updateOne: {
+          filter: { 
+            _id: chatId,
+            'unreadCounts.user': participantId 
+          },
+          update: { 
+            $inc: { 'unreadCounts.$.count': 1 } 
+          }
+        }
+      }));
+
+      const addUnreadCountOps = otherParticipants.map(participantId => ({
+        updateOne: {
+          filter: { 
+            _id: chatId,
+            'unreadCounts.user': { $ne: participantId }
+          },
+          update: { 
+            $push: { 
+              unreadCounts: { user: participantId, count: 1 } 
+            } 
+          }
+        }
+      }));
+
+      await Chat.bulkWrite([...bulkOps, ...addUnreadCountOps]);
+    }
+  } catch (error) {
+    console.error('Error updating unread counts:', error);
+  }
+}
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {

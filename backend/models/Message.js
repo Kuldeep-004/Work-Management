@@ -97,12 +97,15 @@ const messageSchema = new mongoose.Schema(
   }
 );
 
-// Indexes for better performance
-messageSchema.index({ chat: 1, createdAt: -1 });
-messageSchema.index({ sender: 1 });
-messageSchema.index({ type: 1 });
-messageSchema.index({ isDeleted: 1 });
-messageSchema.index({ createdAt: -1 });
+// Indexes for better performance - WhatsApp level optimization
+messageSchema.index({ chat: 1, createdAt: -1 }); // Primary index for chat messages
+messageSchema.index({ chat: 1, sender: 1 }); // For sender-specific queries
+messageSchema.index({ chat: 1, 'readBy.user': 1 }); // For unread message counts - CRITICAL
+messageSchema.index({ sender: 1, createdAt: -1 }); // For user message history
+messageSchema.index({ 'readBy.user': 1 }); // For read status queries
+messageSchema.index({ deletedFor: 1 }); // For deleted message filtering
+messageSchema.index({ type: 1 }); // For message type filtering
+messageSchema.index({ createdAt: -1 }); // For recent messages
 
 // Update chat's lastMessage and lastActivity when message is saved
 messageSchema.post('save', async function() {

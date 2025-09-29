@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ChatSidebar from './ChatSidebar';
 import ChatView from './ChatView';
@@ -14,91 +14,113 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
-  const [showMobileChat, setShowMobileChat] = useState(false); // Mobile navigation state
+  const [showMobileChat, setShowMobileChat] = useState(false);
+  const [chatPage, setChatPage] = useState(1); // For pagination
+  const [hasMoreChats, setHasMoreChats] = useState(true);
   const { user } = useAuth();
   const windowRef = useRef(null);
+  const lastMessageRef = useRef(null); // For preventing duplicate message handling
 
-  // Initialize socket connection
-  useEffect(() => {
-    if (user?.token) {
-      const newSocket = io(API_BASE_URL, {
-        autoConnect: false
-      });
-
-      newSocket.connect();
-      
-      // Authenticate with the server
-      newSocket.emit('authenticate', user.token);
-      
-      // Handle authentication error
-      newSocket.on('auth_error', (error) => {
-        console.error('Socket authentication error:', error);
-      });
-
-      // Handle new messages
-      newSocket.on('new_message', (message) => {
-        setChats(prevChats => {
-          const updatedChats = prevChats.map(chat => {
-            if (chat._id === message.chat) {
-              // If this chat is currently active, don't increment unread count
-              const isActiveChat = activeChat?._id === message.chat;
-              const isOwnMessage = message.sender._id === user._id;
-              
-              return { 
-                ...chat, 
-                lastMessage: message, 
-                lastActivity: message.createdAt,
-                unreadCount: (isActiveChat || isOwnMessage) ? 0 : (chat.unreadCount || 0) + 1
-              };
-            }
-            return chat;
-          });
-          
-          // Move the updated chat to the top (WhatsApp behavior)
-          const chatIndex = updatedChats.findIndex(chat => chat._id === message.chat);
-          if (chatIndex > 0) {
-            const [chatToMove] = updatedChats.splice(chatIndex, 1);
-            return [chatToMove, ...updatedChats];
-          }
-          
-          return updatedChats;
-        });
-      });
-
-      // Handle message read updates
-      newSocket.on('messages_read', ({ chatId, userId }) => {
-        if (userId === user._id) {
-          // Reset unread count when current user reads messages
-          setChats(prevChats => 
-            prevChats.map(chat => 
-              chat._id === chatId 
-                ? { ...chat, unreadCount: 0 }
-                : chat
-            )
-          );
-        }
-      });
-
-      // Handle user online status
-      newSocket.on('user_online', ({ userId, isOnline }) => {
-        setOnlineUsers(prev => {
-          const newSet = new Set(prev);
-          if (isOnline) {
-            newSet.add(userId);
-          } else {
-            newSet.delete(userId);
-          }
-          return newSet;
-        });
-      });
-
-      setSocket(newSocket);
-
-      return () => {
-        newSocket.disconnect();
-      };
-    }
+  // Memoize socket connection to prevent reconnections
+  const socketConnection = useMemo(() => {
+    if (!user?.token) return null;
+    
+    const newSocket = io(API_BASE_URL, {
+      autoConnect: false,
+      forceNew: false,
+      transports: ['websocket', 'polling'], // WebSocket first for better performance
+    });
+    
+    return newSocket;
   }, [user?.token]);
+
+  // Optimize message handling with useCallback to prevent unnecessary re-renders
+  const handleNewMessage = useCallback((message) => {
+    // Prevent duplicate message handling
+    if (lastMessageRef.current === message._id) return;
+    lastMessageRef.current = message._id;
+
+    setChats(prevChats => {
+      const updatedChats = prevChats.map(chat => {
+        if (chat._id === message.chat) {
+          const isActiveChat = activeChat?._id === message.chat;
+          const isOwnMessage = message.sender._id === user._id;
+          
+          return { 
+            ...chat, 
+            lastMessage: message, 
+            lastActivity: message.createdAt,
+            unreadCount: (isActiveChat || isOwnMessage) ? 0 : (chat.unreadCount || 0) + 1
+          };
+        }
+        return chat;
+      });
+      
+      // Move updated chat to top efficiently
+      const chatIndex = updatedChats.findIndex(chat => chat._id === message.chat);
+      if (chatIndex > 0) {
+        const [chatToMove] = updatedChats.splice(chatIndex, 1);
+        return [chatToMove, ...updatedChats];
+      }
+      
+      return updatedChats;
+    });
+  }, [activeChat?._id, user._id]);
+
+  // Optimize message read handling
+  const handleMessagesRead = useCallback(({ chatId, userId }) => {
+    if (userId === user._id) {
+      setChats(prevChats => 
+        prevChats.map(chat => 
+          chat._id === chatId 
+            ? { ...chat, unreadCount: 0 }
+            : chat
+        )
+      );
+    }
+  }, [user._id]);
+
+  // Optimize online status handling
+  const handleUserOnline = useCallback(({ userId, isOnline }) => {
+    setOnlineUsers(prev => {
+      const newSet = new Set(prev);
+      if (isOnline) {
+        newSet.add(userId);
+      } else {
+        newSet.delete(userId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // Initialize socket connection with optimizations
+  useEffect(() => {
+    if (!socketConnection) return;
+
+    socketConnection.connect();
+    
+    // Authenticate with the server
+    socketConnection.emit('authenticate', user.token);
+    
+    // Handle authentication error
+    socketConnection.on('auth_error', (error) => {
+      console.error('Socket authentication error:', error);
+    });
+
+    // Attach optimized event handlers
+    socketConnection.on('new_message', handleNewMessage);
+    socketConnection.on('messages_read', handleMessagesRead);
+    socketConnection.on('user_online', handleUserOnline);
+
+    setSocket(socketConnection);
+
+    return () => {
+      socketConnection.off('new_message', handleNewMessage);
+      socketConnection.off('messages_read', handleMessagesRead);
+      socketConnection.off('user_online', handleUserOnline);
+      socketConnection.disconnect();
+    };
+  }, [socketConnection, handleNewMessage, handleMessagesRead, handleUserOnline, user.token]);
 
   // Fetch chats
   useEffect(() => {
@@ -112,27 +134,38 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
     onUnreadCountChange(totalUnread);
   }, [chats, onUnreadCountChange]);
 
-  const fetchChats = async () => {
+  // Optimized fetch chats with pagination and memoization
+  const fetchChats = useCallback(async (page = 1, append = false) => {
     if (!user?.token) return;
     
     try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/chats`, {
+      if (!append) setLoading(true);
+      
+      const response = await fetch(`${API_BASE_URL}/api/chats?page=${page}&limit=50`, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
       
       if (response.ok) {
         const chatsData = await response.json();
-        setChats(chatsData);
+        
+        if (append) {
+          setChats(prev => [...prev, ...chatsData]);
+        } else {
+          setChats(chatsData);
+        }
+        
+        setHasMoreChats(chatsData.length === 50);
+        setChatPage(page);
       }
     } catch (error) {
       console.error('Error fetching chats:', error);
     } finally {
-      setLoading(false);
+      if (!append) setLoading(false);
     }
-  };
+  }, [user?.token]);
 
-  const fetchAllUsers = async () => {
+  // Memoized fetch all users
+  const fetchAllUsers = useCallback(async () => {
     if (!user?.token) return;
     
     try {
@@ -147,7 +180,7 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
     } catch (error) {
       console.error('Error fetching users:', error);
     }
-  };
+  }, [user?.token]);
 
   const handleChatSelect = (chat) => {
     setActiveChat(chat);

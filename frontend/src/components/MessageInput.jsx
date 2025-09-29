@@ -207,7 +207,7 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop }) => {
               onChange={handleInputChange}
               onKeyPress={handleKeyPress}
               placeholder="Type a message..."
-              className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent  max-h-[33px] text-sm leading-5"
+              className="w-full px-4 py-1 pr-12 border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent  max-h-[33px] text-sm leading-5"
               rows={1}
               disabled={isRecording}
               style={{ 

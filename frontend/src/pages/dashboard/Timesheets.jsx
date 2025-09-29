@@ -909,10 +909,28 @@ const Timesheets = () => {
                       </label>
                       <textarea
                         value={entry.workDescription || ''}
-                        onChange={e => handleEntryChange(key, 'workDescription', e.target.value)}
+                        onChange={e => {
+                          // Auto-resize
+                          const ta = e.target;
+                          ta.style.height = 'auto';
+                          ta.style.height = (ta.scrollHeight) + 'px';
+                          handleEntryChange(key, 'workDescription', e.target.value);
+                        }}
+                        onInput={e => {
+                          // Auto-resize on paste etc.
+                          const ta = e.target;
+                          ta.style.height = 'auto';
+                          ta.style.height = (ta.scrollHeight) + 'px';
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && false) {
+                            e.preventDefault();
+                          }
+                        }}
                         placeholder="Enter work description"
                         className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none min-h-[38px] max-h-72"
                         rows={1}
+                        style={{ overflow: 'hidden' }}
                       />
                     </div>
                     
@@ -1225,7 +1243,7 @@ const Timesheets = () => {
                           ta.style.height = (ta.scrollHeight) + 'px';
                         }}
                         onKeyDown={e => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
+                          if (e.key === 'Enter' && false) {
                             e.preventDefault();
                           }
                         }}

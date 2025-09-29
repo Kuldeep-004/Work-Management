@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
   ArrowLeftIcon, 
@@ -18,13 +18,40 @@ import GroupManagementModal from './GroupManagementModal';
 const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers }) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [typing, setTyping] = useState(new Set());
   const [showDropdown, setShowDropdown] = useState(false);
   const [showGroupManagement, setShowGroupManagement] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [shouldScrollToBottom, setShouldScrollToBottom] = useState(false);
   const { user } = useAuth();
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const dropdownRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const isLoadingRef = useRef(false); // Prevent duplicate loading
+  const previousScrollHeight = useRef(0);
+
+  // Memoize chat display info for better performance
+  const chatDisplayInfo = useMemo(() => {
+    if (chat.type === 'group') {
+      return {
+        name: chat.name,
+        avatar: chat.avatar?.url || null,
+        subtitle: `${chat.participants?.length || 0} participants`
+      };
+    } else {
+      const otherParticipant = chat.participants?.find(p => p.user._id !== user._id);
+      const isOnline = onlineUsers.has(otherParticipant?.user._id);
+      return {
+        name: otherParticipant ? `${otherParticipant.user.firstName} ${otherParticipant.user.lastName}` : 'Unknown User',
+        avatar: otherParticipant?.user.photo?.url || null,
+        subtitle: isOnline ? 'Online' : 'Offline'
+      };
+    }
+  }, [chat, user._id, onlineUsers]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -56,18 +83,24 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
 
   useEffect(() => {
     if (chat?._id && !chat.isTemporary) {
+      setIsInitialLoad(true);
       fetchMessages();
       markMessagesAsRead();
     } else if (chat?.isTemporary) {
       // For temporary chats, start with empty messages
       setMessages([]);
       setLoading(false);
+      setIsInitialLoad(false);
     }
   }, [chat?._id, chat?.isTemporary]);
 
+  // Smart scroll management - only scroll to bottom when needed
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (shouldScrollToBottom) {
+      scrollToBottom();
+      setShouldScrollToBottom(false);
+    }
+  }, [messages, shouldScrollToBottom]);
 
   // Mark messages as read when messages change (new message received while chat is active)
   useEffect(() => {
@@ -99,28 +132,62 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
     }
   }, [socket, chat?._id, chat?.isTemporary]);
 
-  const fetchMessages = async () => {
-    if (!chat?._id || !user?.token || chat.isTemporary) return;
+  // Optimized message fetching with cursor-based pagination
+  const fetchMessages = useCallback(async (loadMore = false) => {
+    if (!chat?._id || !user?.token || chat.isTemporary || isLoadingRef.current) return;
     
     try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/messages/${chat._id}`, {
+      isLoadingRef.current = true;
+      if (loadMore) {
+        setLoadingMore(true);
+        // Store current scroll position before loading more
+        if (chatContainerRef.current) {
+          previousScrollHeight.current = chatContainerRef.current.scrollHeight;
+        }
+      } else {
+        setLoading(true);
+        setMessages([]);
+      }
+      
+      let url = `${API_BASE_URL}/api/messages/${chat._id}?limit=30`;
+      if (loadMore && nextCursor) {
+        url += `&before=${nextCursor}`;
+      }
+      
+      const response = await fetch(url, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
       
       if (response.ok) {
-        const messagesData = await response.json();
-        setMessages(messagesData);
+        const data = await response.json();
+        
+        if (loadMore) {
+          setMessages(prev => [...data.messages, ...prev]);
+          // Don't scroll to bottom when loading more messages
+        } else {
+          setMessages(data.messages);
+          // Only scroll to bottom on initial load when chat opens
+          if (isInitialLoad) {
+            setShouldScrollToBottom(true);
+            setIsInitialLoad(false);
+          }
+        }
+        
+        setHasMoreMessages(data.hasMore);
+        setNextCursor(data.nextCursor);
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+      isLoadingRef.current = false;
     }
-  };
+  }, [chat?._id, user?.token, chat?.isTemporary, nextCursor, isInitialLoad]);
 
-  const markMessagesAsRead = async () => {
-    if (!chat?._id || !user?.token) return;
+  // Optimized message read marking
+  const markMessagesAsRead = useCallback(async () => {
+    if (!chat?._id || !user?.token || chat.isTemporary) return;
     
     try {
       await fetch(`${API_BASE_URL}/api/messages/${chat._id}/read`, {
@@ -135,16 +202,19 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
     } catch (error) {
       console.error('Error marking messages as read:', error);
     }
-  };
+  }, [chat?._id, user?.token, user._id, socket, chat?.isTemporary]);
 
-  const handleNewMessage = (message) => {
+  // Optimized message handlers
+  const handleNewMessage = useCallback((message) => {
     if (message.chat === chat._id) {
       setMessages(prev => [...prev, message]);
+      // Always scroll to bottom when new message arrives
+      setShouldScrollToBottom(true);
       markMessagesAsRead();
     }
-  };
+  }, [chat._id, markMessagesAsRead]);
 
-  const handleTypingIndicator = ({ userId, chatId, isTyping }) => {
+  const handleTypingIndicator = useCallback(({ userId, chatId, isTyping }) => {
     if (chatId === chat._id && userId !== user._id) {
       setTyping(prev => {
         const newTyping = new Set(prev);
@@ -156,9 +226,9 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
         return newTyping;
       });
     }
-  };
+  }, [chat._id, user._id]);
 
-  const handleMessageReadUpdate = ({ messageId, userId, readAt }) => {
+  const handleMessageReadUpdate = useCallback(({ messageId, userId, readAt }) => {
     setMessages(prev => 
       prev.map(msg => 
         msg._id === messageId 
@@ -169,7 +239,7 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
           : msg
       )
     );
-  };
+  }, []);
 
   const sendMessage = async (content, type = 'text', file = null) => {
     if (!content.trim() && !file) return;
@@ -229,6 +299,8 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
       if (response.ok) {
         const newMessage = await response.json();
         setMessages(prev => [...prev, newMessage]);
+        // Scroll to bottom when user sends a message
+        setShouldScrollToBottom(true);
         
         // Emit to socket
         if (socket) {
@@ -250,72 +322,65 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
     }
   };
 
-  const handleTypingStart = () => {
-    if (socket) {
+  // Optimized typing handlers with debouncing
+  const handleTypingStart = useCallback(() => {
+    if (socket && chat._id) {
       socket.emit('typing_start', { chatId: chat._id });
-    }
-  };
-
-  const handleTypingStop = () => {
-    if (socket) {
-      socket.emit('typing_stop', { chatId: chat._id });
-    }
-  };
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-  };
-
-  const getChatDisplayInfo = () => {
-    if (chat.type === 'group') {
-      return {
-        name: chat.name,
-        avatar: chat.avatar?.url || null,
-        subtitle: `${chat.participants?.length || 0} members`,
-        isOnline: false
-      };
-    } else {
-      if (!Array.isArray(chat.participants) || !user || !user._id) {
-        return {
-          name: 'Unknown',
-          avatar: null,
-          subtitle: 'Offline',
-          isOnline: false
-        };
+      
+      // Clear existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
       }
-      const otherParticipant = chat.participants.find(p => p?.user && p.user._id !== user._id)?.user;
-      const isOnline = otherParticipant?._id ? onlineUsers.has(otherParticipant._id) : false;
-      // Use lastOnline from otherParticipant if available
-      const lastSeen = otherParticipant?.lastSeen;
-      return {
-        name: otherParticipant ? `${otherParticipant.firstName} ${otherParticipant.lastName}` : 'Unknown',
-        avatar: otherParticipant?.photo?.url || null,
-        subtitle: isOnline ? 'Online' : `Last seen ${formatLastSeen(lastSeen)}`,
-        isOnline
-      };
+      
+      // Auto-stop typing after 3 seconds
+      typingTimeoutRef.current = setTimeout(() => {
+        socket.emit('typing_stop', { chatId: chat._id });
+      }, 3000);
     }
-  };
+  }, [socket, chat._id]);
+
+  const handleTypingStop = useCallback(() => {
+    if (socket && chat._id) {
+      socket.emit('typing_stop', { chatId: chat._id });
+      
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+    }
+  }, [socket, chat._id]);
+
+  // Optimized scroll management
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+    }
+  }, []);
+
+  // Load more messages when scrolling to top
+  const handleScroll = useCallback(() => {
+    const container = chatContainerRef.current;
+    if (container && container.scrollTop === 0 && hasMoreMessages && !loadingMore) {
+      fetchMessages(true);
+    }
+  }, [hasMoreMessages, loadingMore, fetchMessages]);
+
+  // Maintain scroll position after loading more messages
+  useEffect(() => {
+    if (loadingMore === false && chatContainerRef.current && previousScrollHeight.current > 0) {
+      const container = chatContainerRef.current;
+      const newScrollHeight = container.scrollHeight;
+      const scrollDifference = newScrollHeight - previousScrollHeight.current;
+      container.scrollTop = scrollDifference;
+      previousScrollHeight.current = 0;
+    }
+  }, [loadingMore]);
 
   const isGroupAdmin = () => {
     if (chat.type !== 'group') return false;
     const participant = chat.participants?.find(p => p.user._id === user._id);
     return participant?.role === 'admin' || chat.createdBy === user._id;
   };
-
-  const formatLastSeen = (lastSeen) => {
-    if (!lastSeen) return 'recently';
-    
-    const date = new Date(lastSeen);
-    const now = new Date();
-    const diff = now - date;
-    
-    if (diff < 60000) return 'just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} min ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`;
-    return date.toLocaleDateString();
-  };
-
-  const { name, avatar, subtitle, isOnline } = getChatDisplayInfo();
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -333,10 +398,10 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
             </button>
             
             <div className="relative flex-shrink-0">
-              {avatar ? (
+              {chatDisplayInfo.avatar ? (
                 <img
-                  src={avatar}
-                  alt={name}
+                  src={chatDisplayInfo.avatar}
+                  alt={chatDisplayInfo.name}
                   className="h-10 w-10 rounded-full object-cover"
                 />
               ) : (
@@ -349,14 +414,14 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
                 </div>
               )}
               
-              {chat.type === 'private' && isOnline && (
+              {chat.type === 'private' && onlineUsers.has(chat.participants?.find(p => p.user._id !== user._id)?.user._id) && (
                 <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-green-500 rounded-full border-2 border-white"></div>
               )}
             </div>
             
             <div className="min-w-0 flex-1">
-              <p className="text-base font-medium text-gray-900 truncate">{name}</p>
-              <p className="text-sm text-gray-500 truncate">{subtitle}</p>
+              <p className="text-base font-medium text-gray-900 truncate">{chatDisplayInfo.name}</p>
+              <p className="text-sm text-gray-500 truncate">{chatDisplayInfo.subtitle}</p>
             </div>
           </div>
 
@@ -407,11 +472,20 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
       <div 
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-4 space-y-3"
+        onScroll={handleScroll}
         style={{ 
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f3f4f6' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
           backgroundRepeat: 'repeat'
         }}
       >
+        {/* Loading more indicator */}
+        {loadingMore && (
+          <div className="flex justify-center items-center py-4">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+            <span className="ml-2 text-sm text-gray-500">Loading more messages...</span>
+          </div>
+        )}
+        
         {loading ? (
           <div className="flex justify-center items-center h-full">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>

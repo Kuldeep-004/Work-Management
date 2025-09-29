@@ -7,10 +7,13 @@ import { uploadChatAvatarMiddleware } from '../middleware/uploadMiddleware.js';
 
 const router = express.Router();
 
-// Get all chats for the authenticated user
+// Get all chats for the authenticated user - WhatsApp level optimization
 router.get('/', protect, async (req, res) => {
   try {
     const userId = req.user.id;
+    const { page = 1, limit = 50 } = req.query; // Add pagination for large chat lists
+    
+    const skip = (page - 1) * limit;
     
     const chats = await Chat.find({
       'participants.user': userId,
@@ -22,28 +25,26 @@ router.get('/', protect, async (req, res) => {
     })
     .populate({
       path: 'lastMessage',
+      select: 'content type createdAt file.fileName', // Only select needed fields
       populate: {
         path: 'sender',
         select: 'firstName lastName'
       }
     })
-    .sort({ lastActivity: -1 });
+    .select('type name description participants avatar lastMessage lastActivity unreadCounts settings')
+    .sort({ lastActivity: -1 })
+    .limit(limit)
+    .skip(skip)
+    .lean(); // Use lean() for better performance
 
-    // Get unread message count for each chat
-    const chatsWithUnreadCount = await Promise.all(
-      chats.map(async (chat) => {
-        const unreadCount = await Message.countDocuments({
-          chat: chat._id,
-          sender: { $ne: userId },
-          'readBy.user': { $ne: userId }
-        });
-
-        return {
-          ...chat.toObject(),
-          unreadCount
-        };
-      })
-    );
+    // Add unread count for current user using stored counts
+    const chatsWithUnreadCount = chats.map(chat => {
+      const unreadCountObj = chat.unreadCounts?.find(uc => uc.user.toString() === userId);
+      return {
+        ...chat,
+        unreadCount: unreadCountObj?.count || 0
+      };
+    });
 
     res.json(chatsWithUnreadCount);
   } catch (error) {

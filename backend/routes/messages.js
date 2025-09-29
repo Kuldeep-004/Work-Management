@@ -6,67 +6,95 @@ import { uploadChatFileMiddleware } from '../middleware/uploadMiddleware.js';
 
 const router = express.Router();
 
-// Get messages for a specific chat
+// Get messages for a specific chat - WhatsApp level optimization
 router.get('/:chatId', protect, async (req, res) => {
   try {
     const { chatId } = req.params;
-    const { page = 1, limit = 50 } = req.query;
+    const { page = 1, limit = 30, before } = req.query; // Reduced default limit for better performance
     const userId = req.user.id;
 
-    // Verify user is part of the chat
+    // Verify user is part of the chat - Use index for faster lookup
     const chat = await Chat.findOne({
       _id: chatId,
       'participants.user': userId
-    });
+    }).select('_id').lean();
 
     if (!chat) {
       return res.status(404).json({ message: 'Chat not found' });
     }
 
-    const messages = await Message.find({
+    let query = {
       chat: chatId,
       deletedFor: { $ne: userId }
-    })
+    };
+
+    // Cursor-based pagination for better performance with large datasets
+    if (before) {
+      query.createdAt = { $lt: new Date(before) };
+    }
+
+    const messages = await Message.find(query)
     .populate('sender', 'firstName lastName photo')
     .populate('replyTo', 'content sender type')
-    .populate('readBy.user', 'firstName lastName')
+    .select('chat sender content type file replyTo isEdited editedAt readBy createdAt') // Only select needed fields
     .sort({ createdAt: -1 })
-    .limit(limit * 1)
-    .skip((page - 1) * limit);
+    .limit(parseInt(limit))
+    .lean(); // Use lean() for better performance
 
-    // Mark messages as read
-    await Message.updateMany(
-      {
-        chat: chatId,
-        sender: { $ne: userId },
-        'readBy.user': { $ne: userId }
-      },
-      {
-        $push: {
-          readBy: { user: userId, readAt: new Date() }
+    // Batch update - mark messages as read (more efficient than individual updates)
+    const unreadMessageIds = messages
+      .filter(msg => 
+        msg.sender.toString() !== userId && 
+        !msg.readBy?.some(r => r.user.toString() === userId)
+      )
+      .map(msg => msg._id);
+
+    if (unreadMessageIds.length > 0) {
+      // Batch update for better performance
+      await Message.updateMany(
+        { _id: { $in: unreadMessageIds } },
+        {
+          $push: {
+            readBy: { user: userId, readAt: new Date() }
+          }
         }
-      }
-    );
+      );
 
-    res.json(messages.reverse());
+      // Update unread count in chat efficiently
+      await Chat.updateOne(
+        { 
+          _id: chatId,
+          'unreadCounts.user': userId 
+        },
+        { 
+          $set: { 'unreadCounts.$.count': 0 } 
+        }
+      );
+    }
+
+    res.json({
+      messages: messages.reverse(),
+      hasMore: messages.length === parseInt(limit),
+      nextCursor: messages.length > 0 ? messages[0].createdAt : null
+    });
   } catch (error) {
     console.error('Error fetching messages:', error);
     res.status(500).json({ message: 'Error fetching messages' });
   }
 });
 
-// Send a text message
+// Send a text message - WhatsApp level optimization
 router.post('/:chatId', protect, async (req, res) => {
   try {
     const { chatId } = req.params;
     const { content, replyToId, type = 'text' } = req.body;
     const userId = req.user.id;
 
-    // Verify user is part of the chat
+    // Verify user is part of the chat - Use lean for better performance
     const chat = await Chat.findOne({
       _id: chatId,
       'participants.user': userId
-    });
+    }).populate('participants.user', '_id').lean();
 
     if (!chat) {
       return res.status(404).json({ message: 'Chat not found' });
@@ -86,16 +114,50 @@ router.post('/:chatId', protect, async (req, res) => {
 
     // Mark as delivered to all other participants
     const otherParticipants = chat.participants
-      .filter(p => p.user.toString() !== userId)
-      .map(p => ({ user: p.user, deliveredAt: new Date() }));
+      .filter(p => p.user._id.toString() !== userId)
+      .map(p => ({ user: p.user._id, deliveredAt: new Date() }));
     
     message.deliveredTo = otherParticipants;
 
     await message.save();
 
+    // Update unread counts for other participants efficiently using bulk operation
+    if (otherParticipants.length > 0) {
+      const bulkOps = otherParticipants.map(participant => ({
+        updateOne: {
+          filter: { 
+            _id: chatId,
+            'unreadCounts.user': participant.user 
+          },
+          update: { 
+            $inc: { 'unreadCounts.$.count': 1 } 
+          },
+          upsert: false
+        }
+      }));
+
+      // Add upsert operations for users without unread count entries
+      const addUnreadCountOps = otherParticipants.map(participant => ({
+        updateOne: {
+          filter: { 
+            _id: chatId,
+            'unreadCounts.user': { $ne: participant.user }
+          },
+          update: { 
+            $push: { 
+              unreadCounts: { user: participant.user, count: 1 } 
+            } 
+          }
+        }
+      }));
+
+      await Chat.bulkWrite([...bulkOps, ...addUnreadCountOps]);
+    }
+
     const populatedMessage = await Message.findById(message._id)
       .populate('sender', 'firstName lastName photo')
-      .populate('replyTo', 'content sender type');
+      .populate('replyTo', 'content sender type')
+      .lean();
 
     res.status(201).json(populatedMessage);
   } catch (error) {
@@ -293,6 +355,54 @@ router.post('/:chatId/read', protect, async (req, res) => {
     );
 
     res.json({ message: 'Messages marked as read' });
+  } catch (error) {
+    console.error('Error marking messages as read:', error);
+    res.status(500).json({ message: 'Error marking messages as read' });
+  }
+});
+
+// Mark messages as read - WhatsApp level optimization
+router.post('/:chatId/read', protect, async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const userId = req.user.id;
+
+    // Verify user is part of the chat
+    const chat = await Chat.findOne({
+      _id: chatId,
+      'participants.user': userId
+    }).select('_id').lean();
+
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat not found' });
+    }
+
+    // Mark all unread messages as read in a single operation
+    await Message.updateMany(
+      {
+        chat: chatId,
+        sender: { $ne: userId },
+        'readBy.user': { $ne: userId }
+      },
+      {
+        $push: {
+          readBy: { user: userId, readAt: new Date() }
+        }
+      }
+    );
+
+    // Reset unread count for this user efficiently
+    await Chat.updateOne(
+      { 
+        _id: chatId,
+        'unreadCounts.user': userId 
+      },
+      { 
+        $set: { 'unreadCounts.$.count': 0 } 
+      }
+    );
+
+    res.json({ success: true, message: 'Messages marked as read' });
   } catch (error) {
     console.error('Error marking messages as read:', error);
     res.status(500).json({ message: 'Error marking messages as read' });

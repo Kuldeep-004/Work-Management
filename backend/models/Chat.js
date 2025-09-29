@@ -68,18 +68,31 @@ const chatSchema = new mongoose.Schema(
         default: false,
       },
       muteUntil: Date,
-    }
+    },
+    // Store unread count per user for instant access - WhatsApp optimization
+    unreadCounts: [{
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+      count: {
+        type: Number,
+        default: 0,
+        min: 0
+      }
+    }]
   },
   {
     timestamps: true,
   }
 );
 
-// Indexes for better performance
-chatSchema.index({ participants: 1 });
-chatSchema.index({ lastActivity: -1 });
-chatSchema.index({ type: 1 });
-chatSchema.index({ isActive: 1 });
+// Indexes for better performance - WhatsApp level optimization
+chatSchema.index({ 'participants.user': 1, lastActivity: -1 }); // Compound index for user chats sorted by activity
+chatSchema.index({ 'participants.user': 1, isActive: 1 }); // For fetching active user chats
+chatSchema.index({ type: 1, isActive: 1 }); // For filtering by type
+chatSchema.index({ lastActivity: -1 }); // For sorting
+chatSchema.index({ createdAt: -1 }); // For recent chats
 
 // Ensure private chats have exactly 2 participants
 chatSchema.pre('save', function(next) {
