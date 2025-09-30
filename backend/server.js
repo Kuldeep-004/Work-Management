@@ -125,8 +125,36 @@ app.use('/api/bulk-update', bulkUpdateRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
 // Socket.IO for real-time chat - WhatsApp level optimization
-const connectedUsers = new Map();
+const connectedUsers = new Map(); // userId -> { socketId, lastSeen, isInChat }
 const userTypingState = new Map(); // Track typing states to prevent spam
+const userHeartbeats = new Map(); // Track user activity heartbeats
+
+// Heartbeat cleanup interval - mark users as offline if no heartbeat for 30 seconds
+setInterval(() => {
+  const now = Date.now();
+  const HEARTBEAT_TIMEOUT = 30000; // 30 seconds
+  
+  for (const [userId, data] of connectedUsers.entries()) {
+    if (now - data.lastSeen > HEARTBEAT_TIMEOUT) {
+      // User is considered offline
+      connectedUsers.delete(userId);
+      
+      // Update database status
+      User.findByIdAndUpdate(userId, { 
+        isOnline: false,
+        lastSeen: new Date()
+      }, { lean: true }).catch(err => console.error('Error updating offline status:', err));
+      
+      // Notify other users
+      io.emit('user_online', {
+        userId: userId,
+        isOnline: false
+      });
+      
+      console.log(`User ${userId} marked offline due to heartbeat timeout`);
+    }
+  }
+}, 15000); // Check every 15 seconds
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -139,7 +167,13 @@ io.on('connection', (socket) => {
       
       if (user) {
         socket.userId = user._id.toString();
-        connectedUsers.set(user._id.toString(), socket.id);
+        
+        // Store user connection data with heartbeat
+        connectedUsers.set(user._id.toString(), {
+          socketId: socket.id,
+          lastSeen: Date.now(),
+          isInChat: false
+        });
         
         // Update user online status efficiently
         await User.findByIdAndUpdate(user._id, { 
@@ -155,6 +189,10 @@ io.on('connection', (socket) => {
           userId: user._id,
           isOnline: true
         });
+        
+        // Send current online users to the newly connected user
+        const onlineUserIds = Array.from(connectedUsers.keys());
+        socket.emit('online_users_list', onlineUserIds);
       }
     } catch (error) {
       console.error('Authentication error:', error);
@@ -174,10 +212,64 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.userId} left chat ${chatId}`);
   });
 
+  // Handle user entering chat section
+  socket.on('enter_chat_section', () => {
+    if (socket.userId && connectedUsers.has(socket.userId)) {
+      const userData = connectedUsers.get(socket.userId);
+      userData.isInChat = true;
+      userData.lastSeen = Date.now();
+      connectedUsers.set(socket.userId, userData);
+      console.log(`User ${socket.userId} entered chat section`);
+    }
+  });
+
+  // Handle user leaving chat section
+  socket.on('leave_chat_section', () => {
+    if (socket.userId && connectedUsers.has(socket.userId)) {
+      const userData = connectedUsers.get(socket.userId);
+      userData.isInChat = false;
+      userData.lastSeen = Date.now();
+      connectedUsers.set(socket.userId, userData);
+      console.log(`User ${socket.userId} left chat section`);
+    }
+  });
+
+  // Handle heartbeat to keep user online
+  socket.on('heartbeat', () => {
+    if (socket.userId && connectedUsers.has(socket.userId)) {
+      const userData = connectedUsers.get(socket.userId);
+      userData.lastSeen = Date.now();
+      connectedUsers.set(socket.userId, userData);
+    }
+  });
+
+  // Handle page visibility change
+  socket.on('page_visibility', ({ isVisible }) => {
+    if (socket.userId && connectedUsers.has(socket.userId)) {
+      const userData = connectedUsers.get(socket.userId);
+      userData.lastSeen = Date.now();
+      
+      // If page becomes hidden, mark as potentially away
+      if (!isVisible) {
+        userData.isInChat = false;
+      }
+      
+      connectedUsers.set(socket.userId, userData);
+      console.log(`User ${socket.userId} page visibility: ${isVisible}`);
+    }
+  });
+
   // Handle sending messages - Optimized for batch operations
   socket.on('send_message', (data) => {
     // Emit to chat room immediately for real-time feel
     socket.to(data.chatId).emit('new_message', data.message);
+    
+    // Emit delivery confirmation to sender
+    socket.emit('message_delivered', {
+      messageId: data.message._id,
+      chatId: data.chatId,
+      deliveredAt: new Date()
+    });
     
     // Update unread counts for users in the chat (async for performance)
     updateUnreadCountsAsync(data.chatId, data.message.sender._id);
@@ -237,6 +329,12 @@ io.on('connection', (socket) => {
       userId: data.userId,
       readAt: new Date()
     });
+    
+    // Emit unread count reset to the current user
+    socket.emit('unread_count_update', {
+      chatId: data.chatId,
+      reset: true
+    });
   });
 
   // Handle disconnection
@@ -244,6 +342,7 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
     
     if (socket.userId) {
+      // Remove from connected users
       connectedUsers.delete(socket.userId);
       
       // Clear typing states for this user
@@ -264,6 +363,8 @@ io.on('connection', (socket) => {
         userId: socket.userId,
         isOnline: false
       });
+      
+      console.log(`User ${socket.userId} went offline`);
     }
   });
 });
@@ -316,6 +417,17 @@ async function updateUnreadCountsAsync(chatId, senderId) {
       }));
 
       await Chat.bulkWrite([...bulkOps, ...addUnreadCountOps]);
+      
+      // Emit real-time unread count updates to affected users
+      otherParticipants.forEach(participantId => {
+        const socketId = connectedUsers.get(participantId.toString())?.socketId;
+        if (socketId) {
+          io.to(socketId).emit('unread_count_update', {
+            chatId: chatId,
+            increment: 1
+          });
+        }
+      });
     }
   } catch (error) {
     console.error('Error updating unread counts:', error);

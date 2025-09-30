@@ -110,82 +110,6 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
     }
   }, [messages.length, chat?._id]);
 
-  useEffect(() => {
-    if (socket && chat?._id && !chat.isTemporary) {
-      // Join chat room
-      socket.emit('join_chat', chat._id);
-
-      // Listen for new messages
-      socket.on('new_message', handleNewMessage);
-      
-      // Listen for typing indicators
-      socket.on('user_typing', handleTypingIndicator);
-      
-      // Listen for message read updates
-      socket.on('message_read_update', handleMessageReadUpdate);
-
-      return () => {
-        socket.off('new_message', handleNewMessage);
-        socket.off('user_typing', handleTypingIndicator);
-        socket.off('message_read_update', handleMessageReadUpdate);
-        socket.emit('leave_chat', chat._id);
-      };
-    }
-  }, [socket, chat?._id, chat?.isTemporary]);
-
-  // Optimized message fetching with cursor-based pagination
-  const fetchMessages = useCallback(async (loadMore = false) => {
-    if (!chat?._id || !user?.token || chat.isTemporary || isLoadingRef.current) return;
-    
-    try {
-      isLoadingRef.current = true;
-      if (loadMore) {
-        setLoadingMore(true);
-        // Store current scroll position before loading more
-        if (chatContainerRef.current) {
-          previousScrollHeight.current = chatContainerRef.current.scrollHeight;
-        }
-      } else {
-        setLoading(true);
-        setMessages([]);
-      }
-      
-      let url = `${API_BASE_URL}/api/messages/${chat._id}?limit=30`;
-      if (loadMore && nextCursor) {
-        url += `&before=${nextCursor}`;
-      }
-      
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${user.token}` }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        
-        if (loadMore) {
-          setMessages(prev => [...data.messages, ...prev]);
-          // Don't scroll to bottom when loading more messages
-        } else {
-          setMessages(data.messages);
-          // Only scroll to bottom on initial load when chat opens
-          if (isInitialLoad) {
-            setShouldScrollToBottom(true);
-            setIsInitialLoad(false);
-          }
-        }
-        
-        setHasMoreMessages(data.hasMore);
-        setNextCursor(data.nextCursor);
-      }
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      isLoadingRef.current = false;
-    }
-  }, [chat?._id, user?.token, chat?.isTemporary, nextCursor, isInitialLoad]);
-
   // Optimized message read marking
   const markMessagesAsRead = useCallback(async () => {
     if (!chat?._id || !user?.token || chat.isTemporary) return;
@@ -241,6 +165,99 @@ const ChatView = ({ chat, socket, onBack, onChatUpdate, onlineUsers, allUsers })
       )
     );
   }, []);
+
+  const handleMessageDelivered = useCallback(({ messageId, deliveredAt }) => {
+    setMessages(prev => 
+      prev.map(msg => 
+        msg._id === messageId 
+          ? {
+              ...msg,
+              deliveredTo: [...(msg.deliveredTo || []), { user: user._id, deliveredAt }]
+            }
+          : msg
+      )
+    );
+  }, [user._id]);
+
+  useEffect(() => {
+    if (socket && chat?._id && !chat.isTemporary) {
+      // Join chat room
+      socket.emit('join_chat', chat._id);
+
+      // Listen for new messages
+      socket.on('new_message', handleNewMessage);
+      
+      // Listen for typing indicators
+      socket.on('user_typing', handleTypingIndicator);
+      
+      // Listen for message read updates
+      socket.on('message_read_update', handleMessageReadUpdate);
+      
+      // Listen for message delivery confirmations
+      socket.on('message_delivered', handleMessageDelivered);
+
+      return () => {
+        socket.off('new_message', handleNewMessage);
+        socket.off('user_typing', handleTypingIndicator);
+        socket.off('message_read_update', handleMessageReadUpdate);
+        socket.off('message_delivered', handleMessageDelivered);
+        socket.emit('leave_chat', chat._id);
+      };
+    }
+  }, [socket, chat?._id, chat?.isTemporary, handleNewMessage, handleTypingIndicator, handleMessageReadUpdate, handleMessageDelivered]);
+
+  // Optimized message fetching with cursor-based pagination
+  const fetchMessages = useCallback(async (loadMore = false) => {
+    if (!chat?._id || !user?.token || chat.isTemporary || isLoadingRef.current) return;
+    
+    try {
+      isLoadingRef.current = true;
+      if (loadMore) {
+        setLoadingMore(true);
+        // Store current scroll position before loading more
+        if (chatContainerRef.current) {
+          previousScrollHeight.current = chatContainerRef.current.scrollHeight;
+        }
+      } else {
+        setLoading(true);
+        setMessages([]);
+      }
+      
+      let url = `${API_BASE_URL}/api/messages/${chat._id}?limit=30`;
+      if (loadMore && nextCursor) {
+        url += `&before=${nextCursor}`;
+      }
+      
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (loadMore) {
+          setMessages(prev => [...data.messages, ...prev]);
+          // Don't scroll to bottom when loading more messages
+        } else {
+          setMessages(data.messages);
+          // Only scroll to bottom on initial load when chat opens
+          if (isInitialLoad) {
+            setShouldScrollToBottom(true);
+            setIsInitialLoad(false);
+          }
+        }
+        
+        setHasMoreMessages(data.hasMore);
+        setNextCursor(data.nextCursor);
+      }
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+      isLoadingRef.current = false;
+    }
+  }, [chat?._id, user?.token, chat?.isTemporary, nextCursor, isInitialLoad]);
 
   const sendMessage = async (content, type = 'text', file = null) => {
     if (!content.trim() && !file) return;

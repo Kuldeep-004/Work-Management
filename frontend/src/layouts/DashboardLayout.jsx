@@ -17,8 +17,10 @@ import {
   ClipboardDocumentCheckIcon, // Activity logs icon
 } from '@heroicons/react/24/outline';
 import TopBar from '../components/TopBar';
-import { useState, useEffect } from 'react';
+import useOnlineStatus from '../hooks/useOnlineStatus';
+import { useState, useEffect, useMemo } from 'react';
 import { API_BASE_URL } from '../apiConfig';
+import io from 'socket.io-client';
 
 const DashboardLayout = ({ children }) => {
   const { user } = useAuth();
@@ -26,6 +28,40 @@ const DashboardLayout = ({ children }) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hasPendingTasks, setHasPendingTasks] = useState(false);
+  
+  // Socket connection for online status (when not in chat)
+  const socketConnection = useMemo(() => {
+    if (!user?.token) return null;
+    
+    const allowedOrigins = ['https://works.haacas.com', 'http://localhost:5173', 'http://localhost:5174'];
+    return io(API_BASE_URL, {
+      auth: { token: user.token },
+      autoConnect: false,
+      transports: ['websocket', 'polling']
+    });
+  }, [user?.token]);
+
+  // Use online status tracking (false = not in chat section)
+  useOnlineStatus(socketConnection, false);
+
+  // Initialize socket connection for general online status
+  useEffect(() => {
+    if (!socketConnection || !user?.token) return;
+
+    socketConnection.connect();
+    
+    // Authenticate with the server
+    socketConnection.emit('authenticate', user.token);
+    
+    // Handle authentication error
+    socketConnection.on('auth_error', (error) => {
+      console.error('Socket authentication error:', error);
+    });
+
+    return () => {
+      socketConnection.disconnect();
+    };
+  }, [socketConnection, user?.token]);
 
   // Check for pending tasks
   useEffect(() => {

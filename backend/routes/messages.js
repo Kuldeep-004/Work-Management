@@ -402,6 +402,16 @@ router.post('/:chatId/read', protect, async (req, res) => {
       }
     );
 
+    // Emit real-time unread count reset via socket
+    const io = req.app.get('io');
+    if (io) {
+      // Find the user's socket and emit unread count reset
+      io.to(userId).emit('unread_count_update', {
+        chatId: chatId,
+        reset: true
+      });
+    }
+
     res.json({ success: true, message: 'Messages marked as read' });
   } catch (error) {
     console.error('Error marking messages as read:', error);

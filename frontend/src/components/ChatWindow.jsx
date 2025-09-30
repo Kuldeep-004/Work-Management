@@ -4,6 +4,7 @@ import ChatSidebar from './ChatSidebar';
 import ChatView from './ChatView';
 import NewGroupModal from './NewGroupModal';
 import { API_BASE_URL } from '../apiConfig';
+import useOnlineStatus from '../hooks/useOnlineStatus';
 import io from 'socket.io-client';
 
 const ChatWindow = ({ onClose, onUnreadCountChange }) => {
@@ -34,7 +35,7 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
     return newSocket;
   }, [user?.token]);
 
-  // Optimize message handling with useCallback to prevent unnecessary re-renders
+    // Optimize new message handling with better unread count logic
   const handleNewMessage = useCallback((message) => {
     // Prevent duplicate message handling
     if (lastMessageRef.current === message._id) return;
@@ -50,7 +51,8 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
             ...chat, 
             lastMessage: message, 
             lastActivity: message.createdAt,
-            unreadCount: (isActiveChat || isOwnMessage) ? 0 : (chat.unreadCount || 0) + 1
+            // Don't increment unread count here as it's handled by the server socket event
+            unreadCount: (isActiveChat || isOwnMessage) ? 0 : chat.unreadCount || 0
           };
         }
         return chat;
@@ -93,6 +95,35 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
     });
   }, []);
 
+  // Handle initial online users list
+  const handleOnlineUsersList = useCallback((userIds) => {
+    setOnlineUsers(new Set(userIds));
+  }, []);
+
+  // Handle real-time unread count updates
+  const handleUnreadCountUpdate = useCallback(({ chatId, increment, reset }) => {
+    setChats(prevChats => 
+      prevChats.map(chat => {
+        if (chat._id === chatId) {
+          if (reset) {
+            return { ...chat, unreadCount: 0 };
+          } else if (increment) {
+            // Only increment if this chat is not currently active
+            const isCurrentlyActive = activeChat?._id === chatId;
+            return { 
+              ...chat, 
+              unreadCount: isCurrentlyActive ? 0 : (chat.unreadCount || 0) + increment 
+            };
+          }
+        }
+        return chat;
+      })
+    );
+  }, [activeChat?._id]);
+
+  // Use enhanced online status tracking
+  useOnlineStatus(socket, true); // true indicates user is in chat section
+
   // Initialize socket connection with optimizations
   useEffect(() => {
     if (!socketConnection) return;
@@ -111,6 +142,8 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
     socketConnection.on('new_message', handleNewMessage);
     socketConnection.on('messages_read', handleMessagesRead);
     socketConnection.on('user_online', handleUserOnline);
+    socketConnection.on('online_users_list', handleOnlineUsersList);
+    socketConnection.on('unread_count_update', handleUnreadCountUpdate);
 
     setSocket(socketConnection);
 
@@ -118,9 +151,11 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
       socketConnection.off('new_message', handleNewMessage);
       socketConnection.off('messages_read', handleMessagesRead);
       socketConnection.off('user_online', handleUserOnline);
+      socketConnection.off('online_users_list', handleOnlineUsersList);
+      socketConnection.off('unread_count_update', handleUnreadCountUpdate);
       socketConnection.disconnect();
     };
-  }, [socketConnection, handleNewMessage, handleMessagesRead, handleUserOnline, user.token]);
+  }, [socketConnection, handleNewMessage, handleMessagesRead, handleUserOnline, handleOnlineUsersList, handleUnreadCountUpdate, user.token]);
 
   // Fetch chats
   useEffect(() => {
@@ -186,7 +221,7 @@ const ChatWindow = ({ onClose, onUnreadCountChange }) => {
     setActiveChat(chat);
     setShowMobileChat(true); // Show chat on mobile
     
-    // Reset unread count when chat is selected
+    // Reset unread count when chat is selected - immediately update UI
     if (chat.unreadCount > 0) {
       setChats(prevChats => 
         prevChats.map(c => 

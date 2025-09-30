@@ -78,19 +78,39 @@ const MessageBubble = ({ message, isOwn, showAvatar, showTimestamp }) => {
   const getMessageStatus = () => {
     if (!isOwn) return null;
     
-    // Check if message is read by others (double tick white)
-    const readByOthers = message.readBy?.filter(r => r.user !== message.sender._id) || [];
+    // Check if message is read by others (excluding sender)
+    const readByOthers = message.readBy?.filter(r => 
+      r.user && r.user.toString() !== message.sender._id.toString()
+    ) || [];
+    
+    // Check if message is delivered to others (excluding sender)
+    const deliveredToOthers = message.deliveredTo?.filter(d => 
+      d.user && d.user.toString() !== message.sender._id.toString()
+    ) || [];
+    
     if (readByOthers.length > 0) {
+      // Message has been read by other users (double tick white)
       return (
-        <div className="relative inline-flex">
+        <div className="relative inline-flex" title="Read">
           <CheckIcon className="h-3 w-3 text-white opacity-80" />
           <CheckIcon className="h-3 w-3 text-white opacity-80 -ml-1.5" />
         </div>
       );
+    } else if (deliveredToOthers.length > 0) {
+      // Message delivered but not read (single tick white)
+      return (
+        <div className="relative inline-flex" title="Delivered">
+          <CheckIcon className="h-3 w-3 text-white opacity-60" />
+        </div>
+      );
+    } else {
+      // Message sent but not yet delivered (single tick gray/lighter)
+      return (
+        <div className="relative inline-flex" title="Sent">
+          <CheckIcon className="h-3 w-3 text-white opacity-40" />
+        </div>
+      );
     }
-    
-    // Message sent and delivered but not read (single tick white)
-    return <CheckIcon className="h-3 w-3 text-white opacity-60" />;
   };
 
   const renderMessageContent = () => {
@@ -270,7 +290,7 @@ const MessageBubble = ({ message, isOwn, showAvatar, showTimestamp }) => {
               </div>
               
               {/* Time and status - positioned absolutely at bottom right */}
-              <div className={`absolute bottom-0 right-0 flex items-center space-x-1 text-xs ${
+              <div className={`absolute bottom-0 right-0 flex items-center space-x-1 text-[10px] ${
                 isOwn ? 'text-green-100' : 'text-gray-400'
               } mt-1`}>
                 {message.isEdited && (
