@@ -2021,6 +2021,7 @@ const AdminDashboard = () => {
                 clientGroups={clientGroups}
                 workTypes={workTypes}
                 priorities={priorities}
+                taskStatuses={taskStatuses}
                 customColumns={customColumns}
               />
             </div>
@@ -2162,6 +2163,7 @@ const AdminDashboard = () => {
               clientGroups={clientGroups}
               workTypes={workTypes}
               priorities={priorities}
+              taskStatuses={taskStatuses}
               customColumns={customColumns}
             />
           </div>

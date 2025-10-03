@@ -31,7 +31,7 @@ router.get('/user/:userId', protect, async (req, res) => {
     end.setUTCHours(23, 59, 59, 999);
 
     // Get user details
-    const user = await User.findById(userId).select('firstName lastName email role team photo hourlyRate');
+    const user = await User.findById(userId).select('firstName lastName email role team photo hourlyRate').populate('team', 'name');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -41,7 +41,7 @@ router.get('/user/:userId', protect, async (req, res) => {
       user: userId,
       date: { $gte: start, $lte: end },
       isCompleted: true
-    }).populate('entries.task', 'title description clientName clientGroup workType').sort({ date: 1 });
+    }).populate('entries.task', 'title description clientName clientGroup workType billed').sort({ date: 1 });
 
     // Initialize analytics data
     const analytics = {
@@ -50,7 +50,7 @@ router.get('/user/:userId', protect, async (req, res) => {
         name: `${user.firstName} ${user.lastName}`,
         email: user.email,
         role: user.role,
-        team: user.team,
+        team: user.team?.name || 'Not assigned',
         photo: user.photo,
         hourlyRate: user.hourlyRate || 0
       },
@@ -67,6 +67,8 @@ router.get('/user/:userId', protect, async (req, res) => {
         otherHours: 0,
         infrastructureHours: 0,
         discussionWithVivekHours: 0,
+        billedTaskHours: 0,    // Hours spent on tasks with billed=true
+        unbilledTaskHours: 0,  // Hours spent on tasks with billed=false + other hours
         totalDays: 0,
         workingHours: 0,       // For backward compatibility
         totalSalary: 0
@@ -93,6 +95,8 @@ router.get('/user/:userId', protect, async (req, res) => {
       let dailyOther = 0;
       let dailyInfrastructure = 0;
       let dailyDiscussionWithVivek = 0;
+      let dailyBilledTask = 0;
+      let dailyUnbilledTask = 0;
 
       timesheet.entries.forEach(entry => {
         const minutes = getMinutesBetween(entry.startTime, entry.endTime);
@@ -113,6 +117,7 @@ router.get('/user/:userId', protect, async (req, res) => {
           dailyOther += minutes;
           analytics.summary.otherHours += minutes;
           analytics.summary.totalWorkingHours += minutes;
+          // Remove Other hours from unbilled task hours as per user request
         } else if (entry.manualTaskName === 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR' || entry.task === 'infrastructure-issues') {
           dailyInfrastructure += minutes;
           analytics.summary.infrastructureHours += minutes;
@@ -128,6 +133,19 @@ router.get('/user/:userId', protect, async (req, res) => {
           dailyWorking += minutes;
           analytics.summary.taskHours += minutes;
           analytics.summary.totalWorkingHours += minutes;
+          
+          // Categorize by billed status (corrected logic per user request)
+          if (entry.task.billed === false) {
+            // Tasks with billed=false are counted as "Billed Tasks"
+            dailyBilledTask += minutes;
+            analytics.summary.billedTaskHours += minutes;
+          } else if (entry.task.billed === true) {
+            // Tasks with billed=true are counted as "Unbilled Tasks"
+            dailyUnbilledTask += minutes;
+            analytics.summary.unbilledTaskHours += minutes;
+          }
+          // Note: Tasks with undefined billed status are not counted in either category
+          
           // Track task breakdown
           const taskKey = entry.task._id.toString();
           if (!analytics.taskBreakdown[taskKey]) {
@@ -142,6 +160,7 @@ router.get('/user/:userId', protect, async (req, res) => {
           dailyOther += minutes;
           analytics.summary.otherHours += minutes;
           analytics.summary.totalWorkingHours += minutes;
+          // Remove from unbilled task hours as per user request
         }
       });
 
@@ -156,6 +175,8 @@ router.get('/user/:userId', protect, async (req, res) => {
         otherHours: dailyOther,
         infrastructureHours: dailyInfrastructure,
         discussionWithVivekHours: dailyDiscussionWithVivek,
+        billedTaskHours: dailyBilledTask,
+        unbilledTaskHours: dailyUnbilledTask,
         totalEntries: timesheet.entries.length
       });
 
@@ -211,8 +232,41 @@ router.get('/user/:userId', protect, async (req, res) => {
       analytics.productivity.leastProductiveDay = sortedDays[sortedDays.length - 1];
     }
 
-    // Convert task breakdown to array
-    analytics.taskBreakdown = Object.values(analytics.taskBreakdown).sort((a, b) => b.totalMinutes - a.totalMinutes);
+    // Convert task breakdown to array and add tasks where user was verifier or guide
+    const taskBreakdownArray = Object.values(analytics.taskBreakdown).sort((a, b) => b.totalMinutes - a.totalMinutes);
+    
+    // Find additional tasks where user was verifier or guide within the date range
+    const Task = (await import('../models/Task.js')).default;
+    const additionalTasks = await Task.find({
+      $and: [
+        {
+          $or: [
+            { verificationAssignedTo: userId },
+            { secondVerificationAssignedTo: userId },
+            { thirdVerificationAssignedTo: userId },
+            { fourthVerificationAssignedTo: userId },
+            { fifthVerificationAssignedTo: userId },
+            { guides: userId }
+          ]
+        },
+        {
+          createdAt: { $gte: start, $lte: end }
+        }
+      ]
+    }).select('title clientName workType billed createdAt');
+    
+    // Add tasks where user was verifier/guide but didn't work on them directly
+    additionalTasks.forEach(task => {
+      const taskKey = task._id.toString();
+      if (!analytics.taskBreakdown[taskKey]) {
+        taskBreakdownArray.push({
+          task: task,
+          totalMinutes: 0 // No time spent by this user, but they were involved
+        });
+      }
+    });
+    
+    analytics.taskBreakdown = taskBreakdownArray;
 
     res.json(analytics);
   } catch (error) {

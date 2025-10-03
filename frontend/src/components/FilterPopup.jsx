@@ -11,6 +11,7 @@ const FilterPopup = ({
   clientGroups,
   workTypes,
   priorities = [],
+  taskStatuses = [],
   customColumns = []
 }) => {
   if (!isOpen) return null;
@@ -18,7 +19,7 @@ const FilterPopup = ({
   // Base filterable columns
   const baseFilterableColumns = [
     { value: 'title', label: 'Title' },
-    { value: 'status', label: 'Status', options: ['yet_to_start', 'in_progress', 'completed'] },
+    { value: 'status', label: 'Status', options: taskStatuses.map(s => s.name) },
     { value: 'priority', label: 'Priority', options: priorities.map(p => p.name) },
     { value: 'assignedTo', label: 'Assigned To', options: users.map(u => ({ value: u._id, label: `${u.firstName} ${u.lastName}` })) },
     { value: 'assignedBy', label: 'Assigned By', options: users.map(u => ({ value: u._id, label: `${u.firstName} ${u.lastName}` })) },
@@ -163,19 +164,21 @@ const FilterPopup = ({
       );
     }
 
-    // For 'any_of', show multi-select if options exist
+    // For 'any_of', show custom multi-select if options exist
     if (filter.operator === 'any_of' && selectedColumn.options) {
+      const selectedValues = Array.isArray(filter.value) ? filter.value : [];
+      
+      const toggleSelection = (optionValue) => {
+        const newSelected = selectedValues.includes(optionValue)
+          ? selectedValues.filter(val => val !== optionValue)
+          : [...selectedValues, optionValue];
+        handleFilterChange(index, 'value', newSelected);
+      };
+
       return (
         <div className="flex-1">
-          <select
-            multiple
-            value={Array.isArray(filter.value) ? filter.value : []}
-            onChange={e => {
-              const selected = Array.from(e.target.selectedOptions, opt => opt.value);
-              handleFilterChange(index, 'value', selected);
-            }}
-            size={Math.min(6, selectedColumn.options.length)}
-            className="w-full min-h-[120px] max-h-48 p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white custom-scrollbar"
+          <div 
+            className="w-full min-h-[120px] max-h-48 p-2 border border-gray-300 rounded-lg shadow-sm focus-within:ring-blue-500 focus-within:border-blue-500 sm:text-sm bg-white custom-scrollbar overflow-y-auto"
             style={{
               minHeight: '120px',
               maxHeight: '200px',
@@ -183,16 +186,44 @@ const FilterPopup = ({
               padding: '8px',
               borderRadius: '0.5rem',
               boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-              overflowY: 'auto',
               marginTop: '2px',
             }}
           >
-            {selectedColumn.options.map(opt => (
-              typeof opt === 'object'
-                ? <option key={opt.value} value={opt.value}>{opt.label}</option>
-                : <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
+            {selectedColumn.options.map(opt => {
+              const optionValue = typeof opt === 'object' ? opt.value : opt;
+              const optionLabel = typeof opt === 'object' ? opt.label : opt;
+              const isSelected = selectedValues.includes(optionValue);
+              
+              return (
+                <div
+                  key={optionValue}
+                  onClick={() => toggleSelection(optionValue)}
+                  className={`px-2 py-1 mb-1 rounded cursor-pointer select-none transition-colors duration-150 ${
+                    isSelected 
+                      ? 'bg-blue-100 text-blue-800 border border-blue-300' 
+                      : 'hover:bg-gray-100 border border-transparent'
+                  }`}
+                  style={{
+                    fontSize: '0.875rem',
+                    lineHeight: '1.25rem',
+                  }}
+                >
+                  <span className={`inline-block w-3 h-3 mr-2 rounded-sm border ${
+                    isSelected 
+                      ? 'bg-blue-500 border-blue-500' 
+                      : 'border-gray-400'
+                  }`}>
+                    {isSelected && (
+                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </span>
+                  {optionLabel}
+                </div>
+              );
+            })}
+          </div>
           <style>{`
             .custom-scrollbar::-webkit-scrollbar {
               width: 8px;

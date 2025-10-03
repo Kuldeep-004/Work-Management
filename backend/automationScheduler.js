@@ -23,10 +23,8 @@ cron.schedule('*/5 * * * *', async () => {
 
 // Run timesheet reminders every hour between 10 AM to 7 PM (Monday to Friday)
 cron.schedule('0 10-19 * * 1-5', async () => {
-  console.log('[TimesheetScheduler] Running timesheet reminder job');
   try {
     const result = await sendTimesheetReminder();
-    console.log(`[TimesheetScheduler] Sent ${result.sent}/${result.total} timesheet reminders`);
   } catch (error) {
     console.error('[TimesheetScheduler] Error sending timesheet reminders:', error);
   }
@@ -34,11 +32,9 @@ cron.schedule('0 10-19 * * 1-5', async () => {
 
 // Run database backup daily at 9:00 AM IST
 cron.schedule('0 9 * * *', async () => {
-  console.log('[BackupScheduler] Running daily database backup job');
   try {
     const result = await createAndUploadBackup();
     await logBackupActivity(result, null, 'system');
-    console.log(`[BackupScheduler] Daily backup completed: ${result.fileName} (${result.fileSizeMB} MB) uploaded to pCloud`);
   } catch (error) {
     await logBackupActivity(null, error, 'system');
     console.error('[BackupScheduler] Daily backup failed:', error.message);
@@ -57,7 +53,6 @@ export const runAutomationCheck = async (isManual = true) => {
   const currentTimeString = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
 
   if (isManual) {
-    console.log(`[AutomationScheduler] Manual check triggered at ${now.toISO()}`);
   }
   
   try {
@@ -138,15 +133,7 @@ export const runAutomationCheck = async (isManual = true) => {
     const skippedAutomationsCount = allMonthlyAutomationsToday.length - monthlyAutomations.length;
     
     if (!isManual) {
-      console.log(`[AutomationScheduler] Found ${monthlyAutomations.length} monthly automations for day ${dayOfMonth} that haven't run this month yet`);
-      console.log(`[AutomationScheduler] Skipping ${skippedAutomationsCount} monthly automations that already ran this month`);
-      console.log(`[AutomationScheduler] Found ${quarterlyAutomations.length} quarterly automations for day ${dayOfMonth} of month ${currentMonth + 1}`);
-      console.log(`[AutomationScheduler] Found ${halfYearlyAutomations.length} half-yearly automations for day ${dayOfMonth} of month ${currentMonth + 1}`);
-      console.log(`[AutomationScheduler] Found ${yearlyAutomations.length} yearly automations for day ${dayOfMonth} of month ${currentMonth + 1}`);
-      console.log(`[AutomationScheduler] Found ${dateTimeAutomations.length} date-time automations for today`);
-      console.log(`[AutomationScheduler] Found ${missedAutomations.length} missed date-time automations from past days`);
     } else {
-      console.log(`[AutomationScheduler] Found ${automations.length} total automations to process`);
     }
     
     let processedCount = 0;
@@ -181,11 +168,9 @@ export const runAutomationCheck = async (isManual = true) => {
         })();
         
         if (shouldSkipTemplate) {
-          console.log(`[AutomationScheduler] Skipping template "${template.title}" in automation ${automation._id}: already processed this period.`);
           continue;
         }
         
-        console.log(`[AutomationScheduler] Processing template "${template.title}" in automation ${automation._id}: eligible for processing.`);
         
         const {
           title,
@@ -232,7 +217,6 @@ export const runAutomationCheck = async (isManual = true) => {
         assignedToArray = assignedToArray.filter(id => id && String(id).trim() !== '');
         
         // Log all assignedTo IDs for debugging
-        console.log(`[AutomationScheduler] Processing template "${title}" with assignedTo IDs: ${JSON.stringify(assignedToArray)}`);
         
         // FIXED: Correctly check for valid MongoDB ObjectIds
         const validIds = [];
@@ -259,7 +243,6 @@ export const runAutomationCheck = async (isManual = true) => {
           console.error(`[AutomationScheduler] No valid assignedTo IDs for template "${title}" in automation ${automation._id} - SKIPPING TASK CREATION`);
           continue;
         } else {
-          console.log(`[AutomationScheduler] Found ${assignedToArray.length} valid assignedTo IDs for template "${title}"`);
         }
         
         let templateCreatedCount = 0;
@@ -327,7 +310,6 @@ export const runAutomationCheck = async (isManual = true) => {
             if (savedTask) {
               automation.tasks.push(savedTask._id);
               templateCreatedCount++;
-              console.log(`[AutomationScheduler] Created task ${savedTask._id} from automation ${automation._id}`);
             }
           } catch (err) {
             console.error(`[AutomationScheduler] Automation task creation error for automation ${automation._id}:`, err);
@@ -335,7 +317,6 @@ export const runAutomationCheck = async (isManual = true) => {
         }
         
         totalTasksCreated += templateCreatedCount;
-        console.log(`[AutomationScheduler] Automation ${automation._id}, template "${title}": Created ${templateCreatedCount} tasks.`);
         
         // NEW: Update this template's execution tracking if tasks were created
         if (templateCreatedCount > 0) {
@@ -366,7 +347,6 @@ export const runAutomationCheck = async (isManual = true) => {
         ).length;
         
         // Debug logging to see what's happening
-        console.log(`[AutomationScheduler] DEBUG - Automation ${automation._id}: totalTasksCreated=${totalTasksCreated}, approvedTemplateCount=${approvedTemplateCount}, totalTemplates=${automation.taskTemplate.length}`);
         
         if (totalTasksCreated > 0) {
           // Update the lastRunDate, lastRunMonth, and lastRunYear to track when it was executed
@@ -383,10 +363,8 @@ export const runAutomationCheck = async (isManual = true) => {
           if (automation.triggerType === 'halfYearly') nextRunInfo = 'in 6 months';
           if (automation.triggerType === 'yearly') nextRunInfo = 'next year';
           
-          console.log(`[AutomationScheduler] ${automation.triggerType} automation ${automation._id}: Created ${totalTasksCreated} tasks from ${approvedTemplateCount} approved templates. Will run ${nextRunInfo}.`);
         } else if (approvedTemplateCount === 0) {
           // No approved templates at all - don't mark as run, will try again next run
-          console.log(`[AutomationScheduler] ${automation.triggerType} automation ${automation._id}: No approved templates found. Will try again next run.`);
         } else {
           // Had approved templates but no tasks were created (maybe due to errors) - still mark as run to avoid infinite retries
           automation.lastRunDate = now.toJSDate();
@@ -397,20 +375,17 @@ export const runAutomationCheck = async (isManual = true) => {
           automation.markModified('taskTemplate');
           await automation.save();
           
-          console.log(`[AutomationScheduler] ${automation.triggerType} automation ${automation._id}: Had ${approvedTemplateCount} approved templates but no tasks were created. Marked as run to avoid infinite retries.`);
         }
       } 
       // For dateAndTime automations, delete them after execution since they're one-time
       else if (automation.triggerType === 'dateAndTime') {
         if (totalTasksCreated > 0) {
-          console.log(`[AutomationScheduler] One-time automation ${automation._id}: Created ${totalTasksCreated} tasks total. Deleting automation.`);
           // Save template changes before deleting
           automation.markModified('taskTemplate');
           await automation.save();
           await Automation.deleteOne({ _id: automation._id });
           processedCount++;
         } else {
-          console.log(`[AutomationScheduler] One-time automation ${automation._id}: No tasks were created! Will try again next minute.`);
           // Don't delete the automation if no tasks were created, so we can retry
           // But still save any template execution tracking changes
           automation.markModified('taskTemplate');
@@ -420,7 +395,6 @@ export const runAutomationCheck = async (isManual = true) => {
     }
     
     if (!isManual) {
-      console.log(`[AutomationScheduler] Finished automation cycle at ${DateTime.now().setZone('Asia/Kolkata').toISO()}`);
     } else {
       return { success: true, processedCount };
     }
@@ -440,7 +414,6 @@ export const resetMonthlyAutomationStatus = async (automationId = null) => {
       $unset: { lastRunDate: "", lastRunMonth: "", lastRunYear: "" }
     });
     
-    console.log(`[AutomationScheduler] Reset ${result.modifiedCount} monthly automations run status`);
     return { success: true, modifiedCount: result.modifiedCount };
   } catch (err) {
     console.error('[AutomationScheduler] Error resetting automation status:', err);
@@ -448,4 +421,3 @@ export const resetMonthlyAutomationStatus = async (automationId = null) => {
   }
 };
 
-console.log('[AutomationScheduler] Scheduler started.');

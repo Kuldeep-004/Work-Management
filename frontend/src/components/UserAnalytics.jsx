@@ -108,26 +108,28 @@ const UserAnalytics = ({ userId, userName, onClose }) => {
 
   // Chart configurations
   const timeBreakdownData = {
-    labels: ['Task Hours', 'Permission', 'Lunch', 'Billing', 'Other', 'Infrastructure', 'Discussion w/ Vivek'],
+    labels: ['Permission', 'Lunch', 'Billing', 'Other', 'Infrastructure', 'Discussion w/ Vivek', 'Billed Tasks', 'Unbilled Tasks'],
     datasets: [{
       label: 'Hours',
       data: [
-        analytics.summary.taskHours / 60,
         analytics.summary.permissionHours / 60,
         analytics.summary.lunchHours / 60,
         analytics.summary.billingHours / 60,
         analytics.summary.otherHours / 60,
         (analytics.summary.infrastructureHours || 0) / 60,
-        (analytics.summary.discussionWithVivekHours || 0) / 60
+        (analytics.summary.discussionWithVivekHours || 0) / 60,
+        (analytics.summary.billedTaskHours || 0) / 60,
+        (analytics.summary.unbilledTaskHours || 0) / 60
       ],
       backgroundColor: [
-        '#10B981', // Task Hours - Green
         '#EF4444', // Permission - Red
         '#F59E0B', // Lunch - Yellow
         '#3B82F6', // Billing - Blue
         '#8B5CF6', // Other - Purple
         '#6366F1', // Infrastructure - Indigo
-        '#10D9B4'  // Discussion with Vivek - Emerald
+        '#10D9B4', // Discussion with Vivek - Emerald
+        '#059669', // Billed Tasks - Emerald Dark
+        '#E11D48'  // Unbilled Tasks - Rose
       ],
       borderWidth: 0
     }]
@@ -246,8 +248,8 @@ const UserAnalytics = ({ userId, userName, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/25 bg-opacity-95 flex items-center justify-center z-50 p-2 sm:p-6">
-      <div className="bg-white shadow-2xl w-full h-full sm:w-[95vw] sm:h-[90vh] sm:max-w-7xl overflow-hidden border border-gray-200 sm:rounded-lg">
+    <div className="fixed h-full inset-0 bg-black/25 bg-opacity-95 flex items-center justify-center z-50 p-2 sm:p-6">
+      <div className="bg-white shadow-2xl w-full h-full sm:w-[95vw] sm:max-w-7xl overflow-hidden pb-36 border border-gray-200 sm:rounded-lg">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 p-3 sm:p-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
@@ -475,6 +477,36 @@ const UserAnalytics = ({ userId, userName, onClose }) => {
                 </div>
               </div>
             </div>
+            
+            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 p-3 sm:p-4 border-l-4 border-emerald-500 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="text-emerald-700 text-xs font-semibold uppercase tracking-wide">BILLED TASKS</div>
+                  <div className="text-xl sm:text-2xl font-bold text-emerald-900 mt-1">{formatTime(analytics.summary.billedTaskHours || 0)}</div>
+                  <div className="text-emerald-600 text-xs mt-1">{formatTimeDecimal(analytics.summary.billedTaskHours || 0)}h decimal</div>
+                </div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-500 flex items-center justify-center rounded flex-shrink-0">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-rose-50 to-rose-100 p-3 sm:p-4 border-l-4 border-rose-500 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="text-rose-700 text-xs font-semibold uppercase tracking-wide">UNBILLED TASKS</div>
+                  <div className="text-xl sm:text-2xl font-bold text-rose-900 mt-1">{formatTime(analytics.summary.unbilledTaskHours || 0)}</div>
+                  <div className="text-rose-600 text-xs mt-1">{formatTimeDecimal(analytics.summary.unbilledTaskHours || 0)}h decimal</div>
+                </div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-rose-500 flex items-center justify-center rounded flex-shrink-0">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                  </svg>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Charts Grid */}
@@ -485,7 +517,7 @@ const UserAnalytics = ({ userId, userName, onClose }) => {
                 <div className="w-1 h-4 sm:h-6 bg-green-500 mr-2 sm:mr-3"></div>
                 <span className="truncate">Time Distribution</span>
               </h3>
-              <div className="h-48 sm:h-64">
+              <div className="h-48 sm:h-72">
                 <Doughnut 
                   data={timeBreakdownData} 
                   options={{
@@ -544,7 +576,7 @@ const UserAnalytics = ({ userId, userName, onClose }) => {
                 <div className="w-1 h-4 sm:h-6 bg-purple-500 mr-2 sm:mr-3"></div>
                 <span className="truncate">Task Analytics</span>
               </h3>
-              <div className="max-h-48 sm:max-h-48 overflow-y-auto">
+              <div className="max-h-64 sm:max-h-96 overflow-y-auto">
                 <table className="w-full text-xs sm:text-sm">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
@@ -553,15 +585,24 @@ const UserAnalytics = ({ userId, userName, onClose }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {analytics.taskBreakdown.slice(0, 8).map((task, index) => (
+                    {analytics.taskBreakdown.map((task, index) => (
                       <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                         <td className="p-2 sm:p-3">
-                          <div className="font-medium text-gray-900 truncate text-xs sm:text-sm">
-                            {task.task?.title || 'Unknown Task'}
-                          </div>
-                          <div className="text-xs text-gray-500 truncate">
-                            {task.task?.clientName && `${task.task.clientName} • `}
-                            {task.task?.workType}
+                          <div className="font-medium text-gray-900 text-xs sm:text-sm">
+                            <span className="truncate block" title={task.task?.title || 'Unknown Task'}>
+                              {(task.task?.title || 'Unknown Task').length > 50 
+                                ? `${(task.task?.title || 'Unknown Task').substring(0, 50)}...` 
+                                : (task.task?.title || 'Unknown Task')
+                              }
+                            </span>
+                            {task.task?.clientName && (
+                              <span className="text-xs text-gray-500 truncate block mt-1" title={task.task.clientName}>
+                                {task.task.clientName.length > 50 
+                                  ? `${task.task.clientName.substring(0, 50)}...` 
+                                  : task.task.clientName
+                                }
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="p-2 sm:p-3 text-right font-semibold text-blue-600 text-xs sm:text-sm">

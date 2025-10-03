@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../apiConfig';
@@ -8,11 +8,71 @@ const FileUpload = ({ taskId, onFileUploaded, onFileDeleted }) => {
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
+  const containerRef = useRef(null);
 
   const handleFileSelect = (e) => {
     const selectedFiles = Array.from(e.target.files);
     setFiles(selectedFiles);
   };
+
+  // Handle paste event
+  const handlePaste = (e) => {
+    const clipboardData = e.clipboardData || window.clipboardData;
+    const items = clipboardData.items;
+    
+    const pastedFiles = [];
+    
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      
+      // Check if item is a file
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) {
+          pastedFiles.push(file);
+        }
+      }
+    }
+    
+    if (pastedFiles.length > 0) {
+      // Add pasted files to existing files
+      setFiles(prevFiles => [...prevFiles, ...pastedFiles]);
+      toast.success(`${pastedFiles.length} file(s) pasted successfully`);
+    }
+  };
+
+  // Add event listeners for paste functionality
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Listen for Ctrl+V
+      if (e.ctrlKey && e.key === 'v') {
+        // Let the paste event handle it
+        return;
+      }
+    };
+
+    const handlePasteEvent = (e) => {
+      handlePaste(e);
+    };
+
+    // Add event listeners to the container and document
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('paste', handlePasteEvent);
+    }
+    
+    // Also add to document to catch global paste when component is focused
+    document.addEventListener('paste', handlePasteEvent);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      if (container) {
+        container.removeEventListener('paste', handlePasteEvent);
+      }
+      document.removeEventListener('paste', handlePasteEvent);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const handleUpload = async () => {
     if (files.length === 0) {
@@ -80,7 +140,8 @@ const FileUpload = ({ taskId, onFileUploaded, onFileDeleted }) => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" ref={containerRef} tabIndex={-1}>
+      
       <div className="flex items-center space-x-4">
         <input
           type="file"
@@ -111,8 +172,19 @@ const FileUpload = ({ taskId, onFileUploaded, onFileDeleted }) => {
           <p className="text-sm text-gray-600">Selected files:</p>
           <ul className="mt-1 space-y-1">
             {files.map((file, index) => (
-              <li key={index} className="text-sm text-gray-700">
-                {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+              <li key={index} className="text-sm text-gray-700 flex items-center justify-between">
+                <span>
+                  {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                </span>
+                <button
+                  onClick={() => {
+                    setFiles(prevFiles => prevFiles.filter((_, i) => i !== index));
+                  }}
+                  className="ml-2 text-red-500 hover:text-red-700 text-xs"
+                  title="Remove file"
+                >
+                  ✕
+                </button>
               </li>
             ))}
           </ul>

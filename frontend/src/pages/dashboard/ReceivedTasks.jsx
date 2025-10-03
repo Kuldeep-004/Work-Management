@@ -117,6 +117,7 @@ const ReceivedTasks = () => {
   const [clientGroups, setClientGroups] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
   const [priorities, setPriorities] = useState([]);
+  const [taskStatuses, setTaskStatuses] = useState([]);
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const columnsDropdownRef = useRef(null);
   const tableRef = useRef(null);
@@ -559,6 +560,7 @@ const ReceivedTasks = () => {
       fetchData(`${API_BASE_URL}/api/tasks/unique/client-groups`, setClientGroups);
       fetchData(`${API_BASE_URL}/api/tasks/unique/work-types`, setWorkTypes);
       fetchData(`${API_BASE_URL}/api/priorities`, setPriorities);
+      fetchData(`${API_BASE_URL}/api/task-statuses`, setTaskStatuses);
     }
   }, [user]);
 
@@ -1121,6 +1123,7 @@ const ReceivedTasks = () => {
               clientGroups={clientGroups}
               workTypes={workTypes}
               priorities={priorities}
+              taskStatuses={taskStatuses}
               customColumns={customColumns}
             />
           </div>
