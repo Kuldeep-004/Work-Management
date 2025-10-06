@@ -67,6 +67,9 @@ const DEFAULT_TAB = (taskType = 'execution', customColumns = []) => {
     ]),
     activeTab: taskType,
     selectedUserId: null, // Add selectedUserId field
+    // Add sort options
+    taskSort: 'none', // none, createdAt, inwardEntryDate, dueDate, targetDate
+    taskSortOrder: 'desc', // asc, desc
   };
 };
 
@@ -120,11 +123,14 @@ const ReceivedTasks = () => {
   const [taskStatuses, setTaskStatuses] = useState([]);
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const columnsDropdownRef = useRef(null);
+  const groupByDropdownRef = useRef(null);
+  const sortDropdownRef = useRef(null);
   const tableRef = useRef(null);
   const usersDropdownRef = useRef(null);
   const [taskHours, setTaskHours] = useState([]);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showUsersDropdown, setShowUsersDropdown] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
 
@@ -959,6 +965,28 @@ const ReceivedTasks = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showUsersDropdown]);
 
+  useEffect(() => {
+    if (!showGroupByDropdown) return;
+    function handleClickOutside(event) {
+      if (groupByDropdownRef.current && !groupByDropdownRef.current.contains(event.target)) {
+        setShowGroupByDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showGroupByDropdown]);
+
+  useEffect(() => {
+    if (!showSortDropdown) return;
+    function handleClickOutside(event) {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target)) {
+        setShowSortDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSortDropdown]);
+
   // Fetch tabs and activeTabId from backend on mount
   useEffect(() => {
     if (!user?.token) return;
@@ -1180,7 +1208,7 @@ const ReceivedTasks = () => {
               <span className="font-semibold">Group By</span>
             </button>
             {showGroupByDropdown && (
-              <div className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44 animate-fade-in" style={{minWidth: '160px'}}>
+              <div ref={groupByDropdownRef} className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44 animate-fade-in" style={{minWidth: '160px'}}>
                 <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">Group By</div>
                 <button className={`block w-full text-left px-4 py-2 rounded ${!activeTabObj.sortBy || activeTabObj.sortBy === '' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: '' }); setShowGroupByDropdown(false); }}>None</button>
                 <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'createdAt' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'createdAt' }); setShowGroupByDropdown(false); }}>Received On</button>
@@ -1190,6 +1218,96 @@ const ReceivedTasks = () => {
                 <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'clientGroup' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'clientGroup' }); setShowGroupByDropdown(false); }}>Client Group</button>
                 <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'workType' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'workType' }); setShowGroupByDropdown(false); }}>Work Type</button>
                 <button className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === 'billed' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} onClick={() => { updateActiveTab({ sortBy: 'billed' }); setShowGroupByDropdown(false); }}>Internal Work</button>
+              </div>
+            )}
+          </div>
+          
+          {/* Sort dropdown */}
+          <div className="relative flex items-center gap-2">
+            <button
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
+              onClick={() => setShowSortDropdown(v => !v)}
+              type="button"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4-4v8m0 0l-3-3m3 3l3-3" />
+              </svg>
+              <span className="font-semibold">Sort</span>
+              {activeTabObj.taskSort !== 'none' && (
+                <svg className={`h-4 w-4 text-blue-500 transform ${activeTabObj.taskSortOrder === 'asc' ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              )}
+            </button>
+            {showSortDropdown && (
+              <div ref={sortDropdownRef} className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-44 animate-fade-in" style={{minWidth: '160px'}}>
+                <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">Sort By</div>
+                <button 
+                  className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.taskSort === 'none' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
+                  onClick={() => { updateActiveTab({ taskSort: 'none' }); setShowSortDropdown(false); }}
+                >
+                  None
+                </button>
+                <button 
+                  className={`flex items-center justify-between w-full text-left px-4 py-2 rounded ${activeTabObj.taskSort === 'createdAt' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`}
+                  onClick={() => { 
+                    const newOrder = activeTabObj.taskSort === 'createdAt' && activeTabObj.taskSortOrder === 'desc' ? 'asc' : 'desc';
+                    updateActiveTab({ taskSort: 'createdAt', taskSortOrder: newOrder }); 
+                    setShowSortDropdown(false); 
+                  }}
+                >
+                  <span>Created At</span>
+                  {activeTabObj.taskSort === 'createdAt' && (
+                    <svg className={`h-4 w-4 transform ${activeTabObj.taskSortOrder === 'asc' ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  )}
+                </button>
+                <button 
+                  className={`flex items-center justify-between w-full text-left px-4 py-2 rounded ${activeTabObj.taskSort === 'inwardEntryDate' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`}
+                  onClick={() => { 
+                    const newOrder = activeTabObj.taskSort === 'inwardEntryDate' && activeTabObj.taskSortOrder === 'desc' ? 'asc' : 'desc';
+                    updateActiveTab({ taskSort: 'inwardEntryDate', taskSortOrder: newOrder }); 
+                    setShowSortDropdown(false); 
+                  }}
+                >
+                  <span>Inward Entry Date</span>
+                  {activeTabObj.taskSort === 'inwardEntryDate' && (
+                    <svg className={`h-4 w-4 transform ${activeTabObj.taskSortOrder === 'asc' ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  )}
+                </button>
+                <button 
+                  className={`flex items-center justify-between w-full text-left px-4 py-2 rounded ${activeTabObj.taskSort === 'dueDate' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`}
+                  onClick={() => { 
+                    const newOrder = activeTabObj.taskSort === 'dueDate' && activeTabObj.taskSortOrder === 'desc' ? 'asc' : 'desc';
+                    updateActiveTab({ taskSort: 'dueDate', taskSortOrder: newOrder }); 
+                    setShowSortDropdown(false); 
+                  }}
+                >
+                  <span>Due Date</span>
+                  {activeTabObj.taskSort === 'dueDate' && (
+                    <svg className={`h-4 w-4 transform ${activeTabObj.taskSortOrder === 'asc' ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  )}
+                </button>
+                <button 
+                  className={`flex items-center justify-between w-full text-left px-4 py-2 rounded ${activeTabObj.taskSort === 'targetDate' ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`}
+                  onClick={() => { 
+                    const newOrder = activeTabObj.taskSort === 'targetDate' && activeTabObj.taskSortOrder === 'desc' ? 'asc' : 'desc';
+                    updateActiveTab({ taskSort: 'targetDate', taskSortOrder: newOrder }); 
+                    setShowSortDropdown(false); 
+                  }}
+                >
+                  <span>Target Date</span>
+                  {activeTabObj.taskSort === 'targetDate' && (
+                    <svg className={`h-4 w-4 transform ${activeTabObj.taskSortOrder === 'asc' ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  )}
+                </button>
               </div>
             )}
           </div>
@@ -1326,6 +1444,8 @@ const ReceivedTasks = () => {
           storageKeyPrefix="receivedtasks"
           refetchTasks={fetchTasksAndTabState}
           sortBy={activeTabObj.sortBy}
+          taskSort={activeTabObj.taskSort}
+          taskSortOrder={activeTabObj.taskSortOrder}
           tabId={activeTabObj.id}
           tabKey="receivedTasks"
           allColumns={extendedColumns}

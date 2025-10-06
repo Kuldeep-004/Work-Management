@@ -118,6 +118,8 @@ export const useAdvancedTaskTableLogic = (props) => {
     refetchTasks,
     onEditTask,
     sortBy,
+    taskSort = 'none',
+    taskSortOrder = 'desc',
     tabKey = 'defaultTabKey',
     tabId,
     allColumns,
@@ -1375,6 +1377,11 @@ export const useAdvancedTaskTableLogic = (props) => {
       );
     }
   
+    // Apply task sorting if enabled
+    let tasksToUse = orderedTasks;
+    // Note: When grouping is enabled and sort is active, we need to sort within each group
+    // This will be handled later in the grouping logic
+
     // In the main render, before tbody:
     const groupField = (!sortBy || sortBy === 'none') ? null : (
       (columnOrder.includes('priority') && sortBy === 'priority') ? 'priority'
@@ -1386,6 +1393,51 @@ export const useAdvancedTaskTableLogic = (props) => {
       : null
     );
     const shouldGroup = groupField && sortBy !== 'createdAt';
+    
+    // Helper function to sort tasks based on taskSort
+    const sortTasks = (tasks) => {
+      if (taskSort === 'none') return tasks;
+      
+      return [...tasks].sort((a, b) => {
+        let aValue, bValue;
+        
+        switch (taskSort) {
+          case 'createdAt':
+            aValue = new Date(a.createdAt);
+            bValue = new Date(b.createdAt);
+            break;
+          case 'inwardEntryDate':
+            aValue = a.inwardEntryDate ? new Date(a.inwardEntryDate) : new Date(0);
+            bValue = b.inwardEntryDate ? new Date(b.inwardEntryDate) : new Date(0);
+            break;
+          case 'dueDate':
+            aValue = a.dueDate ? new Date(a.dueDate) : new Date(0);
+            bValue = b.dueDate ? new Date(b.dueDate) : new Date(0);
+            break;
+          case 'targetDate':
+            aValue = a.targetDate ? new Date(a.targetDate) : new Date(0);
+            bValue = b.targetDate ? new Date(b.targetDate) : new Date(0);
+            break;
+          default:
+            return 0;
+        }
+        
+        // Handle null/undefined dates
+        if (!aValue || isNaN(aValue)) aValue = new Date(0);
+        if (!bValue || isNaN(bValue)) bValue = new Date(0);
+        
+        const result = aValue - bValue;
+        return taskSortOrder === 'asc' ? result : -result;
+      });
+    };
+    
+    // If not grouping, apply sorting to all tasks
+    if (!shouldGroup && taskSort !== 'none') {
+      tasksToUse = sortTasks(orderedTasks);
+    } else if (!shouldGroup) {
+      tasksToUse = orderedTasks;
+    }
+    
     let groupedTasks = null;
     if (shouldGroup) {
       let options = {};
@@ -1403,6 +1455,13 @@ export const useAdvancedTaskTableLogic = (props) => {
           if (!groupedTasks[key]) groupedTasks[key] = [];
           groupedTasks[key].push(task);
         });
+        
+        // Apply sorting within each group
+        if (taskSort !== 'none') {
+          Object.keys(groupedTasks).forEach(groupKey => {
+            groupedTasks[groupKey] = sortTasks(groupedTasks[groupKey]);
+          });
+        }
       } else if (groupField === 'billed') {
         groupedTasks = {};
         orderedTasks.forEach(task => {
@@ -1410,8 +1469,22 @@ export const useAdvancedTaskTableLogic = (props) => {
           if (!groupedTasks[key]) groupedTasks[key] = [];
           groupedTasks[key].push(task);
         });
+        
+        // Apply sorting within each group
+        if (taskSort !== 'none') {
+          Object.keys(groupedTasks).forEach(groupKey => {
+            groupedTasks[groupKey] = sortTasks(groupedTasks[groupKey]);
+          });
+        }
       } else {
         groupedTasks = groupTasksBy(orderedTasks, groupField, options);
+        
+        // Apply sorting within each group for all other group types
+        if (taskSort !== 'none') {
+          Object.keys(groupedTasks).forEach(groupKey => {
+            groupedTasks[groupKey] = sortTasks(groupedTasks[groupKey]);
+          });
+        }
       }
     }
   
@@ -1879,6 +1952,11 @@ export const useAdvancedTaskTableLogic = (props) => {
   
     // Drag handlers for rows
     const handleRowDragStart = (e, taskId) => {
+      // Prevent dragging if task sorting is enabled and not 'none'
+      if (taskSort !== 'none') {
+        e.preventDefault();
+        return;
+      }
       setDraggedTaskId(taskId);
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', taskId);
@@ -1963,6 +2041,9 @@ export const useAdvancedTaskTableLogic = (props) => {
   
     // New function for handling group drag and drop
     const handleGroupDrop = (fromGroup, toGroup) => {
+      // Group reordering should always be allowed when groups exist
+      // Only individual task dragging should be disabled when sorting is enabled
+      
       if (!shouldGroup || !fromGroup || !toGroup || fromGroup === toGroup) return;
   
       // First, collect all tasks by their group
@@ -1994,6 +2075,13 @@ export const useAdvancedTaskTableLogic = (props) => {
         if (!tasksByGroup[groupKey]) tasksByGroup[groupKey] = [];
         tasksByGroup[groupKey].push(task);
       });
+      
+      // If task sorting is enabled, apply sorting within each group before reorganizing
+      if (taskSort !== 'none') {
+        Object.keys(tasksByGroup).forEach(groupKey => {
+          tasksByGroup[groupKey] = sortTasks(tasksByGroup[groupKey]);
+        });
+      }
       
       // Then rebuild the task order based on the new group order
       newGroupOrder.forEach(group => {
@@ -2052,6 +2140,13 @@ export const useAdvancedTaskTableLogic = (props) => {
         const gk = getGroupKey(t);
         if (!renderGroupedTasks[gk]) renderGroupedTasks[gk] = [];
         renderGroupedTasks[gk].push(t);
+      }
+
+      // Apply sorting within each group after reconstructing from orderedTasks
+      if (taskSort !== 'none') {
+        Object.keys(renderGroupedTasks).forEach(groupKey => {
+          renderGroupedTasks[groupKey] = sortTasks(renderGroupedTasks[groupKey]);
+        });
       }
 
       // Apply custom group order if available
@@ -2284,6 +2379,9 @@ export const useAdvancedTaskTableLogic = (props) => {
     groupedTasks,
     renderGroupedTasks,
     user,
+    tasksToUse, // Add this to expose the sorted tasks
+    taskSort,   // Add task sort parameters
+    taskSortOrder,
     groupOrder,
     groupOrderLoaded,
     

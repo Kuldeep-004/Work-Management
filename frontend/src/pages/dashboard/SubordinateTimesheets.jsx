@@ -268,7 +268,7 @@ const SubordinateTimesheets = () => {
   const getHierarchyInfo = () => {
     switch (user.role) {
       case 'Admin':
-        return 'Viewing all users\' timesheets';
+        return 'Viewing all user\'s timesheets';
       case 'Senior':
         return 'Viewing Senior\'s timesheets'; // swapped
       case 'Team Head':

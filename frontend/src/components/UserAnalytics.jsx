@@ -108,7 +108,7 @@ const UserAnalytics = ({ userId, userName, onClose }) => {
 
   // Chart configurations
   const timeBreakdownData = {
-    labels: ['Permission', 'Lunch', 'Billing', 'Other', 'Infrastructure', 'Discussion w/ Vivek', 'Billed Tasks', 'Unbilled Tasks'],
+    labels: ['Permission', 'Lunch', 'Billing', 'Other', 'Infrastructure', 'Discussion w/ Vivek Sir', 'Billed Tasks', 'Unbilled Tasks'],
     datasets: [{
       label: 'Hours',
       data: [

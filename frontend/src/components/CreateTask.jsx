@@ -327,7 +327,6 @@ const CreateTask = ({
         if (prev.title || prev.status !== 'yet_to_start') {
           return prev; // Keep existing data
         }
-        
         // Initialize form for first time
         return {
           title: '',
@@ -336,7 +335,7 @@ const CreateTask = ({
           clientGroup: '',
           workType: [],
           assignedTo: [],
-          priority: 'today',
+          priority: 'Today',
           inwardEntryDate: date,
           inwardEntryTime: time,
           dueDate: '',

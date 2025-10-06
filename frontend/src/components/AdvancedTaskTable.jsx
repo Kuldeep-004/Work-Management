@@ -64,6 +64,8 @@ const AdvancedTaskTable = React.memo(({
   currentUser = null,
   refetchTasks,
   sortBy,
+  taskSort = 'none',
+  taskSortOrder = 'desc',
   tabKey = 'defaultTabKey',
   tabId,
   allColumns,
@@ -116,7 +118,7 @@ const AdvancedTaskTable = React.memo(({
     shouldDisableFileActions, taskHours, visibleColumns, setVisibleColumns,
     columnWidths, setColumnWidths, columnOrder, setColumnOrder,
     storageKeyPrefix, users, currentUser, refetchTasks,
-    sortBy, tabKey, tabId, allColumns, highlightedTaskId,
+    sortBy, taskSort, taskSortOrder, tabKey, tabId, allColumns, highlightedTaskId,
     enableBulkSelection, selectedTasks, onTaskSelect, isAllSelected, onSelectAll,
     onEditTask: handleEditTask
   });
@@ -168,6 +170,7 @@ const AdvancedTaskTable = React.memo(({
     groupTasksBy, handleRowDragStart, handleRowDragOver, handleRowDrop, handleRowDragEnd,
     handleGroupDrop, startAutoScroll, updateAutoScroll, stopAutoScroll, saveOrder, saveGroupOrder, getAssignedVerifierIds, getGroupKey, loadMoreTasks,
     shouldShowLoadMore, groupField, shouldGroup, groupedTasks, renderGroupedTasks, user,
+    tasksToUse, taskSort: currentTaskSort, taskSortOrder: currentTaskSortOrder,
     groupOrder, groupOrderLoaded, isGroupedModeLoading, taskTransitions, hiddenTaskIds,
     startTaskTransition, completeTaskTransition, updateTaskWithTransition
   } = logic;
@@ -374,7 +377,7 @@ const AdvancedTaskTable = React.memo(({
                     <tr 
                       key={group + '-header'} 
                       className={`group-header ${dragOverGroup === group && draggedGroup ? 'bg-blue-100' : ''} cursor-grab`}
-                      draggable={true}
+                      draggable={true} // Groups should always be draggable when grouping is enabled
                       onDragStart={(e) => {
                         setDraggedGroup(group);
                         e.dataTransfer.setData('text/plain', group);
@@ -477,7 +480,7 @@ const AdvancedTaskTable = React.memo(({
                       <tr
                         key={task._id}
                         className={`task-row-transition border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''} ${hiddenTaskIds.has(task._id) ? 'task-row-hidden' : 'task-row-visible'}`}
-                        draggable
+                        draggable={currentTaskSort === 'none'} // Disable dragging when sorting is enabled
                         onDragStart={e => handleRowDragStart(e, task._id)}
                         onDragOver={e => handleRowDragOver(e, task._id)}
                         onDrop={e => handleRowDrop(e, task._id)}
@@ -1548,11 +1551,11 @@ const AdvancedTaskTable = React.memo(({
                   }).filter(Boolean);
                 })()
               ) : (
-                orderedTasks.slice(0, loadedTasksCount).map((task, idx) => (
+                tasksToUse.slice(0, loadedTasksCount).map((task, idx) => (
                   <tr
                     key={task._id}
                     className={`task-row-transition border-b border-gray-200 hover:bg-gray-50 transition-none ${dragOverTaskId === task._id && draggedTaskId ? DRAG_ROW_CLASS : ''} ${enableBulkSelection && selectedTasks.includes(task._id) ? 'bg-blue-50' : ''} ${highlightedTaskId === task._id ? 'bg-blue-100 shadow-lg ring-2 ring-blue-400 animate-pulse' : ''} ${hiddenTaskIds.has(task._id) ? 'task-row-hidden' : 'task-row-visible'}`}
-                    draggable
+                    draggable={currentTaskSort === 'none'} // Disable dragging when sorting is enabled
                     onDragStart={e => handleRowDragStart(e, task._id)}
                     onDragOver={e => handleRowDragOver(e, task._id)}
                     onDrop={e => handleRowDrop(e, task._id)}
@@ -2618,7 +2621,7 @@ const AdvancedTaskTable = React.memo(({
         {(() => {
           const totalTasks = shouldGroup 
             ? Object.values(groupedTasks || {}).reduce((sum, tasks) => sum + tasks.length, 0)
-            : orderedTasks.length;
+            : tasksToUse.length;
           
           return shouldShowLoadMore(totalTasks) && (
             <div className="flex justify-center">
@@ -2695,8 +2698,8 @@ const AdvancedTaskTable = React.memo(({
           >
             <button
               onClick={() => {
-                // Find task in orderedTasks first, then in original tasks array
-                const task = orderedTasks.find(t => t._id === showDeleteDropdown) || 
+                // Find task in tasksToUse first, then in original tasks array
+                const task = tasksToUse.find(t => t._id === showDeleteDropdown) || 
                            tasks.find(t => t._id === showDeleteDropdown);
                 if (task) handleDeleteFromDropdown(task);
               }}
