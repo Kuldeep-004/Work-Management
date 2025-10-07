@@ -32,7 +32,7 @@ router.get('/', protect, async (req, res) => {
 });
 
 // Create a client
-router.post('/', protect, checkRole(['Admin', 'Team Head']), async (req, res) => {
+router.post('/', protect, checkRole(['Admin', 'Team Head', 'Senior']), async (req, res) => {
   try {
     const { name, group, status, workOffered, priority } = req.body;
 
@@ -175,7 +175,7 @@ router.get('/groups', protect, async (req, res) => {
 });
 
 // Create a client group
-router.post('/groups', protect, checkRole(['Admin', 'Team Head']), async (req, res) => {
+router.post('/groups', protect, checkRole(['Admin', 'Team Head', 'Senior']), async (req, res) => {
   try {
     const { name } = req.body;
 
