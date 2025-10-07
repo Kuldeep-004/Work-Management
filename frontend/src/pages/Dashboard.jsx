@@ -20,6 +20,7 @@ import BilledTasks from './dashboard/BilledTasks';
 import UnBilledTasks from './dashboard/UnBilledTasks';
 import TaskVerification from './dashboard/TaskVerification';
 import ActivityLogs from './dashboard/ActivityLogs';
+import Tutorials from './dashboard/Tutorials';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -35,6 +36,7 @@ const Dashboard = () => {
           <Route path="task-verification" element={<TaskVerification />} />
           <Route path="activity-logs" element={<ActivityLogs />} />
           <Route path="notes" element={<Notes />} />
+          <Route path="tutorials" element={<Tutorials />} />
           <Route path="team" element={<TeamMembers />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="cost" element={<Cost />} />
@@ -69,6 +71,7 @@ const Dashboard = () => {
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
           <Route path="notes" element={<Notes />} />
+          <Route path="tutorials" element={<Tutorials />} />
           <Route path="clients" element={<Clients />} />
           <Route path="timesheets" element={<Timesheets />} />
           <Route path="*" element={<AdminDashboard/>}/>
@@ -87,6 +90,7 @@ const Dashboard = () => {
           <Route path="assigned-tasks" element={<AssignedTasks />} />
           <Route path="subordinate-timesheets" element={<SubordinateTimesheets />} />
           <Route path="notes" element={<Notes />} />
+          <Route path="tutorials" element={<Tutorials />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
@@ -119,6 +123,7 @@ const Dashboard = () => {
         <Route path="analytics" element={<Analytics />} />
         <Route path="settings" element={<Settings />} />
         <Route path="notes" element={<Notes />} />
+        <Route path="tutorials" element={<Tutorials />} />
         <Route path="clients" element={<Clients />} />
         <Route path="timesheets" element={<Timesheets />} />
         <Route path="*" element={<ReceivedTasks />} />

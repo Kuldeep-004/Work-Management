@@ -15,6 +15,7 @@ import {
   DocumentCurrencyDollarIcon,
   DocumentTextIcon,
   ClipboardDocumentCheckIcon, // Activity logs icon
+  PlayIcon, // Tutorials icon
 } from '@heroicons/react/24/outline';
 import TopBar from '../components/TopBar';
 import useOnlineStatus from '../hooks/useOnlineStatus';
@@ -121,6 +122,7 @@ const DashboardLayout = ({ children }) => {
           { id: 'task-verification', label: 'Tasks Pending For Approval', icon: ShieldCheckIcon, path: '/dashboard/task-verification' },
           { id: 'activity-logs', label: 'Activity Logs', icon: ClipboardDocumentCheckIcon, path: '/dashboard/activity-logs' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
+          { id: 'tutorials', label: 'Tutorials', icon: PlayIcon, path: '/dashboard/tutorials' },
           { id: 'team', label: 'Teams', icon: UserGroupIcon, path: '/dashboard/team' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'cost', label: 'Cost', icon: ChartBarIcon, path: '/dashboard/cost' },
@@ -138,6 +140,7 @@ const DashboardLayout = ({ children }) => {
           // { id: 'assigned-tasks', label: 'Task Assigned By Me', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' }, // HIDDEN TEMPORARILY
           { id: 'timesheets', label: 'My Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
+          { id: 'tutorials', label: 'Tutorials', icon: PlayIcon, path: '/dashboard/tutorials' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
           { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' },
@@ -153,6 +156,7 @@ const DashboardLayout = ({ children }) => {
           { id: 'subordinate-timesheets', label: 'Subordinate Timesheets', icon: ClipboardDocumentListIcon, path: '/dashboard/subordinate-timesheets' },
           { id: 'activity-logs', label: 'Activity Logs', icon: ClipboardDocumentCheckIcon, path: '/dashboard/activity-logs' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
+          { id: 'tutorials', label: 'Tutorials', icon: PlayIcon, path: '/dashboard/tutorials' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'clients', label: 'Clients', icon: BuildingOfficeIcon, path: '/dashboard/clients' },
           { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
@@ -166,6 +170,7 @@ const DashboardLayout = ({ children }) => {
           // { id: 'assigned-tasks', label: 'Task Assigned By Me', icon: ClipboardDocumentListIcon, path: '/dashboard/assigned-tasks' }, // HIDDEN TEMPORARILY
           { id: 'timesheets', label: 'Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
+          { id: 'tutorials', label: 'Tutorials', icon: PlayIcon, path: '/dashboard/tutorials' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
           { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' }
@@ -176,6 +181,7 @@ const DashboardLayout = ({ children }) => {
           { id: 'received-tasks', label: 'Tasks', icon: ClipboardDocumentListIcon, path: '/dashboard/received-tasks' },
           { id: 'timesheets', label: 'Timesheets', icon: ClockIcon, path: '/dashboard/timesheets' },
           { id: 'notes', label: 'Notes', icon: CheckCircleIcon, path: '/dashboard/notes' },
+          { id: 'tutorials', label: 'Tutorials', icon: PlayIcon, path: '/dashboard/tutorials' },
           { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, path: '/dashboard/announcements' },
           { id: 'analytics', label: 'Analytics', icon: ChartBarIcon, path: '/dashboard/analytics' },
           { id: 'settings', label: 'Settings', icon: Cog6ToothIcon, path: '/dashboard/settings' },
