@@ -19,13 +19,13 @@ const automationSchema = new mongoose.Schema({
     clientGroup: String,
     workType: [String],
     assignedTo: [mongoose.Schema.Types.ObjectId],
+    assignedBy: mongoose.Schema.Types.ObjectId, // Original assignedBy from the source task
     priority: String,
     status: { type: String, default: 'yet_to_start' }, // Add status field
     inwardEntryDate: String,
     inwardEntryTime: String,
     dueDate: String,
     targetDate: String,
-    verificationAssignedTo: mongoose.Schema.Types.ObjectId,
     billed: Boolean,
     verificationStatus: {
       type: String,
@@ -45,6 +45,10 @@ const automationSchema = new mongoose.Schema({
       uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       uploadedAt: { type: Date, default: Date.now }
     }]
+    // Deliberately excluding verification fields like:
+    // - verificationAssignedTo, secondVerificationAssignedTo, etc.
+    // - comments array
+    // - guides and other verification-related fields
   }],
   createdAt: { type: Date, default: Date.now },
   lastRunDate: { type: Date }, // Track when automation was last run for the month

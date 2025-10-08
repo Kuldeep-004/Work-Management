@@ -156,6 +156,14 @@ export const useAdvancedTaskTableLogic = (props) => {
     // State for custom delete confirmation modal
     const [deleteConfirmTask, setDeleteConfirmTask] = useState(null);
     
+    // Automation context menu state
+    const automationDropdownRef = useRef(null);
+    const [showAutomationDropdown, setShowAutomationDropdown] = useState(null);
+    const [automationDropdownPosition, setAutomationDropdownPosition] = useState({ x: 0, y: 0 });
+    const [automations, setAutomations] = useState([]);
+    const [automationsLoaded, setAutomationsLoaded] = useState(false);
+    const [addingToAutomation, setAddingToAutomation] = useState(false);
+    
     // Pagination state for infinite scroll
     const [loadedTasksCount, setLoadedTasksCount] = useState(25);
     const TASKS_PER_BATCH = 25;
@@ -266,6 +274,30 @@ export const useAdvancedTaskTableLogic = (props) => {
       };
   
       fetchCustomColumns();
+    }, [user?.token]);
+
+    // Fetch automations for context menu
+    useEffect(() => {
+      const fetchAutomations = async () => {
+        if (!user?.token) return;
+        
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/automations`, {
+            headers: { Authorization: `Bearer ${user.token}` },
+          });
+          if (response.ok) {
+            const automationsData = await response.json();
+            setAutomations(Array.isArray(automationsData) ? automationsData : []);
+          }
+        } catch (error) {
+          console.error('Error fetching automations:', error);
+          setAutomations([]);
+        } finally {
+          setAutomationsLoaded(true);
+        }
+      };
+
+      fetchAutomations();
     }, [user?.token]);
   
     // Get current priority options (dynamic + static fallback)
@@ -379,19 +411,24 @@ export const useAdvancedTaskTableLogic = (props) => {
         if (showDeleteDropdown && deleteDropdownRef.current && !deleteDropdownRef.current.contains(event.target)) {
           setShowDeleteDropdown(null);
         }
+        // Automation dropdown for No column
+        if (showAutomationDropdown && automationDropdownRef.current && !automationDropdownRef.current.contains(event.target)) {
+          setShowAutomationDropdown(null);
+        }
       }
       document.addEventListener('mousedown', handleClickOutside);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
       };
-    }, [editingPriorityTaskId, editingVerificationTaskId, editingStatusTaskId, editingVerifierTaskId, openGuideDropdownTaskId, editingCustomTagsTaskId, showDeleteDropdown]);
+    }, [editingPriorityTaskId, editingVerificationTaskId, editingStatusTaskId, editingVerifierTaskId, openGuideDropdownTaskId, editingCustomTagsTaskId, showDeleteDropdown, showAutomationDropdown]);
   
-    // Add scroll event listener to close delete dropdown
+    // Add scroll event listener to close delete dropdown only
     useEffect(() => {
       function handleScroll() {
         if (showDeleteDropdown) {
           setShowDeleteDropdown(null);
         }
+        // Don't close automation dropdown on scroll - users need to scroll through automation list
       }
       
       if (showDeleteDropdown) {
@@ -1314,24 +1351,30 @@ export const useAdvancedTaskTableLogic = (props) => {
       }
     };
   
-    // Handle right click on No column (show delete dropdown)
+    // Handle right click on No column (show context menu with delete and automation options)
     const handleNoColumnRightClick = (e, task) => {
       e.preventDefault();
       e.stopPropagation();
       
       if (shouldDisableActions && shouldDisableActions(task)) return;
       
-      // Check role permissions for delete dropdown - only Admin and Team Head
-      if (!['Team Head', 'Admin'].includes(user?.role)) {
-        return;
-      }
-  
       const rect = e.target.getBoundingClientRect();
-      setDeleteDropdownPosition({
-        x: rect.right,
-        y: rect.top
-      });
-      setShowDeleteDropdown(task._id);
+      
+      // For Admin and Team Head, show full context menu with both delete and automation options
+      if (['Team Head', 'Admin'].includes(user?.role)) {
+        setDeleteDropdownPosition({
+          x: rect.right,
+          y: rect.top
+        });
+        setShowDeleteDropdown(task._id);
+      } else {
+        // For other roles, show only automation options
+        setAutomationDropdownPosition({
+          x: rect.right,
+          y: rect.top
+        });
+        setShowAutomationDropdown(task._id);
+      }
     };
   
     // Show custom delete confirmation modal
@@ -1354,6 +1397,115 @@ export const useAdvancedTaskTableLogic = (props) => {
     // Close delete dropdown
     const closeDeleteDropdown = () => {
       setShowDeleteDropdown(null);
+    };
+
+    // Handle opening automation dropdown from delete dropdown
+    const handleShowAutomationFromDelete = (task) => {
+      setShowDeleteDropdown(null);
+      const rect = document.querySelector(`[data-task-id="${task._id}"]`)?.getBoundingClientRect();
+      if (rect) {
+        setAutomationDropdownPosition({
+          x: rect.right,
+          y: rect.top
+        });
+        setShowAutomationDropdown(task._id);
+      }
+    };
+
+    // Close automation dropdown
+    const closeAutomationDropdown = () => {
+      setShowAutomationDropdown(null);
+    };
+
+    // Handle adding task to automation
+    const handleAddToAutomation = async (task, automationId) => {
+      if (addingToAutomation) return; // Prevent double clicks
+      
+      setAddingToAutomation(true);
+      setShowAutomationDropdown(null);
+      
+      try {
+        // Prepare assignedTo array - handle different formats
+        let assignedToArray = [];
+        if (task.assignedTo) {
+          if (Array.isArray(task.assignedTo)) {
+            assignedToArray = task.assignedTo.map(u => {
+              if (typeof u === 'string') return u;
+              if (u && u._id) return u._id;
+              return u;
+            }).filter(Boolean);
+          } else {
+            // Single assignedTo value
+            const singleAssignee = typeof task.assignedTo === 'string' 
+              ? task.assignedTo 
+              : (task.assignedTo._id || task.assignedTo);
+            if (singleAssignee) {
+              assignedToArray = [singleAssignee];
+            }
+          }
+        }
+
+        // Ensure we have at least one assignee
+        if (assignedToArray.length === 0) {
+          throw new Error('Task must have at least one assignee to add to automation');
+        }
+
+        // Prepare assignedBy - preserve the original assignedBy from the task
+        let assignedByValue = null;
+        if (task.assignedBy) {
+          assignedByValue = typeof task.assignedBy === 'string' 
+            ? task.assignedBy 
+            : (task.assignedBy._id || task.assignedBy);
+        }
+
+        // Prepare task data for automation template
+        // Exclude verifiers, guides, comments, and verification-related fields
+        const taskTemplate = {
+          title: task.title,
+          description: task.description || '',
+          clientName: task.clientName,
+          clientGroup: task.clientGroup,
+          workType: Array.isArray(task.workType) ? task.workType : [task.workType].filter(Boolean),
+          assignedTo: assignedToArray,
+          assignedBy: assignedByValue, // Preserve original assignedBy
+          priority: task.priority,
+          status: task.status || 'yet_to_start',
+          inwardEntryDate: task.inwardEntryDate ? new Date(task.inwardEntryDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          inwardEntryTime: task.inwardEntryDate ? new Date(task.inwardEntryDate).toTimeString().slice(0, 5) : '09:00',
+          dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : null,
+          targetDate: task.targetDate ? new Date(task.targetDate).toISOString().split('T')[0] : null,
+          billed: task.billed !== undefined ? task.billed : true
+          // Deliberately excluding:
+          // - verificationAssignedTo, secondVerificationAssignedTo, thirdVerificationAssignedTo, etc.
+          // - comments array
+          // - files array (automation should create fresh tasks without existing files)
+          // - verificationStatus (will be set to 'pending' by backend)
+          // - guides and other verification-related fields
+        };
+
+        const response = await fetch(`${API_BASE_URL}/api/automations/${automationId}/tasks`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${user.token}`,
+          },
+          body: JSON.stringify(taskTemplate),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to add task to automation');
+        }
+
+        const result = await response.json();
+        toast.success(`Task "${task.title}" added to automation successfully! Template is pending approval.`);
+        
+      } catch (error) {
+        console.error('Error adding task to automation:', error);
+        toast.error(error.message || 'Failed to add task to automation');
+      } finally {
+        setAddingToAutomation(false);
+      }
     };
   
     // Helper to group tasks by a field
@@ -2207,6 +2359,17 @@ export const useAdvancedTaskTableLogic = (props) => {
     deleteDropdownRef,
     deleteConfirmTask,
     setDeleteConfirmTask,
+    automationDropdownRef,
+    showAutomationDropdown,
+    setShowAutomationDropdown,
+    automationDropdownPosition,
+    setAutomationDropdownPosition,
+    automations,
+    setAutomations,
+    automationsLoaded,
+    setAutomationsLoaded,
+    addingToAutomation,
+    setAddingToAutomation,
   loadedTasksCount,
   setLoadedTasksCount,
     TASKS_PER_BATCH,
@@ -2357,6 +2520,9 @@ export const useAdvancedTaskTableLogic = (props) => {
     handleConfirmDelete,
     handleCancelDelete,
     closeDeleteDropdown,
+    handleShowAutomationFromDelete,
+    closeAutomationDropdown,
+    handleAddToAutomation,
     groupTasksBy,
     handleRowDragStart,
     handleRowDragOver,

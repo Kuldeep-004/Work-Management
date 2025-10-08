@@ -236,6 +236,7 @@ router.post('/:id/tasks', protect, async (req, res) => {
     if (!automation) return res.status(404).json({ message: 'Automation not found' });
 
     // Save task template data to automation, not as real tasks
+    // Exclude verification-related fields (verifiers, guides, comments)
     const {
       title,
       description,
@@ -243,12 +244,12 @@ router.post('/:id/tasks', protect, async (req, res) => {
       clientGroup,
       workType,
       assignedTo,
+      assignedBy, // Add assignedBy field
       priority,
       inwardEntryDate,
       inwardEntryTime,
       dueDate,
       targetDate,
-      verificationAssignedTo,
       billed
     } = req.body;
 
@@ -266,6 +267,7 @@ router.post('/:id/tasks', protect, async (req, res) => {
     }
 
     // Create a new task template object
+    // Exclude verification-related fields (verifiers, guides, comments)
     const newTaskTemplate = {
       title,
       description,
@@ -273,14 +275,18 @@ router.post('/:id/tasks', protect, async (req, res) => {
       clientGroup,
       workType: Array.isArray(workType) ? workType : [],
       assignedTo: Array.isArray(assignedTo) ? assignedTo : [assignedTo].filter(Boolean),
+      assignedBy, // Preserve original assignedBy
       priority,
       inwardEntryDate,
       inwardEntryTime,
       dueDate,
       targetDate,
-      verificationAssignedTo,
       billed: billed !== undefined ? billed : false,
       verificationStatus: 'pending' // Explicitly set pending status for approval
+      // Deliberately excluding verification fields:
+      // - verificationAssignedTo, secondVerificationAssignedTo, etc.
+      // - comments, files arrays
+      // - guides and other verification-related fields
     };
 
     try {

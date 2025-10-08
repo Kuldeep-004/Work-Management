@@ -179,13 +179,13 @@ export const runAutomationCheck = async (isManual = true) => {
           clientGroup,
           workType,
           assignedTo,
+          assignedBy, // Get original assignedBy from template
           priority,
           status, // Add status field
           inwardEntryDate,
           inwardEntryTime,
           dueDate,
           targetDate,
-          verificationAssignedTo,
           billed
         } = template || {};
         
@@ -255,32 +255,18 @@ export const runAutomationCheck = async (isManual = true) => {
             continue;
           }
           
-          let verificationAssignedToId = verificationAssignedTo;
-          if (verificationAssignedToId) {
-            try {
-              if (mongoose.Types.ObjectId.isValid(verificationAssignedToId)) {
-                verificationAssignedToId = new mongoose.Types.ObjectId(verificationAssignedToId);
-              } else {
-                console.warn(`[AutomationScheduler] Invalid verificationAssignedTo ID: ${verificationAssignedToId}`);
-                verificationAssignedToId = undefined;
-              }
-            } catch (err) {
-              console.warn(`[AutomationScheduler] Invalid verificationAssignedTo ID: ${verificationAssignedToId}`, err);
-              verificationAssignedToId = undefined;
-            }
-          }
-          
-          let assignedById = automation.createdBy;
+          // Use template's assignedBy if available, otherwise fall back to automation.createdBy
+          let assignedById = assignedBy || automation.createdBy;
           if (assignedById) {
             try {
               if (mongoose.Types.ObjectId.isValid(assignedById)) {
                 assignedById = new mongoose.Types.ObjectId(assignedById);
               } else {
-                console.warn(`[AutomationScheduler] Invalid createdBy ID: ${assignedById}`);
+                console.warn(`[AutomationScheduler] Invalid assignedBy ID: ${assignedById}`);
                 assignedById = undefined;
               }
             } catch (err) {
-              console.warn(`[AutomationScheduler] Invalid createdBy ID: ${assignedById}`, err);
+              console.warn(`[AutomationScheduler] Invalid assignedBy ID: ${assignedById}`, err);
               assignedById = undefined;
             }
           }
@@ -299,10 +285,13 @@ export const runAutomationCheck = async (isManual = true) => {
             // Only include dueDate and targetDate if they were specified in the template
             ...(dueDate ? { dueDate: DateTime.fromFormat(dueDate, 'yyyy-MM-dd', { zone: 'Asia/Kolkata' }).toJSDate() } : {}),
             ...(targetDate ? { targetDate: DateTime.fromFormat(targetDate, 'yyyy-MM-dd', { zone: 'Asia/Kolkata' }).toJSDate() } : {}),
-            verificationAssignedTo: verificationAssignedToId,
             billed: billed !== undefined ? billed : true,
             selfVerification: false,
             verificationStatus: 'completed'
+            // Deliberately excluding verification fields:
+            // - verificationAssignedTo, secondVerificationAssignedTo, etc.
+            // - comments, files arrays (automation creates fresh tasks)
+            // - guides and other verification-related fields
           });
           
           try {

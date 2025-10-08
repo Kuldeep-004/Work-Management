@@ -167,6 +167,11 @@ const AdvancedTaskTable = React.memo(({
     handleVerificationWithRemarks, closeRemarksModal, handleStatusChangeLocal,
     handleDeleteTask, handleNoColumnLeftClick, handleNoColumnRightClick,
     handleDeleteFromDropdown, handleConfirmDelete, handleCancelDelete, closeDeleteDropdown,
+    handleShowAutomationFromDelete, closeAutomationDropdown, handleAddToAutomation,
+    automationDropdownRef, showAutomationDropdown, setShowAutomationDropdown,
+    automationDropdownPosition, setAutomationDropdownPosition, automations,
+    setAutomations, automationsLoaded, setAutomationsLoaded, addingToAutomation,
+    setAddingToAutomation,
     groupTasksBy, handleRowDragStart, handleRowDragOver, handleRowDrop, handleRowDragEnd,
     handleGroupDrop, startAutoScroll, updateAutoScroll, stopAutoScroll, saveOrder, saveGroupOrder, getAssignedVerifierIds, getGroupKey, loadMoreTasks,
     shouldShowLoadMore, groupField, shouldGroup, groupedTasks, renderGroupedTasks, user,
@@ -502,7 +507,8 @@ const AdvancedTaskTable = React.memo(({
                         <td
                           className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-pointer hover:bg-gray-100"
                           style={{width: '48px', minWidth: '48px', textAlign: 'right'}}
-                          title="Left click to edit, right click for delete option"
+                          title="Left click to edit, right click for more options"
+                          data-task-id={task._id}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleNoColumnLeftClick(task);
@@ -1577,7 +1583,8 @@ const AdvancedTaskTable = React.memo(({
                     <td
                       className="px-2 py-1 text-sm font-normal align-middle bg-white border-r border-gray-200 text-gray-500 cursor-pointer hover:bg-gray-100"
                       style={{width: '48px', minWidth: '48px', textAlign: 'right'}}
-                      title="Left click to edit, right click for delete option"
+                      title="Left click to edit, right click for more options"
+                      data-task-id={task._id}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleEditTask(task);
@@ -2685,7 +2692,7 @@ const AdvancedTaskTable = React.memo(({
           loading={remarksModalLoading}
         />
         
-        {/* Delete Dropdown for No Column */}
+        {/* Context Menu Dropdown for No Column (Delete + Automation) */}
         {showDeleteDropdown && (
           <div
             ref={deleteDropdownRef}
@@ -2693,20 +2700,96 @@ const AdvancedTaskTable = React.memo(({
             style={{
               top: deleteDropdownPosition.y,
               left: deleteDropdownPosition.x,
-              minWidth: '120px'
+              minWidth: '160px'
             }}
           >
             <button
               onClick={() => {
-                // Find task in tasksToUse first, then in original tasks array
+                const task = tasksToUse.find(t => t._id === showDeleteDropdown) || 
+                           tasks.find(t => t._id === showDeleteDropdown);
+                if (task) handleShowAutomationFromDelete(task);
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-purple-600 hover:bg-purple-50 hover:text-purple-800 transition-colors flex items-center"
+              disabled={addingToAutomation}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Add to Automation
+            </button>
+            <hr className="border-gray-100" />
+            <button
+              onClick={() => {
                 const task = tasksToUse.find(t => t._id === showDeleteDropdown) || 
                            tasks.find(t => t._id === showDeleteDropdown);
                 if (task) handleDeleteFromDropdown(task);
               }}
-              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 hover:text-red-800 transition-colors"
+              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 hover:text-red-800 transition-colors flex items-center"
             >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
               Delete Task
             </button>
+          </div>
+        )}
+
+        {/* Automation Selection Dropdown */}
+        {showAutomationDropdown && (
+          <div
+            ref={automationDropdownRef}
+            className="fixed bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-64 overflow-y-auto"
+            style={{
+              top: automationDropdownPosition.y,
+              left: automationDropdownPosition.x,
+              minWidth: '200px'
+            }}
+          >
+            <div className="px-3 py-2 border-b border-gray-100">
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Select Automation
+              </div>
+            </div>
+            {automationsLoaded ? (
+              automations.length > 0 ? (
+                automations.map((automation) => (
+                  <button
+                    key={automation._id}
+                    onClick={() => {
+                      const task = tasksToUse.find(t => t._id === showAutomationDropdown) || 
+                                 tasks.find(t => t._id === showAutomationDropdown);
+                      if (task) handleAddToAutomation(task, automation._id);
+                    }}
+                    disabled={addingToAutomation}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-purple-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="font-medium text-gray-900">{automation.name}</div>
+                    {automation.description && (
+                      <div className="text-xs text-gray-500 mt-1 truncate">
+                        {automation.description}
+                      </div>
+                    )}
+                    <div className="text-xs text-gray-400 mt-1">
+                      Trigger: {automation.triggerType} 
+                      {automation.triggerType === 'dayOfMonth' && ` (Day ${automation.dayOfMonth})`}
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="px-3 py-4 text-sm text-gray-500 text-center">
+                  No automations available
+                </div>
+              )
+            ) : (
+              <div className="px-3 py-4 text-sm text-gray-500 text-center">
+                Loading automations...
+              </div>
+            )}
+            {addingToAutomation && (
+              <div className="px-3 py-2 text-xs text-blue-600 text-center border-t border-gray-100">
+                Adding to automation...
+              </div>
+            )}
           </div>
         )}
 
