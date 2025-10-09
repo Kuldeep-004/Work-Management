@@ -125,6 +125,11 @@ router.get('/current-timeslot', protect, (req, res) => {
 // Get user's assigned tasks for timesheet (only latest eligible user)
 router.get('/my-tasks', protect, async (req, res) => {
   try {
+    // Ensure user exists and has an ID
+    if (!req.user?._id) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
     // Get all tasks where user is assignedTo, any verifier, or a guide
     const tasks = await Task.find({
       $or: [
@@ -143,10 +148,20 @@ router.get('/my-tasks', protect, async (req, res) => {
 
     // Filter: if user is a guide, always include; else apply assignedTo/verifier rule
     const filteredTasks = tasks.filter(task => {
+      // Ensure task exists
+      if (!task) return false;
+
+      const userIdStr = req.user._id?.toString();
+      if (!userIdStr) return false;
+
       // If user is a guide for this task, always allow
-      if (Array.isArray(task.guides) && task.guides.map(id => id.toString()).includes(req.user._id.toString())) {
-        return true;
+      if (Array.isArray(task.guides) && task.guides.length > 0) {
+        const isGuide = task.guides.some(guideId => 
+          guideId && guideId.toString() === userIdStr
+        );
+        if (isGuide) return true;
       }
+
       // Otherwise, apply assignedTo/verifier rule
       const verifiers = [
         task.verificationAssignedTo,
@@ -154,7 +169,8 @@ router.get('/my-tasks', protect, async (req, res) => {
         task.thirdVerificationAssignedTo,
         task.fourthVerificationAssignedTo,
         task.fifthVerificationAssignedTo
-      ];
+      ].filter(Boolean); // Remove null/undefined values
+
       let lastAssignedVerifier = null;
       for (let i = verifiers.length - 1; i >= 0; i--) {
         if (verifiers[i]) {
@@ -163,18 +179,19 @@ router.get('/my-tasks', protect, async (req, res) => {
         }
       }
 
-      if (task.assignedTo && task.assignedTo.toString() === req.user._id.toString()) {
+      // Check if user is assigned to the task
+      if (task.assignedTo && task.assignedTo.toString() === userIdStr) {
         return true;
       }
 
-      return lastAssignedVerifier === req.user._id.toString();
-
-      return false;
+      // Check if user is the last assigned verifier
+      return lastAssignedVerifier && lastAssignedVerifier === userIdStr;
     });
 
-    res.json(filteredTasks);
+    res.json(filteredTasks || []);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error in /my-tasks endpoint:', error);
+    res.status(500).json({ message: error?.message || 'Internal server error' });
   }
 });
 

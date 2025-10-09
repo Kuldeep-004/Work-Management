@@ -5,6 +5,7 @@ import { API_BASE_URL } from '../../apiConfig';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import '../../styles/timesheet-calendar.css';
+import SearchableTaskDropdown from '../../components/SearchableTaskDropdown';
 
 // Utility to normalize timesheet entries but preserve populated task data
 function normalizeTimesheetTasks(ts) {
@@ -881,24 +882,13 @@ const Timesheets = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Task
                       </label>
-                      <select
+                      <SearchableTaskDropdown
+                        tasks={tasks}
                         value={entry.task || ''}
-                        onChange={e => handleEntryChange(key, 'task', e.target.value)}
-                        className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select task</option>
-                        <option value="other">Other</option>
-                        <option value="permission">Permission</option>
-                        <option value="billing">Billing</option>
-                        <option value="lunch">Lunch</option>
-                        <option value="infrastructure-issues">Infrastructure Issues</option>
-                        <option value="discussion-with-vivek">Discussion With Vivek Sir</option>
-                        {tasks.map(task => (
-                          <option key={task._id} value={task._id}>
-                            {task.title}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(taskId) => handleEntryChange(key, 'task', taskId)}
+                        placeholder="Select task"
+                        disabled={false}
+                      />
                     </div>
                     
                     {/* Work Description */}
@@ -1156,68 +1146,48 @@ const Timesheets = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Task
                       </label>
-                      <select
-                        value={taskValue}
-                        onChange={e => isEditing && handleEntryChange(key, 'task', e.target.value)}
-                        className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        disabled={!isEditing || isLocked}
-                      >
-                        <option value="">Select task</option>
-                        <option value="other">Other</option>
-                        <option value="permission">Permission</option>
-                        <option value="billing">Billing</option>
-                        <option value="lunch">Lunch</option>
-                        <option value="infrastructure-issues">Infrastructure Issues</option>
-                        <option value="discussion-with-vivek">Discussion With Vivek Sir</option>
-                        {/* Build dropdown options: all allowed tasks, plus the selected one if missing */}
-                        {(() => {
-                          const selectedTaskId = taskValue;
-                          const taskIds = tasks.map(t => t._id);
-                          let options = [...tasks];
-                          
-                          // If the selected task is not in current tasks list but we have it populated
-                          if (selectedTaskId && !taskIds.includes(selectedTaskId) && !isSpecialTaskType(selectedTaskId)) {
-                            let selectedTaskObj = null;
-                            
-                            // If we have a populated task object, use it
-                            if (entry.task && typeof entry.task === 'object' && entry.task._id === selectedTaskId) {
-                              selectedTaskObj = entry.task;
-                            } else {
-                              // Fallback: try to find it in other entries
-                              for (const e of timesheet.entries) {
-                                if (e.task && typeof e.task === 'object' && e.task._id === selectedTaskId) {
-                                  selectedTaskObj = e.task;
-                                  break;
-                                }
+                      {(() => {
+                        const selectedTaskId = taskValue;
+                        const taskIds = tasks.map(t => t._id);
+                        let allTaskOptions = [...tasks];
+                        let selectedTaskObj = null;
+                        
+                        // If the selected task is not in current tasks list but we have it populated
+                        if (selectedTaskId && !taskIds.includes(selectedTaskId) && !isSpecialTaskType(selectedTaskId)) {
+                          // If we have a populated task object, use it
+                          if (entry.task && typeof entry.task === 'object' && entry.task._id === selectedTaskId) {
+                            selectedTaskObj = entry.task;
+                          } else {
+                            // Fallback: try to find it in other entries
+                            for (const e of timesheet.entries) {
+                              if (e.task && typeof e.task === 'object' && e.task._id === selectedTaskId) {
+                                selectedTaskObj = e.task;
+                                break;
                               }
                             }
-                            
-                            // Last resort: create a placeholder
-                            if (!selectedTaskObj) {
-                              selectedTaskObj = { _id: selectedTaskId, title: '(Old/Completed Task)' };
-                            }
-                            
-                            options = [...options, selectedTaskObj];
                           }
                           
-                          const uniqueOptions = Object.values(options.reduce((acc, t) => {
-                            acc[t._id] = t;
-                            return acc;
-                          }, {}));
+                          // Last resort: create a placeholder
+                          if (!selectedTaskObj) {
+                            selectedTaskObj = { _id: selectedTaskId, title: '(Old/Completed Task)' };
+                          }
                           
-                          uniqueOptions.sort((a, b) => {
-                            if (a._id === selectedTaskId) return -1;
-                            if (b._id === selectedTaskId) return 1;
-                            return 0;
-                          });
-                          
-                          return uniqueOptions.map(task => (
-                            <option key={task._id} value={task._id}>
-                              {task.title}
-                            </option>
-                          ));
-                        })()}
-                      </select>
+                          allTaskOptions = [...allTaskOptions, selectedTaskObj];
+                        } else if (entry.task && typeof entry.task === 'object') {
+                          selectedTaskObj = entry.task;
+                        }
+                        
+                        return (
+                          <SearchableTaskDropdown
+                            tasks={allTaskOptions}
+                            value={taskValue}
+                            onChange={(taskId) => isEditing && handleEntryChange(key, 'task', taskId)}
+                            placeholder="Select task"
+                            disabled={!isEditing || isLocked}
+                            selectedTaskObj={selectedTaskObj}
+                          />
+                        );
+                      })()}
                     </div>
                     
                     {/* Work Description */}
