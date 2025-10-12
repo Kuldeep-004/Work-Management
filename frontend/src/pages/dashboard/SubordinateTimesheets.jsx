@@ -638,8 +638,9 @@ const SubordinateTimesheets = () => {
               </div>
               <div className="divide-y divide-gray-200">
                 {sheets.map((timesheet) => (
-                  <div key={timesheet._id} className="p-6">
-                    <div className="flex items-start justify-between mb-4">
+                  <div key={timesheet._id} className="px-2 sm:px-4 md:px-6 p-6">
+                    {/* Desktop/Tablet Header */}
+                    <div className="hidden md:flex items-start justify-between mb-4">
                       <div className="flex items-center space-x-4">
                         <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
                           {timesheet.user.photo?.url ? (
@@ -702,7 +703,75 @@ const SubordinateTimesheets = () => {
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto w-full">
+                    {/* Mobile Header */}
+                    <div className="md:hidden mb-4 space-y-3">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {timesheet.user.photo?.url ? (
+                            <img 
+                              src={timesheet.user.photo.url} 
+                              alt={`${timesheet.user.firstName} ${timesheet.user.lastName}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-lg font-medium text-blue-600">
+                              {timesheet.user.firstName?.[0]}{timesheet.user.lastName?.[0]}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900">
+                            {timesheet.user.firstName} {timesheet.user.lastName}
+                          </h3>
+                          <p className="text-sm text-gray-600">{timesheet.user.email}</p>
+                        </div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleColor(timesheet.user.role)}`}>
+                          {timesheet.user.role}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-600">Total Time</p>
+                          <p className="text-xl font-bold text-blue-600">{
+                            formatTime(timesheet.entries
+                              .filter(entry => entry.approvalStatus === 'pending' || entry.approvalStatus === 'accepted')
+                              .filter(entry => entry.manualTaskName !== 'Permission' && entry.task !== 'permission') // Exclude permission
+                              .reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0)
+                            )
+                          }</p>
+                        </div>
+                        <div className="flex flex-col space-y-2">
+                          <button
+                            onClick={() => handleAcceptAllEntries(timesheet._id)}
+                            className="bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600 text-sm font-medium"
+                            title="Accept all pending and rejected timeslots"
+                          >
+                            Accept All
+                          </button>
+                          {timesheet.isCompleted ? (
+                            <button
+                              onClick={() => handleReturnTimesheet(timesheet._id)}
+                              className="bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600 text-sm font-medium"
+                              title="Return timesheet for editing"
+                            >
+                              Return
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              className="bg-gray-300 text-gray-500 px-3 py-1 rounded-lg text-sm font-medium cursor-not-allowed"
+                              title="Can only return submitted timesheet"
+                            >
+                              Return
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Desktop/Tablet Table View */}
+                    <div className="hidden md:block overflow-x-auto w-full">
                       <table className="min-w-full divide-y divide-gray-200 border">
                         <thead className="bg-gray-50">
                           <tr>
@@ -716,7 +785,7 @@ const SubordinateTimesheets = () => {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {timesheet.entries.length === 0 ? (
-                            <tr><td colSpan="5" className="text-center text-gray-400 py-3">No Entries</td></tr>
+                            <tr><td colSpan="6" className="text-center text-gray-400 py-3">No Entries</td></tr>
                           ) : (
                             [...timesheet.entries]
                               .sort((a, b) => {
@@ -765,6 +834,75 @@ const SubordinateTimesheets = () => {
                         </tbody>
                       </table>
                     </div>
+
+                    {/* Mobile Card View */}
+                    <div className="md:hidden space-y-3">
+                      {timesheet.entries.length === 0 ? (
+                        <div className="text-center text-gray-400 py-6">No Entries</div>
+                      ) : (
+                        [...timesheet.entries]
+                          .sort((a, b) => {
+                            // Sort by start time (earliest to latest)
+                            if (!a.startTime || !b.startTime) return 0;
+                            const [aHour, aMin] = a.startTime.split(':').map(Number);
+                            const [bHour, bMin] = b.startTime.split(':').map(Number);
+                            const aTime = aHour * 60 + aMin;
+                            const bTime = bHour * 60 + bMin;
+                            return aTime - bTime;
+                          })
+                          .map((entry, idx) => {
+                            let statusColor = '';
+                            if (entry.approvalStatus === 'accepted') statusColor = 'text-green-600 font-semibold';
+                            else if (entry.approvalStatus === 'rejected') statusColor = 'text-red-600 font-semibold';
+                            else statusColor = 'text-gray-700';
+                            
+                            return (
+                              <div 
+                                key={entry._id || idx} 
+                                className="bg-gray-50 border border-gray-200 rounded-lg p-4 cursor-pointer hover:bg-gray-100 transition-colors"
+                                onClick={() => handleApproveEntry(entry._id)}
+                              >
+                                <div className="flex justify-between items-start mb-3">
+                                  <div className="flex-1">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-sm font-medium text-gray-800">
+                                        {entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : 'N/A'}
+                                      </span>
+                                      <span className="text-sm font-bold text-blue-600">
+                                        {formatTime(getMinutesBetween(entry.startTime, entry.endTime))}
+                                      </span>
+                                    </div>
+                                    <h4 className="font-medium text-gray-900 mb-1">
+                                      {entry.task
+                                        ? (entry.task.title === 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR' ? 'INFRASTRUCTURE ISSUES' : entry.task.title)
+                                        : (entry.manualTaskName === 'INFRASTRUCTURE ISSUES & DISCUSSION WITH VIVEK SIR' ? 'INFRASTRUCTURE ISSUES' : (entry.manualTaskName || 'N/A'))
+                                      }
+                                    </h4>
+                                    {entry.workDescription && (
+                                      <p className="text-sm text-gray-600 mb-2" style={{ whiteSpace: 'pre-wrap' }}>
+                                        {entry.workDescription}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className={`text-sm font-medium ${statusColor}`}>
+                                    {entry.approvalStatus === 'accepted' ? 'Accepted' : entry.approvalStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                                  </span>
+                                  {entry.approvalStatus !== 'rejected' && (
+                                    <button
+                                      className="bg-red-500 text-white px-3 py-1 rounded text-sm font-medium hover:bg-red-600"
+                                      onClick={e => { e.stopPropagation(); handleRejectEntry(entry._id); }}
+                                    >
+                                      Reject
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -776,33 +914,43 @@ const SubordinateTimesheets = () => {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="mt-6 flex justify-center">
-          <nav className="flex space-x-2">
+          <nav className="flex space-x-1 sm:space-x-2">
             <button
               onClick={() => fetchTimesheets(currentPage - 1)}
               disabled={currentPage === 1}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 sm:px-3 py-2 border border-gray-300 rounded-md text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Previous
+              Prev
             </button>
             
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-              <button
-                key={page}
-                onClick={() => fetchTimesheets(page)}
-                className={`px-3 py-2 border rounded-md text-sm font-medium ${
-                  currentPage === page
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                {page}
-              </button>
-            ))}
+            {/* Show limited pages on mobile */}
+            <div className="hidden sm:flex space-x-2">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => fetchTimesheets(page)}
+                  className={`px-3 py-2 border rounded-md text-sm font-medium ${
+                    currentPage === page
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+            </div>
+
+            {/* Mobile pagination with current page indicator */}
+            <div className="sm:hidden flex items-center space-x-2">
+              <span className="px-3 py-2 text-sm font-medium text-gray-700">
+                {currentPage} / {totalPages}
+              </span>
+            </div>
             
             <button
               onClick={() => fetchTimesheets(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 sm:px-3 py-2 border border-gray-300 rounded-md text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
             </button>

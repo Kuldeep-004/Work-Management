@@ -39,8 +39,7 @@ router.get('/user/:userId', protect, async (req, res) => {
     // Get timesheets for the date range - only completed timesheets
     const timesheets = await Timesheet.find({
       user: userId,
-      date: { $gte: start, $lte: end },
-      isCompleted: true
+      date: { $gte: start, $lte: end }
     }).populate('entries.task', 'title description clientName clientGroup workType billed').sort({ date: 1 });
 
     // Initialize analytics data

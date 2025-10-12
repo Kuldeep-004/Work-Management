@@ -847,6 +847,8 @@ router.get('/user-hours', protect, async (req, res) => {
         };
       }
 
+      // Include ALL timesheet entries regardless of approval status (pending, accepted, rejected)
+      // This ensures that all time worked is counted in user hour summaries  
       ts.entries.forEach(entry => {
         const minutes = getMinutesBetween(entry.startTime, entry.endTime);
         userHours[userId].totalMinutes += minutes;
