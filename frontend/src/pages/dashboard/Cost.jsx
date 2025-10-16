@@ -36,6 +36,8 @@ const Cost = () => {
   // Column management state - separate for each tab
   const [billedVisibleColumns, setBilledVisibleColumns] = useState([]);
   const [unbilledVisibleColumns, setUnbilledVisibleColumns] = useState([]);
+  const [completedBilledVisibleColumns, setCompletedBilledVisibleColumns] = useState([]);
+  const [completedUnbilledVisibleColumns, setCompletedUnbilledVisibleColumns] = useState([]);
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const [tabsLoaded, setTabsLoaded] = useState(false);
   const columnsDropdownRef = useRef(null);
@@ -68,12 +70,14 @@ const Cost = () => {
     let isMounted = true;
     (async () => {
       try {
-        console.log('Loading tab states for costManagementBilled and costManagementUnbilled...');
-        const [billedTabState, unbilledTabState] = await Promise.all([
+        console.log('Loading tab states for all cost management tabs...');
+        const [billedTabState, unbilledTabState, completedBilledTabState, completedUnbilledTabState] = await Promise.all([
           fetchTabState('costManagementBilled', user.token),
-          fetchTabState('costManagementUnbilled', user.token)
+          fetchTabState('costManagementUnbilled', user.token),
+          fetchTabState('costManagementCompletedBilled', user.token),
+          fetchTabState('costManagementCompletedUnbilled', user.token)
         ]);
-        console.log('Loaded cost management tab states:', { billedTabState, unbilledTabState });
+        console.log('Loaded cost management tab states:', { billedTabState, unbilledTabState, completedBilledTabState, completedUnbilledTabState });
         if (isMounted) {
           // Set billed columns
           if (billedTabState && billedTabState.visibleColumns && Array.isArray(billedTabState.visibleColumns) && billedTabState.visibleColumns.length > 0) {
@@ -92,13 +96,33 @@ const Cost = () => {
             console.log('Using default visible columns for unbilled:', DEFAULT_VISIBLE_COLUMNS);
             setUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
+          
+          // Set completed billed columns
+          if (completedBilledTabState && completedBilledTabState.visibleColumns && Array.isArray(completedBilledTabState.visibleColumns) && completedBilledTabState.visibleColumns.length > 0) {
+            console.log('Setting completed billed columns from saved state:', completedBilledTabState.visibleColumns);
+            setCompletedBilledVisibleColumns(completedBilledTabState.visibleColumns);
+          } else {
+            console.log('Using default visible columns for completed billed:', DEFAULT_VISIBLE_COLUMNS);
+            setCompletedBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+          }
+          
+          // Set completed unbilled columns
+          if (completedUnbilledTabState && completedUnbilledTabState.visibleColumns && Array.isArray(completedUnbilledTabState.visibleColumns) && completedUnbilledTabState.visibleColumns.length > 0) {
+            console.log('Setting completed unbilled columns from saved state:', completedUnbilledTabState.visibleColumns);
+            setCompletedUnbilledVisibleColumns(completedUnbilledTabState.visibleColumns);
+          } else {
+            console.log('Using default visible columns for completed unbilled:', DEFAULT_VISIBLE_COLUMNS);
+            setCompletedUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+          }
         }
       } catch (error) {
         console.error('Error loading tab state:', error);
         if (isMounted) {
-          console.log('Error occurred, setting default columns for both tabs');
+          console.log('Error occurred, setting default columns for all tabs');
           setBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           setUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+          setCompletedBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+          setCompletedUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
         }
       } finally {
         if (isMounted) {
@@ -135,6 +159,30 @@ const Cost = () => {
       });
   }, [unbilledVisibleColumns, user, tabsLoaded]);
 
+  useEffect(() => {
+    if (!user?.token || !tabsLoaded || completedBilledVisibleColumns.length === 0) return;
+    console.log('Saving completed billed visible columns to backend:', completedBilledVisibleColumns);
+    saveTabState('costManagementCompletedBilled', { visibleColumns: completedBilledVisibleColumns }, user.token)
+      .then(() => {
+        console.log('Successfully saved completed billed tab state');
+      })
+      .catch((error) => {
+        console.error('Error saving completed billed tab state:', error);
+      });
+  }, [completedBilledVisibleColumns, user, tabsLoaded]);
+
+  useEffect(() => {
+    if (!user?.token || !tabsLoaded || completedUnbilledVisibleColumns.length === 0) return;
+    console.log('Saving completed unbilled visible columns to backend:', completedUnbilledVisibleColumns);
+    saveTabState('costManagementCompletedUnbilled', { visibleColumns: completedUnbilledVisibleColumns }, user.token)
+      .then(() => {
+        console.log('Successfully saved completed unbilled tab state');
+      })
+      .catch((error) => {
+        console.error('Error saving completed unbilled tab state:', error);
+      });
+  }, [completedUnbilledVisibleColumns, user, tabsLoaded]);
+
   // Handle click outside dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -151,7 +199,8 @@ const Cost = () => {
 
   // Combined effect for initial load and search with debouncing
   useEffect(() => {
-    if (activeTab === 'billedTaskCosting' || activeTab === 'unbilledTaskCosting') {
+    if (activeTab === 'billedTaskCosting' || activeTab === 'unbilledTaskCosting' || 
+        activeTab === 'completedBilledTaskCosting' || activeTab === 'completedUnbilledTaskCosting') {
       // Clear the previous timeout
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
@@ -183,7 +232,8 @@ const Cost = () => {
 
   // Reset initial load flag when switching away from task costing tabs
   useEffect(() => {
-    if (activeTab !== 'billedTaskCosting' && activeTab !== 'unbilledTaskCosting') {
+    if (activeTab !== 'billedTaskCosting' && activeTab !== 'unbilledTaskCosting' && 
+        activeTab !== 'completedBilledTaskCosting' && activeTab !== 'completedUnbilledTaskCosting') {
       initialLoadCompletedRef.current = false;
     }
   }, [activeTab]);
@@ -225,6 +275,10 @@ const Cost = () => {
         endpoint = `${API_BASE_URL}/api/timesheets/task-costs/billed`;
       } else if (activeTab === 'unbilledTaskCosting') {
         endpoint = `${API_BASE_URL}/api/timesheets/task-costs/unbilled`;
+      } else if (activeTab === 'completedBilledTaskCosting') {
+        endpoint = `${API_BASE_URL}/api/timesheets/task-costs/completed-billed`;
+      } else if (activeTab === 'completedUnbilledTaskCosting') {
+        endpoint = `${API_BASE_URL}/api/timesheets/task-costs/completed-unbilled`;
       }
       
       const res = await fetch(`${endpoint}?${params}`, {
@@ -332,7 +386,8 @@ const Cost = () => {
       setHourlyRateInput('');
       fetchUsers();
       // Refresh costs data to reflect rate changes
-      if (activeTab === 'billedTaskCosting' || activeTab === 'unbilledTaskCosting') {
+      if (activeTab === 'billedTaskCosting' || activeTab === 'unbilledTaskCosting' || 
+          activeTab === 'completedBilledTaskCosting' || activeTab === 'completedUnbilledTaskCosting') {
         setCurrentPage(1);
         setCosts([]);
         fetchCosts(search, 1, true);
@@ -349,6 +404,10 @@ const Cost = () => {
       return billedVisibleColumns;
     } else if (activeTab === 'unbilledTaskCosting') {
       return unbilledVisibleColumns;
+    } else if (activeTab === 'completedBilledTaskCosting') {
+      return completedBilledVisibleColumns;
+    } else if (activeTab === 'completedUnbilledTaskCosting') {
+      return completedUnbilledVisibleColumns;
     }
     return [];
   };
@@ -358,6 +417,10 @@ const Cost = () => {
       setBilledVisibleColumns(newColumns);
     } else if (activeTab === 'unbilledTaskCosting') {
       setUnbilledVisibleColumns(newColumns);
+    } else if (activeTab === 'completedBilledTaskCosting') {
+      setCompletedBilledVisibleColumns(newColumns);
+    } else if (activeTab === 'completedUnbilledTaskCosting') {
+      setCompletedUnbilledVisibleColumns(newColumns);
     }
   };
 
@@ -659,7 +722,7 @@ const Cost = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Billed Task Costing
+            Billed Tasks Costing
           </button>
           <button
             onClick={() => {
@@ -673,7 +736,35 @@ const Cost = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Unbilled Task Costing
+            Unbilled Tasks Costing
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('completedBilledTaskCosting');
+              setCosts([]); // Clear costs when switching to this tab
+              initialLoadCompletedRef.current = false; // Reset initial load flag
+            }}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'completedBilledTaskCosting'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Completed Billed Tasks Costing
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('completedUnbilledTaskCosting');
+              setCosts([]); // Clear costs when switching to this tab
+              initialLoadCompletedRef.current = false; // Reset initial load flag
+            }}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'completedUnbilledTaskCosting'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Completed Unbilled Tasks Costing
           </button>
           <button
             onClick={() => setActiveTab('userRates')}
@@ -692,7 +783,7 @@ const Cost = () => {
       {activeTab === 'billedTaskCosting' && (
         <div>
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold">Billed Task Costing</h2>
+            <h2 className="text-2xl font-bold">Billed Tasks Costing</h2>
             {totalTasks > 0 && (
               <div className="text-sm text-gray-600">
                 Total Tasks: <span className="font-semibold">{totalTasks}</span>
@@ -884,6 +975,240 @@ const Cost = () => {
                   <tr><td colSpan={getCurrentVisibleColumns().length} className="text-center py-8">Loading...</td></tr>
                 ) : costs.length === 0 ? (
                   <tr><td colSpan={getCurrentVisibleColumns().length} className="text-center py-8">No unbilled tasks found.</td></tr>
+                ) : (
+                  <>
+                    {costs.map((task) => (
+                      <tr key={task.taskId} className="hover:bg-gray-50">
+                        {ALL_COLUMNS.filter(col => getCurrentVisibleColumns().includes(col.id)).map((column) => (
+                          <td 
+                            key={column.id} 
+                            className="px-4 py-2 whitespace-nowrap"
+                            style={{ width: `${100 / getCurrentVisibleColumns().length}%` }}
+                          >
+                            {renderCellContent(task, column.id)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </>
+                )}
+              </tbody>
+            </table>
+            
+            {/* Infinite scroll trigger element */}
+            <div
+              ref={loadMoreTriggerRef}
+              className="w-full h-4"
+              style={{ height: '1px' }}
+            ></div>
+            
+            {/* Load more info */}
+            {costs.length > 0 && (
+              <div className="mt-4 text-center text-sm text-gray-500">
+                Showing {costs.length} of {totalTasks} tasks
+              </div>
+            )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Completed Billed Task Costing Tab */}
+      {activeTab === 'completedBilledTaskCosting' && (
+        <div>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold">Completed Billed Task Costing</h2>
+            {totalTasks > 0 && (
+              <div className="text-sm text-gray-600">
+                Total Tasks: <span className="font-semibold">{totalTasks}</span>
+              </div>
+            )}
+          </div>
+          <div className="mb-4 flex items-center gap-2">
+            <div className="relative">
+              <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by task or user..."
+                className="border rounded px-3 py-2 pl-10 w-64"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            
+            {/* Column Dropdown */}
+            <div className="relative" ref={columnsDropdownRef}>
+              <button
+                onClick={() => setShowColumnDropdown(!showColumnDropdown)}
+                className="px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center gap-2"
+              >
+                Columns
+                <ChevronDownIcon className="w-4 h-4" />
+              </button>
+
+              {showColumnDropdown && (
+                <div className="absolute z-50 mt-1 w-56 bg-white border border-gray-200 rounded-md shadow-lg">
+                  <div className="py-2">
+                    <div className="px-3 py-1 text-xs font-semibold text-gray-500 uppercase">Show/Hide Columns</div>
+                    {ALL_COLUMNS.map((column) => (
+                      <label key={column.id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={getCurrentVisibleColumns().includes(column.id)}
+                          onChange={() => toggleColumn(column.id)}
+                          className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">{column.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {!tabsLoaded && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="text-center py-8">Loading table configuration...</div>
+            </div>
+          )}
+          {tabsLoaded && getCurrentVisibleColumns().length > 0 && (
+            <div className="bg-white rounded-lg shadow p-4 overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    {ALL_COLUMNS.filter(col => getCurrentVisibleColumns().includes(col.id)).map((column) => (
+                      <th 
+                        key={column.id} 
+                        className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-white"
+                        style={{ width: `${100 / getCurrentVisibleColumns().length}%` }}
+                      >
+                        {column.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {costLoading && costs.length === 0 ? (
+                  <tr><td colSpan={getCurrentVisibleColumns().length} className="text-center py-8">Loading...</td></tr>
+                ) : costs.length === 0 ? (
+                  <tr><td colSpan={getCurrentVisibleColumns().length} className="text-center py-8">No completed billed tasks found.</td></tr>
+                ) : (
+                  <>
+                    {costs.map((task) => (
+                      <tr key={task.taskId} className="hover:bg-gray-50">
+                        {ALL_COLUMNS.filter(col => getCurrentVisibleColumns().includes(col.id)).map((column) => (
+                          <td 
+                            key={column.id} 
+                            className="px-4 py-2 whitespace-nowrap"
+                            style={{ width: `${100 / getCurrentVisibleColumns().length}%` }}
+                          >
+                            {renderCellContent(task, column.id)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </>
+                )}
+              </tbody>
+            </table>
+            
+            {/* Infinite scroll trigger element */}
+            <div
+              ref={loadMoreTriggerRef}
+              className="w-full h-4"
+              style={{ height: '1px' }}
+            ></div>
+            
+            {/* Load more info */}
+            {costs.length > 0 && (
+              <div className="mt-4 text-center text-sm text-gray-500">
+                Showing {costs.length} of {totalTasks} tasks
+              </div>
+            )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Completed Unbilled Task Costing Tab */}
+      {activeTab === 'completedUnbilledTaskCosting' && (
+        <div>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold">Completed Unbilled Task Costing</h2>
+            {totalTasks > 0 && (
+              <div className="text-sm text-gray-600">
+                Total Tasks: <span className="font-semibold">{totalTasks}</span>
+              </div>
+            )}
+          </div>
+          <div className="mb-4 flex items-center gap-2">
+            <div className="relative">
+              <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by task or user..."
+                className="border rounded px-3 py-2 pl-10 w-64"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            
+            {/* Column Dropdown */}
+            <div className="relative" ref={columnsDropdownRef}>
+              <button
+                onClick={() => setShowColumnDropdown(!showColumnDropdown)}
+                className="px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center gap-2"
+              >
+                Columns
+                <ChevronDownIcon className="w-4 h-4" />
+              </button>
+
+              {showColumnDropdown && (
+                <div className="absolute z-50 mt-1 w-56 bg-white border border-gray-200 rounded-md shadow-lg">
+                  <div className="py-2">
+                    <div className="px-3 py-1 text-xs font-semibold text-gray-500 uppercase">Show/Hide Columns</div>
+                    {ALL_COLUMNS.map((column) => (
+                      <label key={column.id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={getCurrentVisibleColumns().includes(column.id)}
+                          onChange={() => toggleColumn(column.id)}
+                          className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">{column.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {!tabsLoaded && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="text-center py-8">Loading table configuration...</div>
+            </div>
+          )}
+          {tabsLoaded && getCurrentVisibleColumns().length > 0 && (
+            <div className="bg-white rounded-lg shadow p-4 overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    {ALL_COLUMNS.filter(col => getCurrentVisibleColumns().includes(col.id)).map((column) => (
+                      <th 
+                        key={column.id} 
+                        className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-white"
+                        style={{ width: `${100 / getCurrentVisibleColumns().length}%` }}
+                      >
+                        {column.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {costLoading && costs.length === 0 ? (
+                  <tr><td colSpan={getCurrentVisibleColumns().length} className="text-center py-8">Loading...</td></tr>
+                ) : costs.length === 0 ? (
+                  <tr><td colSpan={getCurrentVisibleColumns().length} className="text-center py-8">No completed unbilled tasks found.</td></tr>
                 ) : (
                   <>
                     {costs.map((task) => (
