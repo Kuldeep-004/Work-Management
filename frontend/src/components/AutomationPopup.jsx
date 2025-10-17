@@ -605,18 +605,24 @@ const AutomationPopup = ({
     const selectedClient = clients.find(client => client._id === clientId);
     
     if (selectedClient) {
+      // Check if client group is one of the internal work groups
+      const internalWorkGroups = ['Hari Agarwal and Associates', 'Dreamlabs', 'SFS'];
+      const isInternalWorkGroup = internalWorkGroups.includes(selectedClient.group.name);
+      
       setFormData(prev => ({
         ...prev,
         clientName: selectedClient.name,
         clientGroup: selectedClient.group.name,
-        workType: selectedClient.workOffered.map(wt => wt.name)
+        workType: selectedClient.workOffered.map(wt => wt.name),
+        billed: isInternalWorkGroup ? true : false // Set to true for internal work groups
       }));
     } else {
       setFormData(prev => ({
         ...prev,
         clientName: '',
         clientGroup: '',
-        workType: []
+        workType: [],
+        billed: false
       }));
     }
     setIsClientDropdownOpen(false);
@@ -786,10 +792,16 @@ const AutomationPopup = ({
                               key={client._id}
                               className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
                               onClick={() => {
+                                // Check if client group is one of the internal work groups
+                                const internalWorkGroups = ['Hari Agarwal and Associates', 'Dreamlabs', 'SFS'];
+                                const clientGroupName = client.group ? client.group.name : '';
+                                const isInternalWorkGroup = internalWorkGroups.includes(clientGroupName);
+                                
                                 setFormData(prev => ({ 
                                   ...prev, 
                                   clientName: client.name,
-                                  clientGroup: client.group ? client.group.name : ''
+                                  clientGroup: clientGroupName,
+                                  billed: isInternalWorkGroup ? true : false // Set to true for internal work groups
                                 }));
                                 setClientSearchTerm(client.name);
                                 setIsClientDropdownOpen(false);
@@ -1086,13 +1098,13 @@ const AutomationPopup = ({
                     <input
                       type="text"
                       value={(() => {
-                        // Collect all unique team heads for the teams of selected users
+                        // Collect all unique team heads and admins for the teams of selected users
                         const teamIds = new Set();
                         selectedUsers.forEach(u => {
                           if (u.team) teamIds.add(u.team.toString());
                         });
                         const heads = users.filter(
-                          x => x.team && teamIds.has(x.team.toString()) && x.role === 'Team Head'
+                          x => x.team && teamIds.has(x.team.toString()) && (x.role === 'Team Head' || x.role === 'Admin')
                         );
                         if (heads.length === 0) return '';
                         // Remove duplicates by _id

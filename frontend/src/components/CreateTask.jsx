@@ -33,6 +33,7 @@ const CreateTask = ({
     clientGroup: '',
     workType: [],
     assignedTo: [],
+    guides: [], // Add guides field
     priority: '',
     inwardEntryDate: '',
     inwardEntryTime: '',
@@ -42,15 +43,25 @@ const CreateTask = ({
     status: 'yet_to_start' // default to yet_to_start
   });
   const [selectedUsers, setSelectedUsers] = useState([]);
+  const [selectedGuides, setSelectedGuides] = useState([]); // Add selected guides state
   const [searchTerm, setSearchTerm] = useState('');
+  const [guideSearchTerm, setGuideSearchTerm] = useState(''); // Add guide search term
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isGuideDropdownOpen, setIsGuideDropdownOpen] = useState(false); // Add guide dropdown state
   const assignSearchInputRef = useRef(null);
+  const guideSearchInputRef = useRef(null); // Add guide search ref
   // Focus the Assign To search input when dropdown opens
   useEffect(() => {
     if (isDropdownOpen && assignSearchInputRef.current) {
       assignSearchInputRef.current.focus();
     }
   }, [isDropdownOpen]);
+  // Focus the Guide search input when dropdown opens
+  useEffect(() => {
+    if (isGuideDropdownOpen && guideSearchInputRef.current) {
+      guideSearchInputRef.current.focus();
+    }
+  }, [isGuideDropdownOpen]);
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const modalRef = useRef(null);
@@ -294,6 +305,9 @@ const CreateTask = ({
           : initialData.assignedTo
             ? [typeof initialData.assignedTo === 'string' ? initialData.assignedTo : initialData.assignedTo._id]
             : [],
+        guides: Array.isArray(initialData.guides)
+          ? initialData.guides.map(g => typeof g === 'string' ? g : g._id)
+          : [],
         priority: initialData.priority || 'regular',
         inwardEntryDate: initialData.inwardEntryDate ? initialData.inwardEntryDate.split('T')[0] : '',
         inwardEntryTime: convertedTime,
@@ -316,6 +330,12 @@ const CreateTask = ({
       console.log('[EditModal-FIX] selectedUsers to set:', selected);
       setSelectedUsers(selected);
       
+      // Set guides if available
+      const guidesRaw = Array.isArray(initialData.guides) ? initialData.guides : [];
+      const guideIds = guidesRaw.map(g => typeof g === 'string' ? g : g._id);
+      const selectedGuidesData = usersWithCurrent.filter(u => guideIds.includes(u._id));
+      setSelectedGuides(selectedGuidesData);
+      
       // Set multi-user assignment toggle based on number of assigned users
       setIsMultiUserAssign(assignedUserIds.length > 1);
     } else if (mode === 'create' && isOpen) {
@@ -335,6 +355,7 @@ const CreateTask = ({
           clientGroup: '',
           workType: [],
           assignedTo: [],
+          guides: [],
           priority: 'Today',
           inwardEntryDate: date,
           inwardEntryTime: time,
@@ -346,6 +367,7 @@ const CreateTask = ({
       });
       setClientSearchTerm('');
       setSelectedUsers([]);
+      setSelectedGuides([]);
       setIsMultiUserAssign(false); // Reset multi-user toggle for create mode
     }
   }, [mode, initialData, isOpen, users]);
@@ -372,6 +394,13 @@ const CreateTask = ({
       const selected = usersWithCurrent.filter(u => assignedUserIds.includes(u._id));
       console.log('[EditModal-FIX][users effect] selectedUsers to set:', selected);
       setSelectedUsers(selected);
+      
+      // Set guides if available
+      if (Array.isArray(initialData.guides) && initialData.guides.length > 0 && selectedGuides.length === 0) {
+        const guideIds = initialData.guides.map(g => typeof g === 'string' ? g : g._id);
+        const selectedGuidesData = usersWithCurrent.filter(u => guideIds.includes(u._id));
+        setSelectedGuides(selectedGuidesData);
+      }
       
       // Set multi-user assignment toggle based on number of assigned users
       setIsMultiUserAssign(assignedUserIds.length > 1);
@@ -831,6 +860,19 @@ const CreateTask = ({
     });
   };
 
+  const handleGuideChange = (userId) => {
+    const user = usersWithCurrent.find(u => u._id === userId);
+    if (!user) return;
+
+    setFormData(prev => {
+      const newGuides = prev.guides.includes(userId)
+        ? prev.guides.filter(id => id !== userId)
+        : [...prev.guides, userId];
+      setSelectedGuides(usersWithCurrent.filter(u => newGuides.includes(u._id)));
+      return { ...prev, guides: newGuides };
+    });
+  };
+
   const handleWorkTypeChange = (type) => {
     setFormData(prev => {
       const newWorkType = prev.workType.includes(type)
@@ -877,6 +919,12 @@ const CreateTask = ({
   const filteredUsers = usersWithCurrent.filter(user => {
     // First filter by search term
     const matchesSearch = `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch;
+  });
+
+  // Filter guides based on search term
+  const filteredGuides = usersWithCurrent.filter(user => {
+    const matchesSearch = `${user.firstName} ${user.lastName}`.toLowerCase().includes(guideSearchTerm.toLowerCase());
     return matchesSearch;
   });
 
@@ -939,6 +987,7 @@ const CreateTask = ({
       clientGroup: '',
       workType: [],
       assignedTo: [],
+      guides: [],
       priority: 'today',
       inwardEntryDate: '',
       inwardEntryTime: '',
@@ -951,6 +1000,7 @@ const CreateTask = ({
     setTaskFiles([]);
     setCreatedTaskId(null);
     setUploading(false);
+    setSelectedGuides([]);
   };
 
   const filteredWorkTypes   = useMemo(() => {
@@ -1030,10 +1080,16 @@ const CreateTask = ({
                               key={client._id}
                               className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
                               onClick={() => {
+                                // Check if client group is one of the internal work groups
+                                const internalWorkGroups = ['Hari Agarwal and Associates', 'Dreamlabs', 'SFS'];
+                                const clientGroupName = client?.group ? client?.group?.name : '';
+                                const isInternalWorkGroup = internalWorkGroups.includes(clientGroupName);
+                                
                                 setFormData(prev => ({ 
                                   ...prev, 
                                   clientName: client.name,
-                                  clientGroup: client.group ? client.group.name : ''
+                                  clientGroup: clientGroupName,
+                                  billed: isInternalWorkGroup ? true : false // Set to true for internal work groups
                                 }));
                                 setClientSearchTerm(client.name);
                                 setIsClientDropdownOpen(false);
@@ -1336,32 +1392,137 @@ const CreateTask = ({
                     <input
                       type="text"
                       value={(() => {
-                        // Collect all unique team heads for the teams of selected users
+                        // Collect all unique team heads and admins for the teams of selected users
                         const headsMap = {};
                         selectedUsers.forEach(u => {
                           if (!u.team) return;
-                          // Find all users in the same team with role 'Team Head'
+                          // Find all users in the same team with role 'Team Head' or 'Admin'
                           users.forEach(x => {
                             if (
                               x.team &&
                               x.team.toString() === u.team.toString() &&
-                              x.role === 'Team Head'
+                              (x.role === 'Team Head' || x.role === 'Admin')
                             ) {
                               headsMap[x._id] = x;
                             }
                           });
                         });
-                        // If no team heads found, return empty string
+                        // If no team heads or admins found, return empty string
                         const heads = Object.values(headsMap);
                         if (heads.length === 0) return '';
                         return heads.map(h => `${h.firstName} ${h.lastName}`).join(', ');
                       })()}
-                      className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700"
+                      className="w-full border rounded-md px-3 py-2 bg-gray-50 text-gray-700"
                       readOnly
                       placeholder="Team Head will appear here"
                     />
                   </div>
                 </div>
+
+                {/* Guides Selection */}
+                <div className="md:col-span-2 mt-2 w-[410px]">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Guides 
+                  </label>
+                  <div className="relative">
+                    {isGuideDropdownOpen && (
+                      <div className="absolute z-10 w-full bottom-full mb-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                        <div className="sticky top-0 bg-white p-2 border-b">
+                          <input
+                            type="text"
+                            placeholder="Search guides..."
+                            value={guideSearchTerm}
+                            onChange={(e) => setGuideSearchTerm(e.target.value)}
+                            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onClick={(e) => e.stopPropagation()}
+                            ref={guideSearchInputRef}
+                          />
+                        </div>
+                        <div className="py-1">
+                          {filteredGuides.length > 0 ? (
+                            filteredGuides.map((user) => (
+                              <button
+                                key={user._id}
+                                type="button"
+                                onClick={() => handleGuideChange(user._id)}
+                                className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${formData.guides.includes(user._id) ? 'bg-blue-50' : ''}`}
+                              >
+                                <div className="flex items-center">
+                                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium mr-3 overflow-hidden">
+                                    <img 
+                                      src={user.photo?.url || defaultProfile} 
+                                      alt={`${user.firstName} ${user.lastName}`}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+                                  <div>
+                                    <div className="font-medium text-gray-900">
+                                      {user.firstName} {user.lastName}
+                                    </div>
+                                    <div className="text-sm text-gray-500">{user.group}</div>
+                                  </div>
+                                  {formData.guides.includes(user._id) && (
+                                    <svg className="ml-auto w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  )}
+                                </div>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-4 py-2 text-gray-500 text-center">No users found</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsGuideDropdownOpen(!isGuideDropdownOpen)}
+                      className="w-full flex items-center justify-between border rounded-md px-3 py-2 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <span className="text-gray-700">
+                        {selectedGuides.length > 0 
+                          ? `${selectedGuides.length} guide${selectedGuides.length > 1 ? 's' : ''} selected`
+                          : 'Select guides'}
+                      </span>
+                      <svg
+                        className={`w-5 h-5 text-gray-400 transition-transform ${isGuideDropdownOpen ? 'transform rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    
+                    {/* Selected guides chips */}
+                    {selectedGuides.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {selectedGuides.map(guide => (
+                          <span
+                            key={guide._id}
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                          >
+                            {guide.firstName} {guide.lastName}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormData(prev => ({ ...prev, guides: prev.guides.filter(id => id !== guide._id) }));
+                                setSelectedGuides(prev => prev.filter(g => g._id !== guide._id));
+                              }}
+                              className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-green-200"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Task Status Dropdown */}
                 <div className="md:col-span-2 mt-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">

@@ -767,7 +767,8 @@ router.post('/', protect, canAssignTask, async (req, res) => {
       verificationAssignedTo,
       billed,
       status, // Add status to destructuring
-      customFields // Add custom fields to destructuring
+      customFields, // Add custom fields to destructuring
+      guides // Add guides to destructuring
     } = req.body;
 
     // Validate priority
@@ -846,7 +847,8 @@ router.post('/', protect, canAssignTask, async (req, res) => {
         billed: billed !== undefined ? billed : true,
         selfVerification: req.body.selfVerification ?? false,
         verificationStatus,
-        customFields: processedCustomFields // Add custom fields
+        customFields: processedCustomFields, // Add custom fields
+        guides: guides || [] // Add guides
       });
       const savedTask = await task.save();
       createdTasks.push(savedTask);

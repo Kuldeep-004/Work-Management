@@ -260,7 +260,7 @@ const DashboardLayout = ({ children }) => {
                 const isActive = getCurrentPath() === item.id;
                 const isPendingTasksItem = item.id === 'task-verification';
                 const iconColor = isPendingTasksItem && hasPendingTasks 
-                  ? 'text-green-400' 
+                  ? 'text-red-500' 
                   : isActive ? 'text-white' : 'text-gray-600 group-hover:text-gray-900';
                 
                 return (
