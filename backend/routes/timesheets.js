@@ -1547,6 +1547,516 @@ router.get('/task-costs/completed-unbilled', protect, async (req, res) => {
   }
 });
 
+// Admin/Team Head: Get cost breakdown for billed tasks for a specific user
+router.get('/task-costs/billed/user/:userId', protect, async (req, res) => {
+  try {
+    // Check if current user has permission (Admin or Team Head)
+    if (!['Admin', 'Team Head'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied. Only Admin and Team Head can view user task costs.' });
+    }
+
+    const { userId } = req.params;
+    const { search, page = 1, limit = 25 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Validate userId
+    if (!userId || userId === 'null' || userId === 'undefined') {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    // Build task filter - tasks where the user is assignedTo only
+    let taskFilter = { 
+      billed: false, 
+      status: { $ne: 'completed' },
+      assignedTo: userId
+    };
+    
+    if (search) {
+      const searchLower = search.toLowerCase();
+      taskFilter.title = { $regex: searchLower, $options: 'i' };
+    }
+    
+    // Get tasks with pagination
+    const tasks = await Task.find(taskFilter)
+      .populate('assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides', 'firstName lastName hourlyRate')
+      .skip(skip)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 });
+      
+    const totalTasks = await Task.countDocuments(taskFilter);
+    
+    // Get all timesheets with entries
+    const timesheets = await Timesheet.find({}).populate('user', 'firstName lastName hourlyRate').populate('entries.task', 'title');
+    
+    const taskUserMinutes = {};
+    timesheets.forEach(ts => {
+      const user = ts.user;
+      if (!user) return;
+      ts.entries.forEach(entry => {
+        if (entry.task && user) {
+          const taskId = entry.task._id?.toString();
+          const userIdStr = user._id?.toString();
+          if (!taskId || !userIdStr) return;
+          if (!taskUserMinutes[taskId]) taskUserMinutes[taskId] = {};
+          if (!taskUserMinutes[taskId][userIdStr]) taskUserMinutes[taskId][userIdStr] = 0;
+          
+          const [sh, sm] = entry.startTime.split(':').map(Number);
+          const [eh, em] = entry.endTime.split(':').map(Number);
+          let startM = sh * 60 + sm;
+          let endM = eh * 60 + em;
+          if (endM < startM) endM += 24 * 60;
+          taskUserMinutes[taskId][userIdStr] += (endM - startM);
+        }
+      });
+    });
+    
+    const result = [];
+    for (const task of tasks) {
+      const taskId = task._id.toString();
+      
+      function getUserCost(user) {
+        if (!user) return null;
+        const userIdStr = user._id?.toString();
+        const totalMinutes = taskUserMinutes[taskId]?.[userIdStr] || 0;
+        const hours = Math.round((totalMinutes / 60) * 100) / 100;
+        const cost = hours * (user.hourlyRate || 0);
+        return {
+          name: user.firstName + ' ' + user.lastName,
+          hourlyRate: user.hourlyRate || 0,
+          hours,
+          cost
+        };
+      }
+      
+      const assignedTo = getUserCost(task.assignedTo);
+      const firstVerifier = getUserCost(task.verificationAssignedTo);
+      const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
+      const thirdVerifier = getUserCost(task.thirdVerificationAssignedTo);
+      const fourthVerifier = getUserCost(task.fourthVerificationAssignedTo);
+      const fifthVerifier = getUserCost(task.fifthVerificationAssignedTo);
+      
+      const guides = [];
+      if (Array.isArray(task.guides) && task.guides.length > 0) {
+        task.guides.forEach(guide => {
+          const guideInfo = getUserCost(guide);
+          if (guideInfo) {
+            guides.push(guideInfo);
+          }
+        });
+      }
+      
+      const guidesCost = guides.reduce((sum, guide) => sum + (guide.cost || 0), 0);
+      const totalCost = (assignedTo?.cost || 0) + (firstVerifier?.cost || 0) + (secondVerifier?.cost || 0) + 
+                       (thirdVerifier?.cost || 0) + (fourthVerifier?.cost || 0) + (fifthVerifier?.cost || 0) + guidesCost;
+      
+      result.push({
+        taskId: task._id,
+        title: task.title,
+        assignedTo,
+        firstVerifier,
+        secondVerifier,
+        thirdVerifier,
+        fourthVerifier,
+        fifthVerifier,
+        guides,
+        totalCost
+      });
+    }
+    
+    res.json({
+      tasks: result,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(totalTasks / parseInt(limit)),
+        hasNext: parseInt(page) < Math.ceil(totalTasks / parseInt(limit)),
+        hasPrev: parseInt(page) > 1,
+        total: totalTasks
+      }
+    });
+  } catch (error) {
+    console.error('Error aggregating billed task costs for user:', error.stack || error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Admin/Team Head: Get cost breakdown for unbilled tasks for a specific user
+router.get('/task-costs/unbilled/user/:userId', protect, async (req, res) => {
+  try {
+    if (!['Admin', 'Team Head'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied. Only Admin and Team Head can view user task costs.' });
+    }
+
+    const { userId } = req.params;
+    const { search, page = 1, limit = 25 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    if (!userId || userId === 'null' || userId === 'undefined') {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    let taskFilter = { 
+      billed: true, 
+      status: { $ne: 'completed' },
+      assignedTo: userId
+    };
+    
+    if (search) {
+      taskFilter.title = { $regex: search.toLowerCase(), $options: 'i' };
+    }
+    
+    const tasks = await Task.find(taskFilter)
+      .populate('assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides', 'firstName lastName hourlyRate')
+      .skip(skip)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 });
+      
+    const totalTasks = await Task.countDocuments(taskFilter);
+    
+    const timesheets = await Timesheet.find({}).populate('user', 'firstName lastName hourlyRate').populate('entries.task', 'title');
+    
+    const taskUserMinutes = {};
+    timesheets.forEach(ts => {
+      const user = ts.user;
+      if (!user) return;
+      ts.entries.forEach(entry => {
+        if (entry.task && user) {
+          const taskId = entry.task._id?.toString();
+          const userIdStr = user._id?.toString();
+          if (!taskId || !userIdStr) return;
+          if (!taskUserMinutes[taskId]) taskUserMinutes[taskId] = {};
+          if (!taskUserMinutes[taskId][userIdStr]) taskUserMinutes[taskId][userIdStr] = 0;
+          
+          const [sh, sm] = entry.startTime.split(':').map(Number);
+          const [eh, em] = entry.endTime.split(':').map(Number);
+          let startM = sh * 60 + sm;
+          let endM = eh * 60 + em;
+          if (endM < startM) endM += 24 * 60;
+          taskUserMinutes[taskId][userIdStr] += (endM - startM);
+        }
+      });
+    });
+    
+    const result = [];
+    for (const task of tasks) {
+      const taskId = task._id.toString();
+      
+      function getUserCost(user) {
+        if (!user) return null;
+        const userIdStr = user._id?.toString();
+        const totalMinutes = taskUserMinutes[taskId]?.[userIdStr] || 0;
+        const hours = Math.round((totalMinutes / 60) * 100) / 100;
+        const cost = hours * (user.hourlyRate || 0);
+        return {
+          name: user.firstName + ' ' + user.lastName,
+          hourlyRate: user.hourlyRate || 0,
+          hours,
+          cost
+        };
+      }
+      
+      const assignedTo = getUserCost(task.assignedTo);
+      const firstVerifier = getUserCost(task.verificationAssignedTo);
+      const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
+      const thirdVerifier = getUserCost(task.thirdVerificationAssignedTo);
+      const fourthVerifier = getUserCost(task.fourthVerificationAssignedTo);
+      const fifthVerifier = getUserCost(task.fifthVerificationAssignedTo);
+      
+      const guides = [];
+      if (Array.isArray(task.guides) && task.guides.length > 0) {
+        task.guides.forEach(guide => {
+          const guideInfo = getUserCost(guide);
+          if (guideInfo) {
+            guides.push(guideInfo);
+          }
+        });
+      }
+      
+      const guidesCost = guides.reduce((sum, guide) => sum + (guide.cost || 0), 0);
+      const totalCost = (assignedTo?.cost || 0) + (firstVerifier?.cost || 0) + (secondVerifier?.cost || 0) + 
+                       (thirdVerifier?.cost || 0) + (fourthVerifier?.cost || 0) + (fifthVerifier?.cost || 0) + guidesCost;
+      
+      result.push({
+        taskId: task._id,
+        title: task.title,
+        assignedTo,
+        firstVerifier,
+        secondVerifier,
+        thirdVerifier,
+        fourthVerifier,
+        fifthVerifier,
+        guides,
+        totalCost
+      });
+    }
+    
+    res.json({
+      tasks: result,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(totalTasks / parseInt(limit)),
+        hasNext: parseInt(page) < Math.ceil(totalTasks / parseInt(limit)),
+        hasPrev: parseInt(page) > 1,
+        total: totalTasks
+      }
+    });
+  } catch (error) {
+    console.error('Error aggregating unbilled task costs for user:', error.stack || error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Admin/Team Head: Get cost breakdown for completed billed tasks for a specific user
+router.get('/task-costs/completed-billed/user/:userId', protect, async (req, res) => {
+  try {
+    if (!['Admin', 'Team Head'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied. Only Admin and Team Head can view user task costs.' });
+    }
+
+    const { userId } = req.params;
+    const { search, page = 1, limit = 25 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    if (!userId || userId === 'null' || userId === 'undefined') {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    let taskFilter = { 
+      billed: false, 
+      status: 'completed',
+      assignedTo: userId
+    };
+    
+    if (search) {
+      taskFilter.title = { $regex: search.toLowerCase(), $options: 'i' };
+    }
+    
+    const tasks = await Task.find(taskFilter)
+      .populate('assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides', 'firstName lastName hourlyRate')
+      .skip(skip)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 });
+      
+    const totalTasks = await Task.countDocuments(taskFilter);
+    
+    const timesheets = await Timesheet.find({}).populate('user', 'firstName lastName hourlyRate').populate('entries.task', 'title');
+    
+    const taskUserMinutes = {};
+    timesheets.forEach(ts => {
+      const user = ts.user;
+      if (!user) return;
+      ts.entries.forEach(entry => {
+        if (entry.task && user) {
+          const taskId = entry.task._id?.toString();
+          const userIdStr = user._id?.toString();
+          if (!taskId || !userIdStr) return;
+          if (!taskUserMinutes[taskId]) taskUserMinutes[taskId] = {};
+          if (!taskUserMinutes[taskId][userIdStr]) taskUserMinutes[taskId][userIdStr] = 0;
+          
+          const [sh, sm] = entry.startTime.split(':').map(Number);
+          const [eh, em] = entry.endTime.split(':').map(Number);
+          let startM = sh * 60 + sm;
+          let endM = eh * 60 + em;
+          if (endM < startM) endM += 24 * 60;
+          taskUserMinutes[taskId][userIdStr] += (endM - startM);
+        }
+      });
+    });
+    
+    const result = [];
+    for (const task of tasks) {
+      const taskId = task._id.toString();
+      
+      function getUserCost(user) {
+        if (!user) return null;
+        const userIdStr = user._id?.toString();
+        const totalMinutes = taskUserMinutes[taskId]?.[userIdStr] || 0;
+        const hours = Math.round((totalMinutes / 60) * 100) / 100;
+        const cost = hours * (user.hourlyRate || 0);
+        return {
+          name: user.firstName + ' ' + user.lastName,
+          hourlyRate: user.hourlyRate || 0,
+          hours,
+          cost
+        };
+      }
+      
+      const assignedTo = getUserCost(task.assignedTo);
+      const firstVerifier = getUserCost(task.verificationAssignedTo);
+      const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
+      const thirdVerifier = getUserCost(task.thirdVerificationAssignedTo);
+      const fourthVerifier = getUserCost(task.fourthVerificationAssignedTo);
+      const fifthVerifier = getUserCost(task.fifthVerificationAssignedTo);
+      
+      const guides = [];
+      if (Array.isArray(task.guides) && task.guides.length > 0) {
+        task.guides.forEach(guide => {
+          const guideInfo = getUserCost(guide);
+          if (guideInfo) {
+            guides.push(guideInfo);
+          }
+        });
+      }
+      
+      const guidesCost = guides.reduce((sum, guide) => sum + (guide.cost || 0), 0);
+      const totalCost = (assignedTo?.cost || 0) + (firstVerifier?.cost || 0) + (secondVerifier?.cost || 0) + 
+                       (thirdVerifier?.cost || 0) + (fourthVerifier?.cost || 0) + (fifthVerifier?.cost || 0) + guidesCost;
+      
+      result.push({
+        taskId: task._id,
+        title: task.title,
+        assignedTo,
+        firstVerifier,
+        secondVerifier,
+        thirdVerifier,
+        fourthVerifier,
+        fifthVerifier,
+        guides,
+        totalCost
+      });
+    }
+    
+    res.json({
+      tasks: result,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(totalTasks / parseInt(limit)),
+        hasNext: parseInt(page) < Math.ceil(totalTasks / parseInt(limit)),
+        hasPrev: parseInt(page) > 1,
+        total: totalTasks
+      }
+    });
+  } catch (error) {
+    console.error('Error aggregating completed billed task costs for user:', error.stack || error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Admin/Team Head: Get cost breakdown for completed unbilled tasks for a specific user
+router.get('/task-costs/completed-unbilled/user/:userId', protect, async (req, res) => {
+  try {
+    if (!['Admin', 'Team Head'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied. Only Admin and Team Head can view user task costs.' });
+    }
+
+    const { userId } = req.params;
+    const { search, page = 1, limit = 25 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    if (!userId || userId === 'null' || userId === 'undefined') {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    let taskFilter = { 
+      billed: true, 
+      status: 'completed',
+      assignedTo: userId
+    };
+    
+    if (search) {
+      taskFilter.title = { $regex: search.toLowerCase(), $options: 'i' };
+    }
+    
+    const tasks = await Task.find(taskFilter)
+      .populate('assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides', 'firstName lastName hourlyRate')
+      .skip(skip)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 });
+      
+    const totalTasks = await Task.countDocuments(taskFilter);
+    
+    const timesheets = await Timesheet.find({}).populate('user', 'firstName lastName hourlyRate').populate('entries.task', 'title');
+    
+    const taskUserMinutes = {};
+    timesheets.forEach(ts => {
+      const user = ts.user;
+      if (!user) return;
+      ts.entries.forEach(entry => {
+        if (entry.task && user) {
+          const taskId = entry.task._id?.toString();
+          const userIdStr = user._id?.toString();
+          if (!taskId || !userIdStr) return;
+          if (!taskUserMinutes[taskId]) taskUserMinutes[taskId] = {};
+          if (!taskUserMinutes[taskId][userIdStr]) taskUserMinutes[taskId][userIdStr] = 0;
+          
+          const [sh, sm] = entry.startTime.split(':').map(Number);
+          const [eh, em] = entry.endTime.split(':').map(Number);
+          let startM = sh * 60 + sm;
+          let endM = eh * 60 + em;
+          if (endM < startM) endM += 24 * 60;
+          taskUserMinutes[taskId][userIdStr] += (endM - startM);
+        }
+      });
+    });
+    
+    const result = [];
+    for (const task of tasks) {
+      const taskId = task._id.toString();
+      
+      function getUserCost(user) {
+        if (!user) return null;
+        const userIdStr = user._id?.toString();
+        const totalMinutes = taskUserMinutes[taskId]?.[userIdStr] || 0;
+        const hours = Math.round((totalMinutes / 60) * 100) / 100;
+        const cost = hours * (user.hourlyRate || 0);
+        return {
+          name: user.firstName + ' ' + user.lastName,
+          hourlyRate: user.hourlyRate || 0,
+          hours,
+          cost
+        };
+      }
+      
+      const assignedTo = getUserCost(task.assignedTo);
+      const firstVerifier = getUserCost(task.verificationAssignedTo);
+      const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
+      const thirdVerifier = getUserCost(task.thirdVerificationAssignedTo);
+      const fourthVerifier = getUserCost(task.fourthVerificationAssignedTo);
+      const fifthVerifier = getUserCost(task.fifthVerificationAssignedTo);
+      
+      const guides = [];
+      if (Array.isArray(task.guides) && task.guides.length > 0) {
+        task.guides.forEach(guide => {
+          const guideInfo = getUserCost(guide);
+          if (guideInfo) {
+            guides.push(guideInfo);
+          }
+        });
+      }
+      
+      const guidesCost = guides.reduce((sum, guide) => sum + (guide.cost || 0), 0);
+      const totalCost = (assignedTo?.cost || 0) + (firstVerifier?.cost || 0) + (secondVerifier?.cost || 0) + 
+                       (thirdVerifier?.cost || 0) + (fourthVerifier?.cost || 0) + (fifthVerifier?.cost || 0) + guidesCost;
+      
+      result.push({
+        taskId: task._id,
+        title: task.title,
+        assignedTo,
+        firstVerifier,
+        secondVerifier,
+        thirdVerifier,
+        fourthVerifier,
+        fifthVerifier,
+        guides,
+        totalCost
+      });
+    }
+    
+    res.json({
+      tasks: result,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(totalTasks / parseInt(limit)),
+        hasNext: parseInt(page) < Math.ceil(totalTasks / parseInt(limit)),
+        hasPrev: parseInt(page) > 1,
+        total: totalTasks
+      }
+    });
+  } catch (error) {
+    console.error('Error aggregating completed unbilled task costs for user:', error.stack || error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Admin: Get detailed timeslots for a specific task
 router.get('/task/:taskId/timeslots', protect, async (req, res) => {
   try {

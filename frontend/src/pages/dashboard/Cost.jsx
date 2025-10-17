@@ -42,6 +42,16 @@ const Cost = () => {
   const [tabsLoaded, setTabsLoaded] = useState(false);
   const columnsDropdownRef = useRef(null);
 
+  // User filtering state - separate for each tab
+  const [billedSelectedUserId, setBilledSelectedUserId] = useState(null);
+  const [unbilledSelectedUserId, setUnbilledSelectedUserId] = useState(null);
+  const [completedBilledSelectedUserId, setCompletedBilledSelectedUserId] = useState(null);
+  const [completedUnbilledSelectedUserId, setCompletedUnbilledSelectedUserId] = useState(null);
+  const [showUsersDropdown, setShowUsersDropdown] = useState(false);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const usersDropdownRef = useRef(null);
+  const [allUsers, setAllUsers] = useState([]);
+
   // All available columns for Cost page
   const ALL_COLUMNS = [
     { id: 'taskTitle', label: 'Task', type: 'text' },
@@ -64,6 +74,34 @@ const Cost = () => {
     }
   }, [user]);
 
+  // Fetch all users for the dropdown filter
+  useEffect(() => {
+    const fetchAllUsers = async () => {
+      if (!user?.token) return;
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/users/except-me`, {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to fetch users');
+        }
+
+        const data = await res.json();
+        setAllUsers(data);
+      } catch (err) {
+        console.error('Error fetching users:', err);
+        toast.error('Failed to fetch users for filter');
+      }
+    };
+
+    if (user && user.token && ['Admin', 'Team Head'].includes(user?.role)) {
+      fetchAllUsers();
+    }
+  }, [user]);
+
   // Load tab state (visible columns) on mount - separate for each tab
   useEffect(() => {
     if (!user?.token) return;
@@ -79,7 +117,7 @@ const Cost = () => {
         ]);
         console.log('Loaded cost management tab states:', { billedTabState, unbilledTabState, completedBilledTabState, completedUnbilledTabState });
         if (isMounted) {
-          // Set billed columns
+          // Set billed columns and selectedUserId
           if (billedTabState && billedTabState.visibleColumns && Array.isArray(billedTabState.visibleColumns) && billedTabState.visibleColumns.length > 0) {
             console.log('Setting billed columns from saved state:', billedTabState.visibleColumns);
             setBilledVisibleColumns(billedTabState.visibleColumns);
@@ -87,8 +125,11 @@ const Cost = () => {
             console.log('Using default visible columns for billed:', DEFAULT_VISIBLE_COLUMNS);
             setBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
+          if (billedTabState && billedTabState.selectedUserId !== undefined) {
+            setBilledSelectedUserId(billedTabState.selectedUserId);
+          }
           
-          // Set unbilled columns
+          // Set unbilled columns and selectedUserId
           if (unbilledTabState && unbilledTabState.visibleColumns && Array.isArray(unbilledTabState.visibleColumns) && unbilledTabState.visibleColumns.length > 0) {
             console.log('Setting unbilled columns from saved state:', unbilledTabState.visibleColumns);
             setUnbilledVisibleColumns(unbilledTabState.visibleColumns);
@@ -96,8 +137,11 @@ const Cost = () => {
             console.log('Using default visible columns for unbilled:', DEFAULT_VISIBLE_COLUMNS);
             setUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
+          if (unbilledTabState && unbilledTabState.selectedUserId !== undefined) {
+            setUnbilledSelectedUserId(unbilledTabState.selectedUserId);
+          }
           
-          // Set completed billed columns
+          // Set completed billed columns and selectedUserId
           if (completedBilledTabState && completedBilledTabState.visibleColumns && Array.isArray(completedBilledTabState.visibleColumns) && completedBilledTabState.visibleColumns.length > 0) {
             console.log('Setting completed billed columns from saved state:', completedBilledTabState.visibleColumns);
             setCompletedBilledVisibleColumns(completedBilledTabState.visibleColumns);
@@ -105,14 +149,20 @@ const Cost = () => {
             console.log('Using default visible columns for completed billed:', DEFAULT_VISIBLE_COLUMNS);
             setCompletedBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
+          if (completedBilledTabState && completedBilledTabState.selectedUserId !== undefined) {
+            setCompletedBilledSelectedUserId(completedBilledTabState.selectedUserId);
+          }
           
-          // Set completed unbilled columns
+          // Set completed unbilled columns and selectedUserId
           if (completedUnbilledTabState && completedUnbilledTabState.visibleColumns && Array.isArray(completedUnbilledTabState.visibleColumns) && completedUnbilledTabState.visibleColumns.length > 0) {
             console.log('Setting completed unbilled columns from saved state:', completedUnbilledTabState.visibleColumns);
             setCompletedUnbilledVisibleColumns(completedUnbilledTabState.visibleColumns);
           } else {
             console.log('Using default visible columns for completed unbilled:', DEFAULT_VISIBLE_COLUMNS);
             setCompletedUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+          }
+          if (completedUnbilledTabState && completedUnbilledTabState.selectedUserId !== undefined) {
+            setCompletedUnbilledSelectedUserId(completedUnbilledTabState.selectedUserId);
           }
         }
       } catch (error) {
@@ -138,50 +188,50 @@ const Cost = () => {
   useEffect(() => {
     if (!user?.token || !tabsLoaded || billedVisibleColumns.length === 0) return;
     console.log('Saving billed visible columns to backend:', billedVisibleColumns);
-    saveTabState('costManagementBilled', { visibleColumns: billedVisibleColumns }, user.token)
+    saveTabState('costManagementBilled', { visibleColumns: billedVisibleColumns, selectedUserId: billedSelectedUserId }, user.token)
       .then(() => {
         console.log('Successfully saved billed tab state');
       })
       .catch((error) => {
         console.error('Error saving billed tab state:', error);
       });
-  }, [billedVisibleColumns, user, tabsLoaded]);
+  }, [billedVisibleColumns, billedSelectedUserId, user, tabsLoaded]);
 
   useEffect(() => {
     if (!user?.token || !tabsLoaded || unbilledVisibleColumns.length === 0) return;
     console.log('Saving unbilled visible columns to backend:', unbilledVisibleColumns);
-    saveTabState('costManagementUnbilled', { visibleColumns: unbilledVisibleColumns }, user.token)
+    saveTabState('costManagementUnbilled', { visibleColumns: unbilledVisibleColumns, selectedUserId: unbilledSelectedUserId }, user.token)
       .then(() => {
         console.log('Successfully saved unbilled tab state');
       })
       .catch((error) => {
         console.error('Error saving unbilled tab state:', error);
       });
-  }, [unbilledVisibleColumns, user, tabsLoaded]);
+  }, [unbilledVisibleColumns, unbilledSelectedUserId, user, tabsLoaded]);
 
   useEffect(() => {
     if (!user?.token || !tabsLoaded || completedBilledVisibleColumns.length === 0) return;
     console.log('Saving completed billed visible columns to backend:', completedBilledVisibleColumns);
-    saveTabState('costManagementCompletedBilled', { visibleColumns: completedBilledVisibleColumns }, user.token)
+    saveTabState('costManagementCompletedBilled', { visibleColumns: completedBilledVisibleColumns, selectedUserId: completedBilledSelectedUserId }, user.token)
       .then(() => {
         console.log('Successfully saved completed billed tab state');
       })
       .catch((error) => {
         console.error('Error saving completed billed tab state:', error);
       });
-  }, [completedBilledVisibleColumns, user, tabsLoaded]);
+  }, [completedBilledVisibleColumns, completedBilledSelectedUserId, user, tabsLoaded]);
 
   useEffect(() => {
     if (!user?.token || !tabsLoaded || completedUnbilledVisibleColumns.length === 0) return;
     console.log('Saving completed unbilled visible columns to backend:', completedUnbilledVisibleColumns);
-    saveTabState('costManagementCompletedUnbilled', { visibleColumns: completedUnbilledVisibleColumns }, user.token)
+    saveTabState('costManagementCompletedUnbilled', { visibleColumns: completedUnbilledVisibleColumns, selectedUserId: completedUnbilledSelectedUserId }, user.token)
       .then(() => {
         console.log('Successfully saved completed unbilled tab state');
       })
       .catch((error) => {
         console.error('Error saving completed unbilled tab state:', error);
       });
-  }, [completedUnbilledVisibleColumns, user, tabsLoaded]);
+  }, [completedUnbilledVisibleColumns, completedUnbilledSelectedUserId, user, tabsLoaded]);
 
   // Handle click outside dropdown
   useEffect(() => {
@@ -196,6 +246,24 @@ const Cost = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Handle click outside users dropdown
+  useEffect(() => {
+    if (!showUsersDropdown) {
+      setUserSearchTerm(''); // Clear search when dropdown closes
+      return;
+    }
+    const handleClickOutside = (event) => {
+      if (usersDropdownRef.current && !usersDropdownRef.current.contains(event.target)) {
+        setShowUsersDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUsersDropdown]);
 
   // Combined effect for initial load and search with debouncing
   useEffect(() => {
@@ -228,7 +296,7 @@ const Cost = () => {
         }
       };
     }
-  }, [search, activeTab]);
+  }, [search, activeTab, billedSelectedUserId, unbilledSelectedUserId, completedBilledSelectedUserId, completedUnbilledSelectedUserId]);
 
   // Reset initial load flag when switching away from task costing tabs
   useEffect(() => {
@@ -269,16 +337,36 @@ const Cost = () => {
         params.append('search', searchQuery);
       }
       
-      // Determine which API endpoint to use based on active tab
+      // Get the current selected user ID for this tab
+      const selectedUserId = getCurrentSelectedUserId();
+      
+      // Determine which API endpoint to use based on active tab and selectedUserId
       let endpoint = `${API_BASE_URL}/api/timesheets/task-costs`;
+      
       if (activeTab === 'billedTaskCosting') {
-        endpoint = `${API_BASE_URL}/api/timesheets/task-costs/billed`;
+        if (selectedUserId) {
+          endpoint = `${API_BASE_URL}/api/timesheets/task-costs/billed/user/${selectedUserId}`;
+        } else {
+          endpoint = `${API_BASE_URL}/api/timesheets/task-costs/billed`;
+        }
       } else if (activeTab === 'unbilledTaskCosting') {
-        endpoint = `${API_BASE_URL}/api/timesheets/task-costs/unbilled`;
+        if (selectedUserId) {
+          endpoint = `${API_BASE_URL}/api/timesheets/task-costs/unbilled/user/${selectedUserId}`;
+        } else {
+          endpoint = `${API_BASE_URL}/api/timesheets/task-costs/unbilled`;
+        }
       } else if (activeTab === 'completedBilledTaskCosting') {
-        endpoint = `${API_BASE_URL}/api/timesheets/task-costs/completed-billed`;
+        if (selectedUserId) {
+          endpoint = `${API_BASE_URL}/api/timesheets/task-costs/completed-billed/user/${selectedUserId}`;
+        } else {
+          endpoint = `${API_BASE_URL}/api/timesheets/task-costs/completed-billed`;
+        }
       } else if (activeTab === 'completedUnbilledTaskCosting') {
-        endpoint = `${API_BASE_URL}/api/timesheets/task-costs/completed-unbilled`;
+        if (selectedUserId) {
+          endpoint = `${API_BASE_URL}/api/timesheets/task-costs/completed-unbilled/user/${selectedUserId}`;
+        } else {
+          endpoint = `${API_BASE_URL}/api/timesheets/task-costs/completed-unbilled`;
+        }
       }
       
       const res = await fetch(`${endpoint}?${params}`, {
@@ -304,7 +392,7 @@ const Cost = () => {
       setCostLoading(false);
       setIsLoadingMore(false);
     }
-  }, [token, activeTab]);
+  }, [token, activeTab, billedSelectedUserId, unbilledSelectedUserId, completedBilledSelectedUserId, completedUnbilledSelectedUserId]);
 
   // Load more tasks function
   const loadMoreTasks = useCallback(() => {
@@ -421,6 +509,32 @@ const Cost = () => {
       setCompletedBilledVisibleColumns(newColumns);
     } else if (activeTab === 'completedUnbilledTaskCosting') {
       setCompletedUnbilledVisibleColumns(newColumns);
+    }
+  };
+
+  // User filtering functions - works with current active tab's selectedUserId
+  const getCurrentSelectedUserId = () => {
+    if (activeTab === 'billedTaskCosting') {
+      return billedSelectedUserId;
+    } else if (activeTab === 'unbilledTaskCosting') {
+      return unbilledSelectedUserId;
+    } else if (activeTab === 'completedBilledTaskCosting') {
+      return completedBilledSelectedUserId;
+    } else if (activeTab === 'completedUnbilledTaskCosting') {
+      return completedUnbilledSelectedUserId;
+    }
+    return null;
+  };
+
+  const setCurrentSelectedUserId = (userId) => {
+    if (activeTab === 'billedTaskCosting') {
+      setBilledSelectedUserId(userId);
+    } else if (activeTab === 'unbilledTaskCosting') {
+      setUnbilledSelectedUserId(userId);
+    } else if (activeTab === 'completedBilledTaskCosting') {
+      setCompletedBilledSelectedUserId(userId);
+    } else if (activeTab === 'completedUnbilledTaskCosting') {
+      setCompletedUnbilledSelectedUserId(userId);
     }
   };
 
@@ -802,6 +916,83 @@ const Cost = () => {
               />
             </div>
             
+            {/* Users dropdown - only show for Admin and Team Head */}
+            {['Admin', 'Team Head'].includes(user?.role) && (
+              <div className="relative" ref={usersDropdownRef}>
+                <button
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
+                  onClick={() => setShowUsersDropdown(v => !v)}
+                  type="button"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                  </svg>
+                  <span className="font-semibold">
+                    {getCurrentSelectedUserId() ? 
+                      (() => {
+                        const selectedUser = allUsers.find(u => u._id === getCurrentSelectedUserId());
+                        return selectedUser ? `${selectedUser.firstName} ${selectedUser.lastName}` : 'Users';
+                      })() : 'Users'
+                    }
+                  </span>
+                </button>
+                {showUsersDropdown && (
+                  <div className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-48 animate-fade-in max-h-64 overflow-y-auto">
+                    <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">View Tasks For</div>
+                    
+                    {/* Search input */}
+                    <div className="px-3 pb-2">
+                      <input
+                        type="text"
+                        placeholder="Search users..."
+                        value={userSearchTerm}
+                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    
+                    <button 
+                      className={`block w-full text-left px-4 py-2 rounded ${!getCurrentSelectedUserId() ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
+                      onClick={() => { 
+                        setCurrentSelectedUserId(null); 
+                        setShowUsersDropdown(false); 
+                        setUserSearchTerm('');
+                      }}
+                    >
+                      None (All Tasks)
+                    </button>
+                    {allUsers
+                      .filter(u => {
+                        if (!userSearchTerm) return true;
+                        const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+                        return fullName.includes(userSearchTerm.toLowerCase());
+                      })
+                      .map(user => (
+                        <button 
+                          key={user._id}
+                          className={`block w-full text-left px-4 py-2 rounded ${getCurrentSelectedUserId() === user._id ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
+                          onClick={() => { 
+                            setCurrentSelectedUserId(user._id); 
+                            setShowUsersDropdown(false); 
+                            setUserSearchTerm('');
+                          }}
+                        >
+                          {user.firstName} {user.lastName}
+                        </button>
+                      ))}
+                    {allUsers.filter(u => {
+                      if (!userSearchTerm) return true;
+                      const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+                      return fullName.includes(userSearchTerm.toLowerCase());
+                    }).length === 0 && userSearchTerm && (
+                      <div className="px-4 py-2 text-gray-500 text-sm">No users found</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
             {/* Column Dropdown */}
             <div className="relative" ref={columnsDropdownRef}>
               <button
@@ -918,6 +1109,83 @@ const Cost = () => {
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
+            
+            {/* Users dropdown - only show for Admin and Team Head */}
+            {['Admin', 'Team Head'].includes(user?.role) && (
+              <div className="relative" ref={usersDropdownRef}>
+                <button
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
+                  onClick={() => setShowUsersDropdown(v => !v)}
+                  type="button"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                  </svg>
+                  <span className="font-semibold">
+                    {getCurrentSelectedUserId() ? 
+                      (() => {
+                        const selectedUser = allUsers.find(u => u._id === getCurrentSelectedUserId());
+                        return selectedUser ? `${selectedUser.firstName} ${selectedUser.lastName}` : 'Users';
+                      })() : 'Users'
+                    }
+                  </span>
+                </button>
+                {showUsersDropdown && (
+                  <div className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-48 animate-fade-in max-h-64 overflow-y-auto">
+                    <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">View Tasks For</div>
+                    
+                    {/* Search input */}
+                    <div className="px-3 pb-2">
+                      <input
+                        type="text"
+                        placeholder="Search users..."
+                        value={userSearchTerm}
+                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    
+                    <button 
+                      className={`block w-full text-left px-4 py-2 rounded ${!getCurrentSelectedUserId() ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
+                      onClick={() => { 
+                        setCurrentSelectedUserId(null); 
+                        setShowUsersDropdown(false); 
+                        setUserSearchTerm('');
+                      }}
+                    >
+                      None (All Tasks)
+                    </button>
+                    {allUsers
+                      .filter(u => {
+                        if (!userSearchTerm) return true;
+                        const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+                        return fullName.includes(userSearchTerm.toLowerCase());
+                      })
+                      .map(user => (
+                        <button 
+                          key={user._id}
+                          className={`block w-full text-left px-4 py-2 rounded ${getCurrentSelectedUserId() === user._id ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
+                          onClick={() => { 
+                            setCurrentSelectedUserId(user._id); 
+                            setShowUsersDropdown(false); 
+                            setUserSearchTerm('');
+                          }}
+                        >
+                          {user.firstName} {user.lastName}
+                        </button>
+                      ))}
+                    {allUsers.filter(u => {
+                      if (!userSearchTerm) return true;
+                      const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+                      return fullName.includes(userSearchTerm.toLowerCase());
+                    }).length === 0 && userSearchTerm && (
+                      <div className="px-4 py-2 text-gray-500 text-sm">No users found</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             
             {/* Column Dropdown */}
             <div className="relative" ref={columnsDropdownRef}>
@@ -1036,6 +1304,83 @@ const Cost = () => {
               />
             </div>
             
+            {/* Users dropdown - only show for Admin and Team Head */}
+            {['Admin', 'Team Head'].includes(user?.role) && (
+              <div className="relative" ref={usersDropdownRef}>
+                <button
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
+                  onClick={() => setShowUsersDropdown(v => !v)}
+                  type="button"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                  </svg>
+                  <span className="font-semibold">
+                    {getCurrentSelectedUserId() ? 
+                      (() => {
+                        const selectedUser = allUsers.find(u => u._id === getCurrentSelectedUserId());
+                        return selectedUser ? `${selectedUser.firstName} ${selectedUser.lastName}` : 'Users';
+                      })() : 'Users'
+                    }
+                  </span>
+                </button>
+                {showUsersDropdown && (
+                  <div className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-48 animate-fade-in max-h-64 overflow-y-auto">
+                    <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">View Tasks For</div>
+                    
+                    {/* Search input */}
+                    <div className="px-3 pb-2">
+                      <input
+                        type="text"
+                        placeholder="Search users..."
+                        value={userSearchTerm}
+                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    
+                    <button 
+                      className={`block w-full text-left px-4 py-2 rounded ${!getCurrentSelectedUserId() ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
+                      onClick={() => { 
+                        setCurrentSelectedUserId(null); 
+                        setShowUsersDropdown(false); 
+                        setUserSearchTerm('');
+                      }}
+                    >
+                      None (All Tasks)
+                    </button>
+                    {allUsers
+                      .filter(u => {
+                        if (!userSearchTerm) return true;
+                        const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+                        return fullName.includes(userSearchTerm.toLowerCase());
+                      })
+                      .map(user => (
+                        <button 
+                          key={user._id}
+                          className={`block w-full text-left px-4 py-2 rounded ${getCurrentSelectedUserId() === user._id ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
+                          onClick={() => { 
+                            setCurrentSelectedUserId(user._id); 
+                            setShowUsersDropdown(false); 
+                            setUserSearchTerm('');
+                          }}
+                        >
+                          {user.firstName} {user.lastName}
+                        </button>
+                      ))}
+                    {allUsers.filter(u => {
+                      if (!userSearchTerm) return true;
+                      const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+                      return fullName.includes(userSearchTerm.toLowerCase());
+                    }).length === 0 && userSearchTerm && (
+                      <div className="px-4 py-2 text-gray-500 text-sm">No users found</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
             {/* Column Dropdown */}
             <div className="relative" ref={columnsDropdownRef}>
               <button
@@ -1152,6 +1497,83 @@ const Cost = () => {
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
+            
+            {/* Users dropdown - only show for Admin and Team Head */}
+            {['Admin', 'Team Head'].includes(user?.role) && (
+              <div className="relative" ref={usersDropdownRef}>
+                <button
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 text-sm font-medium h-11 min-w-[120px] transition-colors"
+                  onClick={() => setShowUsersDropdown(v => !v)}
+                  type="button"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                  </svg>
+                  <span className="font-semibold">
+                    {getCurrentSelectedUserId() ? 
+                      (() => {
+                        const selectedUser = allUsers.find(u => u._id === getCurrentSelectedUserId());
+                        return selectedUser ? `${selectedUser.firstName} ${selectedUser.lastName}` : 'Users';
+                      })() : 'Users'
+                    }
+                  </span>
+                </button>
+                {showUsersDropdown && (
+                  <div className="absolute left-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-48 animate-fade-in max-h-64 overflow-y-auto">
+                    <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">View Tasks For</div>
+                    
+                    {/* Search input */}
+                    <div className="px-3 pb-2">
+                      <input
+                        type="text"
+                        placeholder="Search users..."
+                        value={userSearchTerm}
+                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    
+                    <button 
+                      className={`block w-full text-left px-4 py-2 rounded ${!getCurrentSelectedUserId() ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
+                      onClick={() => { 
+                        setCurrentSelectedUserId(null); 
+                        setShowUsersDropdown(false); 
+                        setUserSearchTerm('');
+                      }}
+                    >
+                      None (All Tasks)
+                    </button>
+                    {allUsers
+                      .filter(u => {
+                        if (!userSearchTerm) return true;
+                        const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+                        return fullName.includes(userSearchTerm.toLowerCase());
+                      })
+                      .map(user => (
+                        <button 
+                          key={user._id}
+                          className={`block w-full text-left px-4 py-2 rounded ${getCurrentSelectedUserId() === user._id ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'}`} 
+                          onClick={() => { 
+                            setCurrentSelectedUserId(user._id); 
+                            setShowUsersDropdown(false); 
+                            setUserSearchTerm('');
+                          }}
+                        >
+                          {user.firstName} {user.lastName}
+                        </button>
+                      ))}
+                    {allUsers.filter(u => {
+                      if (!userSearchTerm) return true;
+                      const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+                      return fullName.includes(userSearchTerm.toLowerCase());
+                    }).length === 0 && userSearchTerm && (
+                      <div className="px-4 py-2 text-gray-500 text-sm">No users found</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             
             {/* Column Dropdown */}
             <div className="relative" ref={columnsDropdownRef}>

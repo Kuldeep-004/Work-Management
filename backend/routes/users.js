@@ -26,6 +26,8 @@ function validateTabKey(tabKey) {
     'costManagement',
     'costManagementBilled',
     'costManagementUnbilled',
+    'costManagementCompletedBilled',
+    'costManagementCompletedUnbilled',
     // add more as needed
   ];
   if (!validTabKeys.includes(tabKey)) {
