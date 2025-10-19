@@ -485,6 +485,35 @@ router.post('/user-tab-state/:tabKey', protect, async (req, res) => {
     if (typeof state !== 'object') {
       return res.status(400).json({ message: 'State must be an object' });
     }
+    
+    // Get existing state to preserve taskOrder and groupOrder
+    const existing = await UserTabState.findOne({ user: req.user._id, tabKey });
+    
+    // Merge new state with existing state, preserving taskOrder and groupOrder for each tab
+    if (existing && existing.state && Array.isArray(existing.state.tabs) && Array.isArray(state.tabs)) {
+      // Create a map of existing tabs by id for quick lookup
+      const existingTabsMap = new Map();
+      existing.state.tabs.forEach(tab => {
+        if (tab.id) {
+          existingTabsMap.set(tab.id, tab);
+        }
+      });
+      
+      // Merge each new tab with its existing counterpart to preserve taskOrder and groupOrder
+      state.tabs = state.tabs.map(newTab => {
+        const existingTab = existingTabsMap.get(newTab.id);
+        if (existingTab) {
+          // Preserve taskOrder and groupOrder from existing tab
+          return {
+            ...newTab,
+            taskOrder: existingTab.taskOrder || newTab.taskOrder,
+            groupOrder: existingTab.groupOrder || newTab.groupOrder
+          };
+        }
+        return newTab;
+      });
+    }
+    
     const updated = await UserTabState.findOneAndUpdate(
       { user: req.user._id, tabKey },
       { state },

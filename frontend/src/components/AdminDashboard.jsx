@@ -247,14 +247,20 @@ const AdminDashboard = () => {
     setTabs(tabs.map(tab => {
       if (tab.id !== activeTabId) return tab;
       let newTab = { ...tab, ...patch };
-      // If grouping by 'priority', always reset groupOrder to database order
-      if (patch.groupBy === 'priority') {
-        // Build group order using database priorities
-        let groupOrder = priorities
-          .sort((a, b) => (a.order || 0) - (b.order || 0))
-          .map(p => p.name);
-        newTab.groupOrder = groupOrder;
+      
+      // Only reset groupOrder when FIRST enabling priority grouping (changing from non-priority to priority)
+      // Don't reset if already grouped by priority or if user has custom group order
+      if (patch.sortBy === 'priority' && tab.sortBy !== 'priority') {
+        // Only reset if there's no saved groupOrder for this tab
+        if (!tab.groupOrder || tab.groupOrder.length === 0) {
+          // Build group order using database priorities
+          let groupOrder = priorities
+            .sort((a, b) => (a.order || 0) - (b.order || 0))
+            .map(p => p.name);
+          newTab.groupOrder = groupOrder;
+        }
       }
+      
       if (patch.visibleColumns) {
         // Remove hidden columns from order, add new visible columns at the end
         const currentOrder = newTab.columnOrder || ALL_COLUMNS.map(col => col.id);
@@ -371,9 +377,18 @@ const AdminDashboard = () => {
   }, [user?.token]);
 
   // Save tabs and activeTabId to backend whenever they change (after load)
+  // Add debouncing to prevent saving stale state during rapid tab changes
+  // Note: taskOrder and groupOrder are preserved on the backend to prevent overwrites
   useEffect(() => {
     if (!user?.token || !tabsLoaded) return;
-    saveTabState('adminDashboard', { tabs, activeTabId }, user.token).catch(() => {});
+    
+    // Debounce the save operation to allow order updates to complete
+    // The backend will merge this state with existing taskOrder/groupOrder
+    const timeoutId = setTimeout(() => {
+      saveTabState('adminDashboard', { tabs, activeTabId }, user.token).catch(() => {});
+    }, 1000); // 1 second delay to ensure order saves complete first
+    
+    return () => clearTimeout(timeoutId);
   }, [tabs, activeTabId, user, tabsLoaded]);
 
   useEffect(() => {

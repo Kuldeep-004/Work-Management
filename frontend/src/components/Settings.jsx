@@ -571,6 +571,61 @@ const Settings = () => {
     setEditStatusData({ name: '', color: '' });
   };
 
+  // Handle task status drag and drop
+  const handleStatusDragEnd = async (result) => {
+    if (!result.destination) {
+      return;
+    }
+
+    const filteredStatuses = taskStatuses.filter(status => 
+      statusSearchTerm === '' || 
+      status.name.toLowerCase().includes(statusSearchTerm.toLowerCase())
+    );
+
+    const reorderedStatuses = Array.from(filteredStatuses);
+    const [reorderedItem] = reorderedStatuses.splice(result.source.index, 1);
+    reorderedStatuses.splice(result.destination.index, 0, reorderedItem);
+
+    // Update the local state immediately for better UX
+    const newStatuses = taskStatuses.map(status => {
+      const indexInFiltered = filteredStatuses.findIndex(s => s._id === status._id);
+      if (indexInFiltered !== -1) {
+        const newIndex = reorderedStatuses.findIndex(s => s._id === status._id);
+        return { ...status, order: newIndex + 1 };
+      }
+      return status;
+    });
+    
+    setTaskStatuses(newStatuses.sort((a, b) => a.order - b.order));
+
+    // Send update to backend
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/task-statuses/bulk-update-order`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          statuses: reorderedStatuses
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update status order');
+      }
+
+      toast.success('Status order updated successfully');
+      // Refresh the statuses to ensure consistency
+      fetchTaskStatuses();
+    } catch (error) {
+      toast.error(error.message);
+      // Revert the local state on error
+      fetchTaskStatuses();
+    }
+  };
+
   // Work Types management functions
   const fetchWorkTypes = async () => {
     if (user.role !== 'Admin' && user.role !== 'Team Head') return;
@@ -1555,101 +1610,153 @@ const Settings = () => {
 
             {/* Task Statuses List */}
             <div className="px-0 md:px-6 py-4">
-              <h3 className="text-md font-medium text-gray-800 mb-3">Current Task Statuses</h3>
+              <h3 className="text-md font-medium text-gray-800 mb-3">
+                Current Task Statuses 
+                <span className="text-sm text-gray-500 ml-2">(Drag to reorder)</span>
+              </h3>
               
               {loadingTaskStatuses ? (
-                <p className="text-gray-600 text-center py-4">Loading task statuses...</p>
-              ) : (
-                <div className="space-y-3">
-                  {taskStatuses
-                    .filter(status => 
-                      statusSearchTerm === '' || 
-                      status.name.toLowerCase().includes(statusSearchTerm.toLowerCase())
-                    )
-                    .map((status) => (
-                    <div key={status._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div className="flex items-center space-x-4 flex-1">
-                        <div 
-                          className="w-4 h-4 rounded-full border border-gray-300"
-                          style={{ backgroundColor: status.hexColor || status.color }}
-                          title={`Status color: ${status.hexColor || status.color}`}
-                        ></div>
-                        <div className="flex-1">
-                          {editingStatus === status._id ? (
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={editStatusData.name}
-                                onChange={(e) => setEditStatusData(prev => ({ ...prev, name: e.target.value }))}
-                                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                                autoFocus
-                              />
-                              <input
-                                type="color"
-                                value={editStatusData.color}
-                                onChange={(e) => setEditStatusData(prev => ({ ...prev, color: e.target.value }))}
-                                className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
-                                title="Status color"
-                              />
-                              <button
-                                onClick={() => updateStatusWithBulkCheck(status._id, editStatusData, status.name)}
-                                disabled={updatingStatus || !editStatusData.name.trim()}
-                                className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400"
-                              >
-                                {updatingStatus ? 'Saving...' : 'Save'}
-                              </button>
-                              <button
-                                onClick={cancelEditTaskStatus}
-                                disabled={updatingStatus}
-                                className="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 transition-colors disabled:bg-gray-400"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <div>
-                              <span className="font-medium text-gray-900">{status.name}</span>
-                              {status.isDefault && (
-                                <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Default</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {!status.isDefault && editingStatus !== status._id && (
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleEditTaskStatus(status)}
-                            className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors"
-                            title="Edit status"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => deleteTaskStatus(status._id, status.name)}
-                            className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-full transition-colors"
-                            title="Delete status"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  
-                  {taskStatuses.filter(status => 
-                    statusSearchTerm === '' || 
-                    status.name.toLowerCase().includes(statusSearchTerm.toLowerCase())
-                  ).length === 0 && (
-                    <p className="text-gray-600 text-center py-4">
-                      {statusSearchTerm ? 'No statuses found matching your search.' : 'No task statuses found.'}
-                    </p>
-                  )}
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-gray-600 mt-2">Loading task statuses...</p>
                 </div>
+              ) : (
+                <DragDropContext onDragEnd={handleStatusDragEnd}>
+                  <Droppable droppableId="taskStatuses">
+                    {(provided, snapshot) => (
+                      <div
+                        {...provided.droppableProps}
+                        ref={provided.innerRef}
+                        className={`space-y-2 ${snapshot.isDraggingOver ? 'bg-blue-50 rounded-lg p-2' : ''}`}
+                      >
+                        {taskStatuses
+                          .filter(status => 
+                            statusSearchTerm === '' || 
+                            status.name.toLowerCase().includes(statusSearchTerm.toLowerCase())
+                          )
+                          .map((status, index) => (
+                            <Draggable
+                              key={status._id || status.name}
+                              draggableId={status._id || status.name}
+                              index={index}
+                              isDragDisabled={editingStatus === status._id}
+                            >
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  className={`flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 transition-all ${
+                                    snapshot.isDragging ? 'shadow-lg rotate-1 bg-white' : ''
+                                  } ${editingStatus === status._id ? 'ring-2 ring-blue-500' : ''}`}
+                                >
+                                  <div className="flex items-center gap-3 flex-1">
+                                    {/* Drag Handle */}
+                                    <div
+                                      {...provided.dragHandleProps}
+                                      className={`cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 rounded ${
+                                        editingStatus === status._id ? 'opacity-50 cursor-not-allowed' : ''
+                                      }`}
+                                      title={editingStatus === status._id ? 'Cannot drag while editing' : 'Drag to reorder'}
+                                    >
+                                      <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zM8 4h4v2H8V4zm0 4h4v2H8V8zm0 4h4v2H8v-2z"/>
+                                      </svg>
+                                    </div>
+
+                                    {/* Status Content */}
+                                    <div className="flex items-center space-x-4 flex-1">
+                                      <div 
+                                        className="w-4 h-4 rounded-full border border-gray-300"
+                                        style={{ backgroundColor: status.hexColor || status.color }}
+                                        title={`Status color: ${status.hexColor || status.color}`}
+                                      ></div>
+                                      <div className="flex-1">
+                                        {editingStatus === status._id ? (
+                                          <div className="flex gap-2">
+                                            <input
+                                              type="text"
+                                              value={editStatusData.name}
+                                              onChange={(e) => setEditStatusData(prev => ({ ...prev, name: e.target.value }))}
+                                              className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                                              autoFocus
+                                            />
+                                            <input
+                                              type="color"
+                                              value={editStatusData.color}
+                                              onChange={(e) => setEditStatusData(prev => ({ ...prev, color: e.target.value }))}
+                                              className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                                              title="Status color"
+                                            />
+                                            <button
+                                              onClick={() => updateStatusWithBulkCheck(status._id, editStatusData, status.name)}
+                                              disabled={updatingStatus || !editStatusData.name.trim()}
+                                              className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400"
+                                            >
+                                              {updatingStatus ? 'Saving...' : 'Save'}
+                                            </button>
+                                            <button
+                                              onClick={cancelEditTaskStatus}
+                                              disabled={updatingStatus}
+                                              className="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 transition-colors disabled:bg-gray-400"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div>
+                                            <span className="font-medium text-gray-900">{status.name}</span>
+                                            {status.isDefault && (
+                                              <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Default</span>
+                                            )}
+                                            {status.order && (
+                                              <span className="ml-2 text-sm text-gray-600">Order: {status.order}</span>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  {!status.isDefault && editingStatus !== status._id && (
+                                    <div className="flex space-x-2">
+                                      <button
+                                        onClick={() => handleEditTaskStatus(status)}
+                                        className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors"
+                                        title="Edit status"
+                                      >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                      </button>
+                                      <button
+                                        onClick={() => deleteTaskStatus(status._id, status.name)}
+                                        className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-full transition-colors"
+                                        title="Delete status"
+                                      >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                        {provided.placeholder}
+                        
+                        {taskStatuses.filter(status => 
+                          statusSearchTerm === '' || 
+                          status.name.toLowerCase().includes(statusSearchTerm.toLowerCase())
+                        ).length === 0 && (
+                          <p className="text-gray-600 text-center py-4">
+                            {statusSearchTerm ? 'No statuses found matching your search.' : 'No task statuses found.'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </Droppable>
+                </DragDropContext>
               )}
             </div>
           </>

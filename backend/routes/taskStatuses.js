@@ -137,6 +137,45 @@ router.post('/', protect, async (req, res) => {
   }
 });
 
+// Bulk update task status orders (Admin and Team Head only) - MUST be before /:id route
+router.put('/bulk-update-order', protect, adminOrTeamHead, async (req, res) => {
+  try {
+    const { statuses } = req.body;
+
+    if (!Array.isArray(statuses) || statuses.length === 0) {
+      return res.status(400).json({ message: 'Invalid statuses data' });
+    }
+
+    // Update each status's order
+    const updatePromises = statuses.map((status, index) => {
+      return TaskStatus.findByIdAndUpdate(
+        status._id,
+        { order: index + 1 },
+        { new: true }
+      );
+    });
+
+    await Promise.all(updatePromises);
+
+    // Log bulk status order update
+    await ActivityLogger.logSystemActivity(
+      req.user._id,
+      'task_status_reordered',
+      null,
+      `Updated task status order for ${statuses.length} statuses`,
+      null,
+      { count: statuses.length },
+      req
+    );
+
+    console.log('=== BULK UPDATE SUCCESSFUL ===');
+    res.json({ message: 'Task status orders updated successfully' });
+  } catch (error) {
+    console.error('Error in bulk-update-order:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Update task status (Admin and Team Head only)
 router.put('/:id', protect, adminOrTeamHead, async (req, res) => {
   try {

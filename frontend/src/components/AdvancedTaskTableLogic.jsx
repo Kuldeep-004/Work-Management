@@ -2002,7 +2002,32 @@ export const useAdvancedTaskTableLogic = (props) => {
       if (!shouldGroup || !groupOrderLoaded || !orderLoaded || groupOrder.length > 0 || !groupedTasks) return;
       
       // Get the natural order of groups from groupedTasks
-      const naturalGroupOrder = Object.keys(groupedTasks);
+      let naturalGroupOrder = Object.keys(groupedTasks);
+      
+      // Sort groups based on their type
+      if (groupField === 'priority') {
+        // Sort by priority order from dynamicPriorities
+        const priorityOrderMap = {};
+        getCurrentPriorityOptions().forEach((opt, index) => {
+          priorityOrderMap[opt.label] = index;
+        });
+        naturalGroupOrder = naturalGroupOrder.sort((a, b) => {
+          const orderA = priorityOrderMap[a] !== undefined ? priorityOrderMap[a] : 9999;
+          const orderB = priorityOrderMap[b] !== undefined ? priorityOrderMap[b] : 9999;
+          return orderA - orderB;
+        });
+      } else if (groupField === 'status') {
+        // Sort by status order from dynamicTaskStatuses
+        const statusOrderMap = {};
+        currentStatusOptions.forEach((opt, index) => {
+          statusOrderMap[opt.label] = index;
+        });
+        naturalGroupOrder = naturalGroupOrder.sort((a, b) => {
+          const orderA = statusOrderMap[a] !== undefined ? statusOrderMap[a] : 9999;
+          const orderB = statusOrderMap[b] !== undefined ? statusOrderMap[b] : 9999;
+          return orderA - orderB;
+        });
+      }
       
       // Only save if there are groups to save
       if (naturalGroupOrder.length > 0) {
@@ -2012,7 +2037,8 @@ export const useAdvancedTaskTableLogic = (props) => {
         // Save to backend
         saveGroupOrder(naturalGroupOrder);
       }
-    }, [shouldGroup, groupOrderLoaded, orderLoaded, groupOrder.length, groupedTasks]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [shouldGroup, groupOrderLoaded, orderLoaded, groupOrder.length, groupedTasks, groupField]);
 
     // Save order to backend
     const saveOrder = async (newOrder, newGroupOrder = null) => {
