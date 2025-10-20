@@ -35,6 +35,7 @@ const SubordinateTimesheets = () => {
   // Custom dropdown state
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(false);
+  const [acceptingAll, setAcceptingAll] = useState(false);
   const dropdownRef = useRef(null);
 
   // Filtered subordinates for search
@@ -289,6 +290,12 @@ const SubordinateTimesheets = () => {
     return endM - startM;
   }
 
+  // Helper to check if all entries are accepted or rejected (no pending)
+  const getTimesheetStatus = (timesheet) => {
+    const hasPending = timesheet.entries.some(entry => entry.approvalStatus === 'pending');
+    return !hasPending; // Returns true if all are accepted/rejected, false if any pending
+  };
+
   // Add approve/reject handlers
   const handleApproveEntry = async (entryId) => {
     try {
@@ -429,6 +436,100 @@ const SubordinateTimesheets = () => {
     }
   };
 
+  const handleAcceptAllRenderedTimeslots = async () => {
+    if (filteredTimesheets.length === 0) {
+      toast.error('No timesheets to accept');
+      return;
+    }
+
+    const confirmAccept = window.confirm(
+      `Are you sure you want to accept all pending and rejected timeslots from ${filteredTimesheets.length} timesheet(s)?`
+    );
+    
+    if (!confirmAccept) return;
+
+    setAcceptingAll(true);
+    let totalAccepted = 0;
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      // Process each timesheet sequentially to avoid overwhelming the server
+      for (const timesheet of filteredTimesheets) {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/timesheets/${timesheet._id}/accept-all`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${user.token}` }
+          });
+          
+          const data = await res.json();
+          
+          if (res.ok) {
+            totalAccepted += data.entriesAccepted || 0;
+            successCount++;
+            
+            // Update the timesheet in the state
+            setTimesheets(prev => prev.map(ts => {
+              if (ts._id === timesheet._id) {
+                return {
+                  ...ts,
+                  entries: ts.entries.map(entry => ({
+                    ...entry,
+                    approvalStatus: (entry.approvalStatus === 'pending' || entry.approvalStatus === 'rejected') ? 'accepted' : entry.approvalStatus
+                  }))
+                };
+              }
+              return ts;
+            }));
+          } else {
+            failCount++;
+            console.error(`Failed to accept entries for timesheet ${timesheet._id}:`, data.message);
+          }
+        } catch (error) {
+          failCount++;
+          console.error(`Error accepting entries for timesheet ${timesheet._id}:`, error);
+        }
+      }
+
+      // Update grouped timesheets state
+      setGroupedTimesheets(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(date => {
+          updated[date] = updated[date].map(ts => {
+            const matchingTimesheet = filteredTimesheets.find(ft => ft._id === ts._id);
+            if (matchingTimesheet) {
+              return {
+                ...ts,
+                entries: ts.entries.map(entry => ({
+                  ...entry,
+                  approvalStatus: (entry.approvalStatus === 'pending' || entry.approvalStatus === 'rejected') ? 'accepted' : entry.approvalStatus
+                }))
+              };
+            }
+            return ts;
+          });
+        });
+        return updated;
+      });
+
+      // Show summary message
+      if (successCount > 0 && failCount === 0) {
+        toast.success(`Successfully accepted ${totalAccepted} timeslots from ${successCount} timesheet(s)`);
+      } else if (successCount > 0 && failCount > 0) {
+        toast(`Accepted ${totalAccepted} timeslots from ${successCount} timesheet(s). Failed: ${failCount}`, {
+          icon: '⚠️',
+        });
+      } else {
+        toast.error(`Failed to accept timeslots. Please try again.`);
+      }
+    } catch (error) {
+      toast.error('An error occurred while accepting timeslots');
+      console.error('Error in handleAcceptAllRenderedTimeslots:', error);
+    } finally {
+      setAcceptingAll(false);
+    }
+  };
+
   if (!isAuthenticated()) {
     return <div className="p-8 text-center">Please log in to view this page.</div>;
   }
@@ -559,18 +660,47 @@ const SubordinateTimesheets = () => {
 
           {/* Search bar: only show if more than 1 subordinate */}
           {subordinates.length > 1 && (
-            <div>
+            <div className="md:col-span-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <UserIcon className="w-4 h-4 inline mr-1" />
                 Search User
               </label>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Type to search by name..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Type to search by name..."
+                  className="flex-1 px-1 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={handleAcceptAllRenderedTimeslots}
+                  disabled={loading || acceptingAll || filteredTimesheets.length === 0}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm whitespace-nowrap"
+                  title="Accept all pending and rejected timeslots on this page"
+                >
+                  {acceptingAll ? 'Accepting...' : 'Accept All'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* If only 1 subordinate, show Accept All button separately */}
+          {subordinates.length <= 1 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 opacity-0">
+                Action
+              </label>
+              <button
+                type="button"
+                onClick={handleAcceptAllRenderedTimeslots}
+                disabled={loading || acceptingAll || filteredTimesheets.length === 0}
+                className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm"
+                title="Accept all pending and rejected timeslots on this page"
+              >
+                {acceptingAll ? 'Accepting...' : 'Accept All'}
+              </button>
             </div>
           )}
 
@@ -666,15 +796,21 @@ const SubordinateTimesheets = () => {
                         </span>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className="text-sm text-gray-600">Total Time</p>
+                        <div className="flex items-center justify-end gap-2">
+                          <span className={`px-3 py-1.5 text-base font-bold rounded-md ${getTimesheetStatus(timesheet) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {getTimesheetStatus(timesheet) ? 'Accepted' : 'Pending'}
+                          </span>
+                          <p className="text-sm text-gray-600">Total Time</p>
+                        </div>
                         <p className="text-xl font-bold text-blue-600">{
                           formatTime(timesheet.entries
                             .filter(entry => entry.approvalStatus === 'pending' || entry.approvalStatus === 'accepted')
                             .filter(entry => entry.manualTaskName !== 'Permission' && entry.task !== 'permission') // Exclude permission
                             .reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0)
-                          )
-                        }</p>
-                        <div className="mt-2 space-x-2">
+                            )
+                          }
+                        </p>
+                        <div className="mt-1 space-x-2">
                           <button
                             onClick={() => handleAcceptAllEntries(timesheet._id)}
                             className="bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600 text-sm font-medium"
@@ -731,15 +867,20 @@ const SubordinateTimesheets = () => {
                       </div>
                       
                       <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-gray-600">Total Time</p>
-                          <p className="text-xl font-bold text-blue-600">{
-                            formatTime(timesheet.entries
-                              .filter(entry => entry.approvalStatus === 'pending' || entry.approvalStatus === 'accepted')
-                              .filter(entry => entry.manualTaskName !== 'Permission' && entry.task !== 'permission') // Exclude permission
-                              .reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0)
-                            )
-                          }</p>
+                        <div className="flex flex-col">
+                          <span className={`px-3 py-1.5 text-sm font-bold rounded-md mb-2 inline-block w-fit ${getTimesheetStatus(timesheet) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {getTimesheetStatus(timesheet) ? 'Accepted' : 'Pending'}
+                          </span>
+                          <div>
+                            <p className="text-xs text-gray-600">Total Time</p>
+                            <p className="text-xl font-bold text-blue-600">{
+                              formatTime(timesheet.entries
+                                .filter(entry => entry.approvalStatus === 'pending' || entry.approvalStatus === 'accepted')
+                                .filter(entry => entry.manualTaskName !== 'Permission' && entry.task !== 'permission') // Exclude permission
+                                .reduce((sum, entry) => sum + getMinutesBetween(entry.startTime, entry.endTime), 0)
+                              )
+                            }</p>
+                          </div>
                         </div>
                         <div className="flex flex-col space-y-2">
                           <button
