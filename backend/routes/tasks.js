@@ -1397,6 +1397,7 @@ router.delete('/:id', protect, async (req, res) => {
 });
 
 // Upload files to a task
+// Upload files to a task
 router.post('/:taskId/files', protect, uploadTaskFilesMiddleware, async (req, res) => {
   try {
     const task = await Task.findById(req.params.taskId);
@@ -1404,22 +1405,59 @@ router.post('/:taskId/files', protect, uploadTaskFilesMiddleware, async (req, re
       return res.status(404).json({ message: 'Task not found' });
     }
 
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: 'No files provided' });
+    }
+
     // Add uploaded files to task
     const uploadedFiles = [];
+    const failedFiles = [];
+    
+    // Helper function to retry upload with exponential backoff
+    const retryUpload = async (file, maxRetries = 3) => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const cloudResult = await uploadFile(file.path, 'files');
+          return cloudResult;
+        } catch (error) {
+          console.error(`Upload attempt ${attempt} failed for ${file.originalname}:`, error.message);
+          
+          // Don't retry on certain errors
+          if (error.message.includes('File not found') || 
+              error.message.includes('File too large')) {
+            throw error;
+          }
+          
+          // Wait before retrying (exponential backoff)
+          if (attempt < maxRetries) {
+            const waitTime = Math.min(1000 * Math.pow(2, attempt), 10000);
+            console.log(`Waiting ${waitTime}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          } else {
+            throw error;
+          }
+        }
+      }
+    };
     
     for (const file of req.files) {
       try {
-        // Upload to pCloud
-        const cloudResult = await uploadFile(file.path, 'files');
-        // Delete local file after cloud upload
+        console.log(`Uploading file: ${file.originalname} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+        
+        // Upload to pCloud with retry logic
+        const cloudResult = await retryUpload(file);
+        
+        // Delete local file after successful cloud upload
         try {
           await unlinkAsync(file.path);
+          console.log(`Deleted local file: ${file.path}`);
         } catch (unlinkError) {
           // Ignore errors if file doesn't exist
           if (unlinkError.code !== 'ENOENT') {
             console.error('Error deleting local file:', unlinkError);
           }
         }
+        
         uploadedFiles.push({
           filename: file.filename,
           originalName: file.originalname,
@@ -1427,38 +1465,96 @@ router.post('/:taskId/files', protect, uploadTaskFilesMiddleware, async (req, re
           cloudUrl: cloudResult.url,
           uploadedBy: req.user._id
         });
+        
+        console.log(`Successfully uploaded: ${file.originalname}`);
       } catch (cloudError) {
-        console.error('Error uploading to pCloud:', cloudError);
-        // Do not push to uploadedFiles if upload fails
+        console.error(`Failed to upload ${file.originalname}:`, cloudError.message);
+        
+        // Clean up local file on error
+        try {
+          if (fs.existsSync(file.path)) {
+            await unlinkAsync(file.path);
+          }
+        } catch (cleanupError) {
+          console.error('Error cleaning up file:', cleanupError);
+        }
+        
+        failedFiles.push({
+          filename: file.originalname,
+          error: cloudError.message || 'Upload failed'
+        });
       }
     }
 
-    task.files.push(...uploadedFiles);
-    await task.save();
+    // Only save if at least one file was uploaded successfully
+    if (uploadedFiles.length > 0) {
+      task.files.push(...uploadedFiles);
+      await task.save();
 
-    // Populate the uploadedBy field
-    await task.populate('files.uploadedBy', 'firstName lastName photo');
+      // Populate the uploadedBy field
+      await task.populate('files.uploadedBy', 'firstName lastName photo');
 
-    // Log file upload activity for each uploaded file
-    for (const file of uploadedFiles) {
-      await ActivityLogger.logFileActivity(
-        req.user._id,
-        'task_file_uploaded',
-        task._id,
-        `Uploaded file "${file.originalName}" to task "${task.title}"`,
-        {
-          fileName: file.originalName,
-          fileSize: req.files.find(f => f.originalname === file.originalName)?.size || 0,
-          fileType: req.files.find(f => f.originalname === file.originalName)?.mimetype || 'unknown'
-        },
-        req
-      );
+      // Log file upload activity for each uploaded file
+      for (const file of uploadedFiles) {
+        try {
+          await ActivityLogger.logFileActivity(
+            req.user._id,
+            'task_file_uploaded',
+            task._id,
+            `Uploaded file "${file.originalName}" to task "${task.title}"`,
+            {
+              fileName: file.originalName,
+              fileSize: req.files.find(f => f.originalname === file.originalName)?.size || 0,
+              fileType: req.files.find(f => f.originalname === file.originalName)?.mimetype || 'unknown'
+            },
+            req
+          );
+        } catch (logError) {
+          console.error('Error logging file activity:', logError);
+          // Don't fail the upload if logging fails
+        }
+      }
     }
 
-    res.json(task.files);
+    // Return response with success and failure information
+    if (failedFiles.length > 0 && uploadedFiles.length === 0) {
+      return res.status(500).json({ 
+        message: 'All file uploads failed',
+        failedFiles 
+      });
+    } else if (failedFiles.length > 0) {
+      return res.status(207).json({ 
+        message: `${uploadedFiles.length} file(s) uploaded, ${failedFiles.length} failed`,
+        files: task.files,
+        uploadedFiles,
+        failedFiles 
+      });
+    } else {
+      return res.json({ 
+        message: `${uploadedFiles.length} file(s) uploaded successfully`,
+        files: task.files 
+      });
+    }
   } catch (error) {
     console.error('Error uploading files:', error);
-    res.status(500).json({ message: error.message });
+    
+    // Clean up any remaining local files
+    if (req.files) {
+      for (const file of req.files) {
+        try {
+          if (fs.existsSync(file.path)) {
+            await unlinkAsync(file.path);
+          }
+        } catch (cleanupError) {
+          console.error('Error cleaning up file:', cleanupError);
+        }
+      }
+    }
+    
+    res.status(500).json({ 
+      message: error.message || 'Error uploading files',
+      error: error.toString()
+    });
   }
 });
 

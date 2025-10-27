@@ -45,9 +45,16 @@ export const uploadFile = async (filePath, type = 'files') => {
       {
         headers: form.getHeaders(),
         maxContentLength: Infinity,
-        maxBodyLength: Infinity
+        maxBodyLength: Infinity,
+        timeout: 300000, // 5 minutes timeout for large files
+        validateStatus: (status) => status < 500 // Don't throw on 4xx errors
       }
     );
+
+    // Check for pCloud API errors
+    if (uploadRes.data?.result !== 0) {
+      throw new Error(`pCloud API error: ${uploadRes.data?.error || 'Unknown error'}`);
+    }
 
     // Safe handling of metadata
     const meta = uploadRes.data?.metadata;
@@ -75,6 +82,18 @@ export const uploadFile = async (filePath, type = 'files') => {
     };
   } catch (error) {
     console.error('pCloud upload error:', error.response?.data || error);
+    
+    // Provide more specific error messages
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('Upload timeout - file may be too large or connection is slow');
+    } else if (error.response?.status === 413) {
+      throw new Error('File too large for pCloud');
+    } else if (error.response?.status === 429) {
+      throw new Error('Rate limit exceeded - please wait a moment and try again');
+    } else if (error.message?.includes('ENOENT')) {
+      throw new Error('File not found on server');
+    }
+    
     throw new Error(error.message || 'Upload to pCloud failed');
   }
 };

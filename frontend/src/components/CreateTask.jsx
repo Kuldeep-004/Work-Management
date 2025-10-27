@@ -76,8 +76,8 @@ const CreateTask = ({
   const [isMultiUserAssign, setIsMultiUserAssign] = useState(false); // Toggle for multi-user assignment
   const [isMultiWorkTypeAssign, setIsMultiWorkTypeAssign] = useState(false);
 
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-  const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
+  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB (increased from 10MB)
+  const MAX_TOTAL_SIZE = 500 * 1024 * 1024; // 500MB (increased from 50MB)
   const MAX_FILES = 10;
 
   // Function to get current date and time in required format
@@ -211,20 +211,20 @@ const CreateTask = ({
 
     // Check total number of files
     if (selectedFiles.length + newFiles.length > MAX_FILES) {
-      errors.push(`Maximum ${MAX_FILES} files allowed`);
+      errors.push(`Maximum ${MAX_FILES} files allowed. You are trying to add ${newFiles.length} file(s) but already have ${selectedFiles.length}.`);
     }
 
     // Check individual file sizes and total size
     let totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
     newFiles.forEach(file => {
       if (file.size > MAX_FILE_SIZE) {
-        errors.push(`${file.name} exceeds 10MB limit`);
+        errors.push(`${file.name} is ${(file.size / 1024 / 1024).toFixed(2)}MB and exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`);
       }
       totalSize += file.size;
     });
 
     if (totalSize > MAX_TOTAL_SIZE) {
-      errors.push(`Total size exceeds 50MB limit`);
+      errors.push(`Total size ${(totalSize / 1024 / 1024).toFixed(2)}MB exceeds ${MAX_TOTAL_SIZE / 1024 / 1024}MB limit`);
     }
 
     // Check file types
@@ -244,12 +244,12 @@ const CreateTask = ({
 
     newFiles.forEach(file => {
       if (!allowedTypes.includes(file.type)) {
-        errors.push(`${file.name} is not a supported file type`);
+        errors.push(`${file.name} (${file.type}) is not a supported file type`);
       }
     });
 
     if (errors.length > 0) {
-      toast.error(errors.join('\n'));
+      errors.forEach(error => toast.error(error, { duration: 5000 }));
       return false;
     }
 
@@ -792,8 +792,10 @@ const CreateTask = ({
     console.log('Uploading files for task:', taskId, 'Files:', selectedFiles); // Debug log
     setUploadProgress({});
     
-    // Upload files in batches of 3
-    const batchSize = 3;
+    // Upload files in smaller batches to avoid timeout
+    const batchSize = 2; // Reduced batch size for better reliability
+    const allFailedFiles = [];
+    
     for (let i = 0; i < selectedFiles.length; i += batchSize) {
       const batch = selectedFiles.slice(i, i + batchSize);
       const formData = new FormData();
@@ -804,21 +806,45 @@ const CreateTask = ({
 
       try {
         console.log('Uploading batch:', batch); // Debug log
+        
+        // Update progress to show uploading
+        batch.forEach((_, index) => {
+          setUploadProgress(prev => ({
+            ...prev,
+            [i + index]: 'uploading'
+          }));
+        });
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
+        
         const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/files`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${loggedInUser.token}`,
           },
           body: formData,
+          signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const error = await response.json();
           throw new Error(error.message || 'Failed to upload files');
         }
 
-        const uploadedFiles = await response.json();
-        console.log('Uploaded files response:', uploadedFiles); // Debug log
+        const result = await response.json();
+        console.log('Upload response:', result); // Debug log
+        
+        // Handle partial success (207 status)
+        if (result.failedFiles && result.failedFiles.length > 0) {
+          allFailedFiles.push(...result.failedFiles);
+          console.warn('Some files failed to upload:', result.failedFiles);
+        }
+        
+        // Get uploaded files from response
+        const uploadedFiles = result.files || result.uploadedFiles || [];
         
         setTaskFiles(prev => {
           const updatedFiles = [...prev, ...uploadedFiles];
@@ -833,16 +859,38 @@ const CreateTask = ({
             [i + index]: 'completed'
           }));
         });
+        
       } catch (error) {
         console.error(`Failed to upload batch starting at index ${i}:`, error); // Debug log
-        throw error;
+        
+        // Handle timeout
+        if (error.name === 'AbortError') {
+          toast.error(`Upload timeout for ${batch.map(f => f.name).join(', ')}. Files may be too large or connection is slow.`);
+        } else {
+          toast.error(`Failed to upload ${batch.map(f => f.name).join(', ')}: ${error.message}`);
+        }
+        
+        // Mark batch as failed
+        batch.forEach((file, index) => {
+          setUploadProgress(prev => ({
+            ...prev,
+            [i + index]: 'failed'
+          }));
+          allFailedFiles.push({ filename: file.name, error: error.message });
+        });
       }
     }
 
-    // Clear selected files only after all uploads are successful
+    // Clear selected files only after all uploads are attempted
     setSelectedFiles([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+    
+    // Show summary if there were any failures
+    if (allFailedFiles.length > 0) {
+      const failedNames = allFailedFiles.map(f => f.filename).join(', ');
+      toast.error(`Failed to upload: ${failedNames}`);
     }
   };
 
@@ -1737,13 +1785,33 @@ const CreateTask = ({
                               <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full ${
-                                    uploadProgress[index] === 'completed' ? 'bg-green-500' : 'bg-blue-500 animate-pulse'
+                                    uploadProgress[index] === 'completed' 
+                                      ? 'bg-green-500' 
+                                      : uploadProgress[index] === 'failed'
+                                      ? 'bg-red-500'
+                                      : uploadProgress[index] === 'uploading'
+                                      ? 'bg-blue-500 animate-pulse'
+                                      : 'bg-gray-300'
                                   }`}
-                                  style={{ width: uploadProgress[index] === 'completed' ? '100%' : '50%' }}
+                                  style={{ 
+                                    width: uploadProgress[index] === 'completed' 
+                                      ? '100%' 
+                                      : uploadProgress[index] === 'uploading' 
+                                      ? '50%' 
+                                      : uploadProgress[index] === 'failed'
+                                      ? '100%'
+                                      : '0%' 
+                                  }}
                                 />
                               </div>
-                              <span className="text-xs text-gray-500">
-                                {uploadProgress[index] === 'completed' ? 'Done' : 'Uploading...'}
+                              <span className="text-xs text-gray-500 min-w-[80px]">
+                                {uploadProgress[index] === 'completed' 
+                                  ? '✓ Done' 
+                                  : uploadProgress[index] === 'failed'
+                                  ? '✗ Failed'
+                                  : uploadProgress[index] === 'uploading'
+                                  ? 'Uploading...'
+                                  : 'Waiting...'}
                               </span>
                             </div>
                           ))}

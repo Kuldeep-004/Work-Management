@@ -129,7 +129,7 @@ const uploadPhoto = multer({
   storage: storage,
   fileFilter: photoFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit for photos
+    fileSize: 20 * 1024 * 1024 // 20MB limit for photos (increased from 5MB)
   }
 }).single('photo');
 
@@ -145,7 +145,7 @@ const uploadChatAvatar = multer({
   storage: storage,
   fileFilter: photoFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit for avatars
+    fileSize: 20 * 1024 * 1024 // 20MB limit for avatars (increased from 5MB)
   }
 }).single('avatar');
 
@@ -153,7 +153,8 @@ const uploadTaskFiles = multer({
   storage: storage,
   fileFilter: taskFileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit for task files
+    fileSize: 100 * 1024 * 1024, // 100MB limit for task files (increased from 10MB)
+    files: 10 // Maximum 10 files at once
   }
 });
 
@@ -163,7 +164,7 @@ export const uploadMiddleware = (req, res, next) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({
-          message: 'File is too large. Maximum size is 5MB'
+          message: 'File is too large. Maximum size is 20MB'
         });
       }
       return res.status(400).json({
@@ -232,7 +233,7 @@ export const uploadChatAvatarMiddleware = (req, res, next) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({
-          message: 'Avatar is too large. Maximum size is 5MB'
+          message: 'Avatar is too large. Maximum size is 20MB'
         });
       }
       return res.status(400).json({

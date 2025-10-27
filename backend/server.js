@@ -87,7 +87,16 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
+// Increase payload size limit for file uploads
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
+
+// Set timeout for all requests (5 minutes for file uploads)
+app.use((req, res, next) => {
+  req.setTimeout(300000); // 5 minutes
+  res.setTimeout(300000); // 5 minutes
+  next();
+});
 
 // Activity logging middleware (place before routes)
 app.use(activityLoggerMiddleware({ includeBody: false }));

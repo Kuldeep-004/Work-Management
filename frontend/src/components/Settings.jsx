@@ -113,6 +113,13 @@ const Settings = () => {
       return;
     }
 
+    // Check file size (20MB limit)
+    const MAX_SIZE = 20 * 1024 * 1024; // 20MB
+    if (file.size > MAX_SIZE) {
+      toast.error(`Image is too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum size is 20MB`);
+      return;
+    }
+
     const formData = new FormData();
     formData.append('photo', file);
 
