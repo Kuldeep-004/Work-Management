@@ -95,6 +95,13 @@ const taskSchema = new mongoose.Schema({
     enum: ['pending','completed'],
     default: 'pending'
   },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  approvedAt: {
+    type: Date
+  },
   originalAssignee: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

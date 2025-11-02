@@ -1822,6 +1822,94 @@ const CreateTask = ({
                 </div>
               )}
 
+              {/* Read-only Task Info Section - Only show in edit mode */}
+              {mode === 'edit' && initialData && (
+                <div className="border-t pt-4 mt-4">
+                  <h3 className="text-lg font-medium text-gray-700 mb-4">Task Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Assigned By */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Assigned By
+                      </label>
+                      <input
+                        type="text"
+                        value={
+                          initialData.assignedBy 
+                            ? `${initialData.assignedBy.firstName || ''} ${initialData.assignedBy.lastName || ''}`.trim()
+                            : 'N/A'
+                        }
+                        className="w-full border rounded-md px-3 py-2 bg-gray-50 text-gray-700 cursor-not-allowed"
+                        readOnly
+                        disabled
+                      />
+                    </div>
+
+                    {/* Task Creation Date & Time */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Task Created On
+                      </label>
+                      <input
+                        type="text"
+                        value={
+                          initialData.createdAt 
+                            ? new Date(initialData.createdAt).toLocaleString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true
+                              })
+                            : 'N/A'
+                        }
+                        className="w-full border rounded-md px-3 py-2 bg-gray-50 text-gray-700 cursor-not-allowed"
+                        readOnly
+                        disabled
+                      />
+                    </div>
+
+                    {/* Approved By */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Approved By
+                      </label>
+                      <input
+                        type="text"
+                        value={
+                          (() => {
+                            if (initialData.approvedBy) {
+                              const firstName = initialData.approvedBy.firstName || '';
+                              const lastName = initialData.approvedBy.lastName || '';
+                              const fullName = `${firstName} ${lastName}`.trim();
+                              
+                              if (fullName) {
+                                return fullName;
+                              }
+                              
+                              // Fallback to email if name is not available
+                              if (initialData.approvedBy.email) {
+                                return initialData.approvedBy.email;
+                              }
+                              
+                              return 'Verifier';
+                            }
+                            
+                            return initialData.verificationStatus === 'completed'
+                              ? 'Approved (User Unknown)'
+                              : 'Not Yet Approved';
+                          })()
+                        }
+                        className="w-full border rounded-md px-3 py-2 bg-gray-50 text-gray-700 cursor-not-allowed"
+                        readOnly
+                        disabled
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* ITR Progress Table - only show for tasks with ITR work type in edit mode */}
               {mode === 'edit' && initialData && (
                 (() => {
