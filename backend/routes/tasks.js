@@ -5,7 +5,7 @@ import CustomColumn from '../models/CustomColumn.js';
 import User from '../models/User.js';
 import { protect } from '../middleware/authMiddleware.js';
 import mongoose from 'mongoose';
-import { uploadTaskFilesMiddleware } from '../middleware/uploadMiddleware.js';
+import { uploadTaskFilesMiddleware, uploadCommentFilesMiddleware } from '../middleware/uploadMiddleware.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -1881,6 +1881,183 @@ router.post('/:taskId/comments/audio', protect, uploadAudio.single('audio'), asy
     console.error('Error adding audio comment:', error);
     res.status(500).json({ 
       message: error.message || 'Error uploading audio comment',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Add a comment with file attachments to a task
+router.post('/:taskId/comments/files', protect, uploadCommentFilesMiddleware, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.taskId);
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    const { content } = req.body;
+    
+    if (!content && (!req.files || req.files.length === 0)) {
+      return res.status(400).json({ message: 'Comment must have either content or files' });
+    }
+
+    const uploadedFiles = [];
+    const failedFiles = [];
+
+    // Helper function to retry upload with exponential backoff
+    const retryUpload = async (file, maxRetries = 3) => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const cloudResult = await uploadFile(file.path, 'files');
+          return cloudResult;
+        } catch (error) {
+          console.error(`Upload attempt ${attempt} failed for ${file.originalname}:`, error.message);
+          
+          if (error.message.includes('File not found') || 
+              error.message.includes('File too large')) {
+            throw error;
+          }
+          
+          if (attempt < maxRetries) {
+            const waitTime = Math.min(1000 * Math.pow(2, attempt), 10000);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          } else {
+            throw error;
+          }
+        }
+      }
+    };
+
+    // Upload files if provided
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        try {
+          console.log(`Uploading comment file: ${file.originalname} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+          
+          const cloudResult = await retryUpload(file);
+          
+          // Delete local file after successful cloud upload
+          try {
+            await unlinkAsync(file.path);
+          } catch (unlinkError) {
+            if (unlinkError.code !== 'ENOENT') {
+              console.error('Error deleting local file:', unlinkError);
+            }
+          }
+          
+          uploadedFiles.push({
+            filename: file.filename,
+            originalName: file.originalname,
+            path: file.filename,
+            cloudUrl: cloudResult.url,
+            size: file.size,
+            mimetype: file.mimetype
+          });
+          
+        } catch (cloudError) {
+          console.error(`Failed to upload ${file.originalname}:`, cloudError.message);
+          
+          try {
+            if (fs.existsSync(file.path)) {
+              await unlinkAsync(file.path);
+            }
+          } catch (cleanupError) {
+            console.error('Error cleaning up file:', cleanupError);
+          }
+          
+          failedFiles.push({
+            filename: file.originalname,
+            error: cloudError.message || 'Upload failed'
+          });
+        }
+      }
+    }
+
+    // Check if all uploads failed
+    if (req.files && req.files.length > 0 && uploadedFiles.length === 0) {
+      return res.status(500).json({ 
+        message: 'All file uploads failed',
+        failedFiles 
+      });
+    }
+
+    // Add comment to task
+    const commentData = {
+      type: uploadedFiles.length > 0 ? 'file' : 'text',
+      content: content || 'File attachment',
+      createdBy: req.user._id
+    };
+
+    if (uploadedFiles.length > 0) {
+      commentData.files = uploadedFiles;
+    }
+
+    task.comments.push(commentData);
+    await task.save();
+
+    // Create notifications
+    const commenterId = req.user._id.toString();
+    const assignedToId = task.assignedTo.toString();
+    const assignedById = task.assignedBy.toString();
+
+    const commenter = await User.findById(req.user._id).select('firstName lastName');
+    const truncatedTaskName = truncateTaskName(task.title);
+    const fileInfo = uploadedFiles.length > 0 ? ` with ${uploadedFiles.length} file(s)` : '';
+    const message = `${commenter.firstName} ${commenter.lastName} has commented on "${truncatedTaskName}" of ${task.clientName}${fileInfo}: ${content || 'File attachment'}`;
+    const recipients = new Set();
+
+    if (assignedToId !== commenterId) {
+      recipients.add(assignedToId);
+    }
+    if (assignedById !== commenterId) {
+      recipients.add(assignedById);
+    }
+
+    if (recipients.size > 0) {
+      const notificationPromises = Array.from(recipients).map(recipientId => {
+        return Notification.create({
+          recipient: recipientId,
+          task: task._id,
+          assigner: req.user._id,
+          message: message
+        });
+      });
+      await Promise.all(notificationPromises);
+    }
+
+    // Populate the createdBy field
+    await task.populate('comments.createdBy', 'firstName lastName photo');
+
+    // Return response
+    if (failedFiles.length > 0) {
+      return res.status(207).json({ 
+        message: `Comment added with ${uploadedFiles.length} file(s), ${failedFiles.length} failed`,
+        comments: task.comments,
+        failedFiles 
+      });
+    } else {
+      return res.json({ 
+        message: 'Comment added successfully',
+        comments: task.comments 
+      });
+    }
+  } catch (error) {
+    console.error('Error adding comment with files:', error);
+    
+    // Clean up any remaining local files
+    if (req.files) {
+      for (const file of req.files) {
+        try {
+          if (fs.existsSync(file.path)) {
+            await unlinkAsync(file.path);
+          }
+        } catch (cleanupError) {
+          console.error('Error cleaning up file:', cleanupError);
+        }
+      }
+    }
+    
+    res.status(500).json({ 
+      message: error.message || 'Error adding comment with files',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }

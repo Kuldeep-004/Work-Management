@@ -128,7 +128,7 @@ const taskSchema = new mongoose.Schema({
   comments: [{
     type: {
       type: String,
-      enum: ['text', 'audio'],
+      enum: ['text', 'audio', 'file'],
       required: true
     },
     content: {
@@ -138,6 +138,14 @@ const taskSchema = new mongoose.Schema({
     audioUrl: {
       type: String
     },
+    files: [{
+      filename: String,
+      originalName: String,
+      path: String,
+      cloudUrl: String,
+      size: Number,
+      mimetype: String
+    }],
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

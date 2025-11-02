@@ -272,8 +272,20 @@ export const uploadChatAvatarMiddleware = (req, res, next) => {
   });
 };
 
+// Create multer instance for comment files
+const uploadCommentFiles = multer({
+  storage: storage,
+  fileFilter: taskFileFilter,
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB limit
+  }
+});
+
 // Export task file upload instance
 export const uploadTaskFilesMiddleware = uploadTaskFiles.array('files', 10);
+
+// Export comment file upload instance
+export const uploadCommentFilesMiddleware = uploadCommentFiles.array('files', 5);
 
 // Export default for backward compatibility
 export default uploadTaskFilesMiddleware; 

@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import defaultProfile from '../assets/avatar.jpg';
 import { API_BASE_URL } from '../apiConfig';
+import { PaperClipIcon, XMarkIcon, DocumentIcon } from '@heroicons/react/24/outline';
 
 const TaskComments = ({ taskId }) => {
   const { user, token, isAuthenticated } = useAuth();
@@ -14,6 +15,9 @@ const TaskComments = ({ taskId }) => {
   const audioChunksRef = useRef([]);
   const [audioSrcs, setAudioSrcs] = useState({});
   const [audioUploading, setAudioUploading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (isAuthenticated() && token) {
@@ -91,41 +95,91 @@ const TaskComments = ({ taskId }) => {
     }
   };
 
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files);
+    setSelectedFiles(files);
+  };
+
+  const handleRemoveFile = (index) => {
+    setSelectedFiles(prevFiles => prevFiles.filter((_, i) => i !== index));
+  };
+
   const handleAddTextComment = async (e) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    if (!newComment.trim() && selectedFiles.length === 0) return;
     if (!token) {
       toast.error('Please log in to add comments');
       return;
     }
 
+    setUploading(true);
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ content: newComment })
-      });
+      // If there are files, use the files endpoint
+      if (selectedFiles.length > 0) {
+        const formData = new FormData();
+        formData.append('content', newComment);
+        selectedFiles.forEach(file => {
+          formData.append('files', file);
+        });
 
-      if (response.status === 401) {
-        toast.error('Your session has expired. Please log in again.');
-        return;
+        const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/comments/files`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        if (response.status === 401) {
+          toast.error('Your session has expired. Please log in again.');
+          return;
+        }
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to add comment');
+        }
+
+        const result = await response.json();
+        setComments(result.comments);
+        setNewComment('');
+        setSelectedFiles([]);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        toast.success(result.message || 'Comment added successfully');
+      } else {
+        // Text-only comment
+        const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/comments`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ content: newComment })
+        });
+
+        if (response.status === 401) {
+          toast.error('Your session has expired. Please log in again.');
+          return;
+        }
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to add comment');
+        }
+
+        const updatedComments = await response.json();
+        setComments(updatedComments);
+        setNewComment('');
+        toast.success('Comment added successfully');
       }
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to add comment');
-      }
-
-      const updatedComments = await response.json();
-      setComments(updatedComments);
-      setNewComment('');
-      toast.success('Comment added successfully');
     } catch (error) {
       console.error('Error adding comment:', error);
       toast.error(error.message || 'Failed to add comment');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -239,6 +293,22 @@ const TaskComments = ({ taskId }) => {
     return new Date(dateString).toLocaleString();
   };
 
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  };
+
+  const getFileIcon = (mimetype) => {
+    if (mimetype.startsWith('image/')) return '🖼️';
+    if (mimetype.startsWith('video/')) return '🎬';
+    if (mimetype.includes('pdf')) return '📄';
+    if (mimetype.includes('word') || mimetype.includes('document')) return '📝';
+    if (mimetype.includes('sheet') || mimetype.includes('excel')) return '📊';
+    if (mimetype.includes('presentation') || mimetype.includes('powerpoint')) return '📽️';
+    return '📎';
+  };
+
   return (
     <div className="mt-4">
       <h3 className="text-lg font-semibold mb-2">Comments</h3>
@@ -252,12 +322,59 @@ const TaskComments = ({ taskId }) => {
           className="w-full p-2 border rounded"
           rows="3"
         ></textarea>
-        <button
-          type="submit"
-          className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          Add Comment
-        </button>
+        
+        {/* File attachment section */}
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            multiple
+            className="hidden"
+            id="comment-file-input"
+          />
+          <label
+            htmlFor="comment-file-input"
+            className="cursor-pointer flex items-center gap-1 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+          >
+            <PaperClipIcon className="w-4 h-4" />
+            Attach Files
+          </label>
+          <button
+            type="submit"
+            disabled={uploading || (!newComment.trim() && selectedFiles.length === 0)}
+            className={`px-4 py-2 rounded text-white font-medium ${
+              uploading || (!newComment.trim() && selectedFiles.length === 0)
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-500 hover:bg-blue-600'
+            }`}
+          >
+            {uploading ? 'Posting...' : 'Add Comment'}
+          </button>
+        </div>
+
+        {/* Selected files preview */}
+        {selectedFiles.length > 0 && (
+          <div className="mt-2 space-y-1">
+            <p className="text-sm text-gray-600">Selected files:</p>
+            {selectedFiles.map((file, index) => (
+              <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded text-sm">
+                <span className="flex items-center gap-2">
+                  <DocumentIcon className="w-4 h-4 text-gray-500" />
+                  <span className="text-gray-700">{file.name}</span>
+                  <span className="text-gray-500">({formatFileSize(file.size)})</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFile(index)}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </form>
 
       {/* Audio comment controls */}
@@ -321,12 +438,40 @@ const TaskComments = ({ taskId }) => {
                 </div>
                 {comment.type === 'text' ? (
                   <p className="mt-1 text-gray-700">{comment.content}</p>
-                ) : (
+                ) : comment.type === 'audio' ? (
                   <audio controls className="mt-2 w-full" preload="metadata">
                     {audioSrcs[comment._id] && <source src={audioSrcs[comment._id]} type="audio/webm" />}
                     Your browser does not support the audio element.
                   </audio>
-                )}
+                ) : comment.type === 'file' ? (
+                  <div className="mt-1">
+                    {comment.content && comment.content !== 'File attachment' && (
+                      <p className="text-gray-700 mb-2">{comment.content}</p>
+                    )}
+                    {comment.files && comment.files.length > 0 && (
+                      <div className="space-y-1">
+                        {comment.files.map((file, idx) => (
+                          <a
+                            key={idx}
+                            href={file.cloudUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 p-2 bg-white border border-gray-200 rounded hover:bg-gray-50 text-sm"
+                          >
+                            <span className="text-lg">{getFileIcon(file.mimetype)}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-gray-900 truncate">{file.originalName}</p>
+                              <p className="text-gray-500 text-xs">{formatFileSize(file.size)}</p>
+                            </div>
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
