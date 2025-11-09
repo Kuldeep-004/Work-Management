@@ -8,6 +8,7 @@ import UserAnalytics from '../../components/UserAnalytics';
 
 const rolesList = ['Admin', 'Senior', 'Team Head', 'Fresher']; // swapped
 const role2List = ['None', 'TimeSheet Verifier', 'Task Verifier'];
+const timesheetViewList = ['default', 'team'];
 
 const AllUsers = () => {
   const { user } = useAuth();
@@ -207,6 +208,34 @@ const AllUsers = () => {
     }
   };
 
+  const handleTimesheetViewChange = async (userId, newTimesheetView) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/${userId}/update-fields`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ timesheetView: newTimesheetView }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to update user timesheet view');
+      }
+
+      setUsers(prev => prev.map(u =>
+        u._id === userId
+          ? { ...u, timesheetView: newTimesheetView }
+          : u
+      ));
+      toast.success('Timesheet view updated successfully');
+    } catch (err) {
+      console.error('Error updating user timesheet view:', err);
+      toast.error(err.message);
+    }
+  };
+
   const handleDeleteUser = async (userId) => {
     if (!window.confirm('Are you sure you want to delete this user?')) {
       return;
@@ -277,6 +306,7 @@ const AllUsers = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role1</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role2</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timesheets</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
@@ -377,6 +407,16 @@ const AllUsers = () => {
                   ) : (
                     (Array.isArray(u.role2) ? u.role2.join(', ') : u.role2) || 'None'
                   )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  <select
+                    value={u.timesheetView || 'default'}
+                    onChange={e => handleTimesheetViewChange(u._id, e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded"
+                  >
+                    <option value="default">Default</option>
+                    <option value="team">Team</option>
+                  </select>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                   <select

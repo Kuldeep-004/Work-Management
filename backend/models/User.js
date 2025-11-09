@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema(
     lastName: {
       type: String,
       required: function() {
-        return this.isEmailVerified;
+        return this.isEmailVerified;  
       }
     },
     email: {
@@ -49,6 +49,11 @@ const userSchema = new mongoose.Schema(
       type: [String],
       enum: ['None', 'TimeSheet Verifier', 'Task Verifier'],
       default: ['None'],
+    },
+    timesheetView: {
+      type: String,
+      enum: ['default', 'team'],
+      default: 'default',
     },
     status: {
       type: String,
@@ -91,10 +96,9 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  } 
 );
 
-// Hash password before saving
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
 
@@ -103,11 +107,10 @@ userSchema.pre('save', async function (next) {
     this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (error) {
-    next(error);
+    next(error);  
   }
 });
 
-// Method to compare password
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };

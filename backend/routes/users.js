@@ -372,7 +372,7 @@ router.patch('/:userId/update-fields', protect, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const { role, team, role2 } = req.body;
+    const { role, team, role2, timesheetView } = req.body;
     let updatedFields = {};
 
     if (role) {
@@ -395,6 +395,13 @@ router.patch('/:userId/update-fields', protect, async (req, res) => {
         updatedFields.role2 = role2;
       } else if (typeof role2 === 'string') {
         updatedFields.role2 = [role2];
+      }
+    }
+
+    // Handle timesheetView update
+    if (timesheetView !== undefined) {
+      if (['default', 'team'].includes(timesheetView)) {
+        updatedFields.timesheetView = timesheetView;
       }
     }
 

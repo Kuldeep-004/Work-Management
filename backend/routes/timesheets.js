@@ -130,8 +130,11 @@ router.get('/my-tasks', protect, async (req, res) => {
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
-    // Get all tasks where user is assignedTo, any verifier, or a guide
-    const tasks = await Task.find({
+    // Get the full user object to check timesheetView preference
+    const currentUser = await User.findById(req.user._id).select('timesheetView team');
+    const timesheetView = currentUser?.timesheetView || 'default';
+
+    let taskQuery = {
       $or: [
         { assignedTo: req.user._id },
         { verificationAssignedTo: req.user._id },
@@ -142,9 +145,36 @@ router.get('/my-tasks', protect, async (req, res) => {
         { guides: req.user._id }
       ],
       status: { $ne: 'completed' }
-    })
-    .select('title description clientName clientGroup workType assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides status')
-    .sort({ createdAt: -1 });
+    };
+
+    // If timesheetView is 'team', include tasks from team members
+    if (timesheetView === 'team' && currentUser?.team) {
+      // Get all users in the same team
+      const teamMembers = await User.find({ team: currentUser.team }).select('_id');
+      const teamMemberIds = teamMembers.map(member => member._id);
+
+      // Extend query to include tasks where assignedTo or assignedBy is a team member
+      taskQuery = {
+        $or: [
+          { assignedTo: req.user._id },
+          { verificationAssignedTo: req.user._id },
+          { secondVerificationAssignedTo: req.user._id },
+          { thirdVerificationAssignedTo: req.user._id },
+          { fourthVerificationAssignedTo: req.user._id },
+          { fifthVerificationAssignedTo: req.user._id },
+          { guides: req.user._id },
+          // Add team tasks
+          { assignedTo: { $in: teamMemberIds } },
+          { assignedBy: { $in: teamMemberIds } }
+        ],
+        status: { $ne: 'completed' }
+      };
+    }
+
+    // Get all tasks based on query
+    const tasks = await Task.find(taskQuery)
+      .select('title description clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides status')
+      .sort({ createdAt: -1 });
 
     // Filter: if user is a guide, always include; else apply assignedTo/verifier rule
     const filteredTasks = tasks.filter(task => {
@@ -153,6 +183,11 @@ router.get('/my-tasks', protect, async (req, res) => {
 
       const userIdStr = req.user._id?.toString();
       if (!userIdStr) return false;
+
+      // If timesheetView is 'team', include all tasks from query without additional filtering
+      if (timesheetView === 'team' && currentUser?.team) {
+        return true; // Include all team tasks
+      }
 
       // If user is a guide for this task, always allow
       if (Array.isArray(task.guides) && task.guides.length > 0) {
@@ -188,7 +223,10 @@ router.get('/my-tasks', protect, async (req, res) => {
       return lastAssignedVerifier && lastAssignedVerifier === userIdStr;
     });
 
-    res.json(filteredTasks || []);
+    // Remove duplicates based on task _id
+    const uniqueTasks = Array.from(new Map(filteredTasks.map(task => [task._id.toString(), task])).values());
+
+    res.json(uniqueTasks || []);
   } catch (error) {
     console.error('Error in /my-tasks endpoint:', error);
     res.status(500).json({ message: error?.message || 'Internal server error' });
