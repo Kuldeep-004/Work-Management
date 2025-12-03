@@ -72,7 +72,6 @@ const Cost = () => {
     { id: "fourthVerifier", label: "Fourth Verifier", type: "user" },
     { id: "fifthVerifier", label: "Fifth Verifier", type: "user" },
     { id: "guides", label: "Guide", type: "guides" },
-    { id: "totalCost", label: "Total Cost (₹)", type: "cost" },
   ];
 
   // Default visible columns
@@ -782,7 +781,7 @@ const Cost = () => {
           <div>
             <div className="font-medium">{user.name}</div>
             <div className="inline-block bg-blue-100 text-blue-700 rounded px-2 py-0.5 text-xs mt-1">
-              {user.hours} hr | ₹{user.cost.toFixed(2)}
+              {user.hours} hr
             </div>
           </div>
         ) : (
@@ -795,19 +794,13 @@ const Cost = () => {
               <div key={idx}>
                 <div className="font-medium text-sm">{guide.name}</div>
                 <div className="inline-block bg-purple-100 text-purple-700 rounded px-2 py-0.5 text-xs">
-                  {guide.hours} hr | ₹{guide.cost.toFixed(2)}
+                  {guide.hours} hr
                 </div>
               </div>
             ))}
           </div>
         ) : (
           <span className="text-gray-400">-</span>
-        );
-      case "totalCost":
-        return (
-          <span className="font-bold text-green-700">
-            ₹{task.totalCost.toFixed(2)}
-          </span>
         );
       default:
         return "-";
@@ -919,107 +912,6 @@ const Cost = () => {
                 </div>
               )}
 
-              {/* Cost Breakdown */}
-              <div className="bg-blue-50 rounded-lg p-4">
-                <h4 className="text-lg font-semibold mb-3">Cost Breakdown</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {selectedTask.assignedTo && (
-                    <div className="bg-white rounded p-3">
-                      <p className="text-sm text-gray-600">Assigned To</p>
-                      <p className="font-medium">
-                        {selectedTask.assignedTo.name}
-                      </p>
-                      <p className="text-sm text-blue-600">
-                        {selectedTask.assignedTo.hours}h × ₹
-                        {selectedTask.assignedTo.hourlyRate} = ₹
-                        {selectedTask.assignedTo.cost.toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-                  {selectedTask.firstVerifier && (
-                    <div className="bg-white rounded p-3">
-                      <p className="text-sm text-gray-600">First Verifier</p>
-                      <p className="font-medium">
-                        {selectedTask.firstVerifier.name}
-                      </p>
-                      <p className="text-sm text-blue-600">
-                        {selectedTask.firstVerifier.hours}h × ₹
-                        {selectedTask.firstVerifier.hourlyRate} = ₹
-                        {selectedTask.firstVerifier.cost.toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-                  {selectedTask.secondVerifier && (
-                    <div className="bg-white rounded p-3">
-                      <p className="text-sm text-gray-600">Second Verifier</p>
-                      <p className="font-medium">
-                        {selectedTask.secondVerifier.name}
-                      </p>
-                      <p className="text-sm text-blue-600">
-                        {selectedTask.secondVerifier.hours}h × ₹
-                        {selectedTask.secondVerifier.hourlyRate} = ₹
-                        {selectedTask.secondVerifier.cost.toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-                  {selectedTask.thirdVerifier && (
-                    <div className="bg-white rounded p-3">
-                      <p className="text-sm text-gray-600">Third Verifier</p>
-                      <p className="font-medium">
-                        {selectedTask.thirdVerifier.name}
-                      </p>
-                      <p className="text-sm text-blue-600">
-                        {selectedTask.thirdVerifier.hours}h × ₹
-                        {selectedTask.thirdVerifier.hourlyRate} = ₹
-                        {selectedTask.thirdVerifier.cost.toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-                  {selectedTask.fourthVerifier && (
-                    <div className="bg-white rounded p-3">
-                      <p className="text-sm text-gray-600">Fourth Verifier</p>
-                      <p className="font-medium">
-                        {selectedTask.fourthVerifier.name}
-                      </p>
-                      <p className="text-sm text-blue-600">
-                        {selectedTask.fourthVerifier.hours}h × ₹
-                        {selectedTask.fourthVerifier.hourlyRate} = ₹
-                        {selectedTask.fourthVerifier.cost.toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-                  {selectedTask.fifthVerifier && (
-                    <div className="bg-white rounded p-3">
-                      <p className="text-sm text-gray-600">Fifth Verifier</p>
-                      <p className="font-medium">
-                        {selectedTask.fifthVerifier.name}
-                      </p>
-                      <p className="text-sm text-blue-600">
-                        {selectedTask.fifthVerifier.hours}h × ₹
-                        {selectedTask.fifthVerifier.hourlyRate} = ₹
-                        {selectedTask.fifthVerifier.cost.toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-                  {selectedTask.guides &&
-                    selectedTask.guides.length > 0 &&
-                    selectedTask.guides.map((guide, idx) => (
-                      <div key={idx} className="bg-white rounded p-3">
-                        <p className="text-sm text-gray-600">Guide {idx + 1}</p>
-                        <p className="font-medium">{guide.name}</p>
-                        <p className="text-sm text-purple-600">
-                          {guide.hours}h × ₹{guide.hourlyRate} = ₹
-                          {guide.cost.toFixed(2)}
-                        </p>
-                      </div>
-                    ))}
-                </div>
-                <div className="mt-4 text-right">
-                  <p className="text-xl font-bold text-green-700">
-                    Total Cost: ₹{selectedTask.totalCost.toFixed(2)}
-                  </p>
-                </div>
-              </div>
 
               {/* Timeslots */}
               <div className="bg-white rounded-lg border">
@@ -1045,16 +937,13 @@ const Cost = () => {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Description
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Cost
-                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {taskTimeslots.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={6}
+                            colSpan={5}
                             className="px-4 py-8 text-center text-gray-500"
                           >
                             No timeslots found for this task
@@ -1120,7 +1009,7 @@ const Cost = () => {
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}
           >
-            Billed Tasks Costing
+            Billed Tasks
           </button>
           <button
             onClick={() => {
@@ -1134,7 +1023,7 @@ const Cost = () => {
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}
           >
-            Unbilled Tasks Costing
+            Unbilled Tasks
           </button>
           <button
             onClick={() => {
@@ -1148,7 +1037,7 @@ const Cost = () => {
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}
           >
-            Completed Billed Tasks Costing
+            Completed Billed Tasks
           </button>
           <button
             onClick={() => {
@@ -1162,7 +1051,7 @@ const Cost = () => {
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}
           >
-            Completed Unbilled Tasks Costing
+            Completed Unbilled Tasks
           </button>
         </nav>
       </div>
@@ -1171,7 +1060,7 @@ const Cost = () => {
       {activeTab === "billedTaskCosting" && (
         <div>
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold">Billed Tasks Costing</h2>
+            <h2 className="text-2xl font-bold">Billed Tasks</h2>
             {totalTasks > 0 && (
               <div className="text-sm text-gray-600">
                 Total Tasks: <span className="font-semibold">{totalTasks}</span>
@@ -1430,7 +1319,7 @@ const Cost = () => {
       {activeTab === "unbilledTaskCosting" && (
         <div>
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold">Unbilled Task Costing</h2>
+            <h2 className="text-2xl font-bold">Unbilled Tasks</h2>
             {totalTasks > 0 && (
               <div className="text-sm text-gray-600">
                 Total Tasks: <span className="font-semibold">{totalTasks}</span>
@@ -1690,7 +1579,7 @@ const Cost = () => {
         <div>
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold">
-              Completed Billed Task Costing
+              Completed Billed Tasks
             </h2>
             {totalTasks > 0 && (
               <div className="text-sm text-gray-600">
@@ -1951,7 +1840,7 @@ const Cost = () => {
         <div>
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold">
-              Completed Unbilled Task Costing
+              Completed Unbilled Tasks
             </h2>
             {totalTasks > 0 && (
               <div className="text-sm text-gray-600">
