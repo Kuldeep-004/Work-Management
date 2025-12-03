@@ -45,9 +45,9 @@ router.get('/', protect, async (req, res) => {
     if (status) {
       query.status = status;
     } 
-    // If includeRejected is not true, exclude rejected users
+    // Otherwise, exclude both rejected and pending users by default
     else if (includeRejected !== 'true') {
-      query.status = { $ne: 'rejected' };
+      query.status = 'approved';
     }
     // Always filter only verified users unless explicitly overridden
     if (typeof query.isEmailVerified === 'undefined') {
@@ -429,8 +429,8 @@ router.get('/hourly-rates', protect, async (req, res) => {
     if (adminUser.role !== 'Admin') {
       return res.status(403).json({ message: 'Not authorized as Admin' });
     }
-  // Exclude only blocked users (status: 'rejected')
-  const users = await User.find({ status: { $ne: 'rejected' } }).select('firstName lastName email role hourlyRate status');
+  // Exclude blocked and pending users (only approved users)
+  const users = await User.find({ status: 'approved' }).select('firstName lastName email role hourlyRate status');
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -464,7 +464,7 @@ router.put('/:userId/hourly-rate', protect, async (req, res) => {
 // Get all users except the current user
 router.get('/except-me', protect, async (req, res) => {
   try {
-    const users = await User.find({ _id: { $ne: req.user._id }, isEmailVerified: true, status: { $ne: 'rejected' } }).select('-password');
+    const users = await User.find({ _id: { $ne: req.user._id }, isEmailVerified: true, status: 'approved' }).select('-password');
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });

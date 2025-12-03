@@ -548,7 +548,7 @@ router.put('/:chatId/admin', protect, async (req, res) => {
 router.get('/users/all', protect, async (req, res) => {
   try {
     const users = await User.find(
-      { _id: { $ne: req.user.id } },
+      { _id: { $ne: req.user.id }, status: 'approved' },
       'firstName lastName email photo isOnline lastSeen'
     ).sort({ firstName: 1 });
 
