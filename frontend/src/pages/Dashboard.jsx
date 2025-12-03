@@ -144,6 +144,7 @@ const Dashboard = () => {
         <Route path="settings" element={<Settings />} />
         <Route path="notes" element={<Notes />} />
         <Route path="tutorials" element={<Tutorials />} />
+        <Route path="task-report" element={<TaskReport />} />
         <Route path="clients" element={<Clients />} />
         <Route path="timesheets" element={<Timesheets />} />
         <Route path="*" element={<ReceivedTasks />} />

@@ -363,11 +363,9 @@ router.post("/add-entry", protect, async (req, res) => {
     });
 
     if (timesheet && timesheet.isCompleted) {
-      return res
-        .status(400)
-        .json({
-          message: "Timesheet already submitted. No more changes allowed.",
-        });
+      return res.status(400).json({
+        message: "Timesheet already submitted. No more changes allowed.",
+      });
     }
 
     if (!timesheet) {
@@ -1001,13 +999,9 @@ router.get("/user-hours", protect, async (req, res) => {
   }
 });
 
-// Admin: Get cost breakdown for each task (assignedTo, firstVerifier, secondVerifier, total)
+// Get cost breakdown for each task (assignedTo, firstVerifier, secondVerifier, total)
 router.get("/task-costs", protect, async (req, res) => {
   try {
-    const adminUser = await User.findById(req.user.id);
-    if (adminUser.role !== "Admin") {
-      return res.status(403).json({ message: "Not authorized as Admin" });
-    }
     const { search, page = 1, limit = 25 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -1152,13 +1146,9 @@ router.get("/task-costs", protect, async (req, res) => {
   }
 });
 
-// Admin: Get cost breakdown for billed tasks only
+// Get cost breakdown for billed tasks only
 router.get("/task-costs/billed", protect, async (req, res) => {
   try {
-    const adminUser = await User.findById(req.user.id);
-    if (adminUser.role !== "Admin") {
-      return res.status(403).json({ message: "Not authorized as Admin" });
-    }
     const { search, page = 1, limit = 25 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -1303,13 +1293,9 @@ router.get("/task-costs/billed", protect, async (req, res) => {
   }
 });
 
-// Admin: Get cost breakdown for unbilled tasks only
+// Get cost breakdown for unbilled tasks only
 router.get("/task-costs/unbilled", protect, async (req, res) => {
   try {
-    const adminUser = await User.findById(req.user.id);
-    if (adminUser.role !== "Admin") {
-      return res.status(403).json({ message: "Not authorized as Admin" });
-    }
     const { search, page = 1, limit = 25 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -1457,13 +1443,9 @@ router.get("/task-costs/unbilled", protect, async (req, res) => {
   }
 });
 
-// Admin: Get cost breakdown for completed billed tasks only
+// Get cost breakdown for completed billed tasks only
 router.get("/task-costs/completed-billed", protect, async (req, res) => {
   try {
-    const adminUser = await User.findById(req.user.id);
-    if (adminUser.role !== "Admin") {
-      return res.status(403).json({ message: "Not authorized as Admin" });
-    }
     const { search, page = 1, limit = 25 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -1611,13 +1593,9 @@ router.get("/task-costs/completed-billed", protect, async (req, res) => {
   }
 });
 
-// Admin: Get cost breakdown for completed unbilled tasks only
+// Get cost breakdown for completed unbilled tasks only
 router.get("/task-costs/completed-unbilled", protect, async (req, res) => {
   try {
-    const adminUser = await User.findById(req.user.id);
-    if (adminUser.role !== "Admin") {
-      return res.status(403).json({ message: "Not authorized as Admin" });
-    }
     const { search, page = 1, limit = 25 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -1765,19 +1743,9 @@ router.get("/task-costs/completed-unbilled", protect, async (req, res) => {
   }
 });
 
-// Admin/Team Head: Get cost breakdown for billed tasks for a specific user
+// Get cost breakdown for billed tasks for a specific user
 router.get("/task-costs/billed/user/:userId", protect, async (req, res) => {
   try {
-    // Check if current user has permission (Admin or Team Head)
-    if (!["Admin", "Team Head"].includes(req.user.role)) {
-      return res
-        .status(403)
-        .json({
-          message:
-            "Access denied. Only Admin and Team Head can view user task costs.",
-        });
-    }
-
     const { userId } = req.params;
     const { search, page = 1, limit = 25 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -1920,18 +1888,9 @@ router.get("/task-costs/billed/user/:userId", protect, async (req, res) => {
   }
 });
 
-// Admin/Team Head: Get cost breakdown for unbilled tasks for a specific user
+// Get cost breakdown for unbilled tasks for a specific user
 router.get("/task-costs/unbilled/user/:userId", protect, async (req, res) => {
   try {
-    if (!["Admin", "Team Head"].includes(req.user.role)) {
-      return res
-        .status(403)
-        .json({
-          message:
-            "Access denied. Only Admin and Team Head can view user task costs.",
-        });
-    }
-
     const { userId } = req.params;
     const { search, page = 1, limit = 25 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -2069,21 +2028,12 @@ router.get("/task-costs/unbilled/user/:userId", protect, async (req, res) => {
   }
 });
 
-// Admin/Team Head: Get cost breakdown for completed billed tasks for a specific user
+// Get cost breakdown for completed billed tasks for a specific user
 router.get(
   "/task-costs/completed-billed/user/:userId",
   protect,
   async (req, res) => {
     try {
-      if (!["Admin", "Team Head"].includes(req.user.role)) {
-        return res
-          .status(403)
-          .json({
-            message:
-              "Access denied. Only Admin and Team Head can view user task costs.",
-          });
-      }
-
       const { userId } = req.params;
       const { search, page = 1, limit = 25 } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -2222,21 +2172,12 @@ router.get(
   }
 );
 
-// Admin/Team Head: Get cost breakdown for completed unbilled tasks for a specific user
+// Get cost breakdown for completed unbilled tasks for a specific user
 router.get(
   "/task-costs/completed-unbilled/user/:userId",
   protect,
   async (req, res) => {
     try {
-      if (!["Admin", "Team Head"].includes(req.user.role)) {
-        return res
-          .status(403)
-          .json({
-            message:
-              "Access denied. Only Admin and Team Head can view user task costs.",
-          });
-      }
-
       const { userId } = req.params;
       const { search, page = 1, limit = 25 } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -2375,14 +2316,9 @@ router.get(
   }
 );
 
-// Admin: Get detailed timeslots for a specific task
+// Get detailed timeslots for a specific task
 router.get("/task/:taskId/timeslots", protect, async (req, res) => {
   try {
-    const adminUser = await User.findById(req.user.id);
-    if (adminUser.role !== "Admin") {
-      return res.status(403).json({ message: "Not authorized as Admin" });
-    }
-
     const { taskId } = req.params;
 
     // Get all timesheets with entries for this specific task
@@ -2750,12 +2686,10 @@ router.patch("/:timesheetId/accept-all", protect, async (req, res) => {
     const isAdmin = req.user.role === "Admin";
 
     if (!isTeamHead && !isTimeSheetVerifier && !isAdmin) {
-      return res
-        .status(403)
-        .json({
-          message:
-            "Access denied. You do not have permission to approve entries.",
-        });
+      return res.status(403).json({
+        message:
+          "Access denied. You do not have permission to approve entries.",
+      });
     }
 
     // Additional authorization check for Team Head - only approve subordinates
@@ -2766,12 +2700,10 @@ router.patch("/:timesheetId/accept-all", protect, async (req, res) => {
           .json({ message: "Team Head user does not have a team assigned" });
       }
       if (timesheet.user.team !== req.user.team) {
-        return res
-          .status(403)
-          .json({
-            message:
-              "Access denied. You can only approve timesheets from your team.",
-          });
+        return res.status(403).json({
+          message:
+            "Access denied. You can only approve timesheets from your team.",
+        });
       }
     }
 
@@ -2783,12 +2715,10 @@ router.patch("/:timesheetId/accept-all", protect, async (req, res) => {
     );
 
     if (entriesToAccept.length === 0) {
-      return res
-        .status(200)
-        .json({
-          message: "No entries to accept. All entries are already accepted.",
-          entriesAccepted: 0,
-        });
+      return res.status(200).json({
+        message: "No entries to accept. All entries are already accepted.",
+        entriesAccepted: 0,
+      });
     }
 
     // Accept all pending and rejected entries

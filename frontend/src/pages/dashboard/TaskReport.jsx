@@ -912,7 +912,6 @@ const Cost = () => {
                 </div>
               )}
 
-
               {/* Timeslots */}
               <div className="bg-white rounded-lg border">
                 <h4 className="text-lg font-semibold p-4 border-b">
@@ -983,12 +982,6 @@ const Cost = () => {
       </div>
     );
   };
-
-  if (user?.role !== "Admin") {
-    return (
-      <div className="p-8 text-center text-lg font-semibold">Access denied</div>
-    );
-  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -1578,9 +1571,7 @@ const Cost = () => {
       {activeTab === "completedBilledTaskCosting" && (
         <div>
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold">
-              Completed Billed Tasks
-            </h2>
+            <h2 className="text-2xl font-bold">Completed Billed Tasks</h2>
             {totalTasks > 0 && (
               <div className="text-sm text-gray-600">
                 Total Tasks: <span className="font-semibold">{totalTasks}</span>
@@ -1839,9 +1830,7 @@ const Cost = () => {
       {activeTab === "completedUnbilledTaskCosting" && (
         <div>
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold">
-              Completed Unbilled Tasks
-            </h2>
+            <h2 className="text-2xl font-bold">Completed Unbilled Tasks</h2>
             {totalTasks > 0 && (
               <div className="text-sm text-gray-600">
                 Total Tasks: <span className="font-semibold">{totalTasks}</span>
