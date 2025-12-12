@@ -912,6 +912,62 @@ const Cost = () => {
                 </div>
               )}
 
+              {/* Cost Breakdown */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h4 className="text-lg font-semibold mb-3">Cost Breakdown</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {selectedTask.assignedTo && (
+                    <div className="bg-white rounded p-3">
+                      <p className="text-sm text-gray-600">Assigned To</p>
+                      <p className="font-medium">{selectedTask.assignedTo.name}</p>
+                      <p className="text-sm text-blue-600">{selectedTask.assignedTo.hours}h</p>
+                    </div>
+                  )}
+                  {selectedTask.firstVerifier && (
+                    <div className="bg-white rounded p-3">
+                      <p className="text-sm text-gray-600">First Verifier</p>
+                      <p className="font-medium">{selectedTask.firstVerifier.name}</p>
+                      <p className="text-sm text-blue-600">{selectedTask.firstVerifier.hours}h</p>
+                    </div>
+                  )}
+                  {selectedTask.secondVerifier && (
+                    <div className="bg-white rounded p-3">
+                      <p className="text-sm text-gray-600">Second Verifier</p>
+                      <p className="font-medium">{selectedTask.secondVerifier.name}</p>
+                      <p className="text-sm text-blue-600">{selectedTask.secondVerifier.hours}h</p>
+                    </div>
+                  )}
+                  {selectedTask.thirdVerifier && (
+                    <div className="bg-white rounded p-3">
+                      <p className="text-sm text-gray-600">Third Verifier</p>
+                      <p className="font-medium">{selectedTask.thirdVerifier.name}</p>
+                      <p className="text-sm text-blue-600">{selectedTask.thirdVerifier.hours}h</p>
+                    </div>
+                  )}
+                  {selectedTask.fourthVerifier && (
+                    <div className="bg-white rounded p-3">
+                      <p className="text-sm text-gray-600">Fourth Verifier</p>
+                      <p className="font-medium">{selectedTask.fourthVerifier.name}</p>
+                      <p className="text-sm text-blue-600">{selectedTask.fourthVerifier.hours}h</p>
+                    </div>
+                  )}
+                  {selectedTask.fifthVerifier && (
+                    <div className="bg-white rounded p-3">
+                      <p className="text-sm text-gray-600">Fifth Verifier</p>
+                      <p className="font-medium">{selectedTask.fifthVerifier.name}</p>
+                      <p className="text-sm text-blue-600">{selectedTask.fifthVerifier.hours}h</p>
+                    </div>
+                  )}
+                  {selectedTask.guides && selectedTask.guides.length > 0 && selectedTask.guides.map((guide, idx) => (
+                    <div key={idx} className="bg-white rounded p-3">
+                      <p className="text-sm text-gray-600">Guide {idx + 1}</p>
+                      <p className="font-medium">{guide.name}</p>
+                      <p className="text-sm text-purple-600">{guide.hours}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Timeslots */}
               <div className="bg-white rounded-lg border">
                 <h4 className="text-lg font-semibold p-4 border-b">
