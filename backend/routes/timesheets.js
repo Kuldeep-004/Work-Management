@@ -1015,7 +1015,7 @@ router.get("/task-costs", protect, async (req, res) => {
     // Get tasks with pagination
     const tasks = await Task.find(taskFilter)
       .populate(
-        "assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
+        "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
         "firstName lastName hourlyRate"
       )
       .skip(skip)
@@ -1086,6 +1086,7 @@ router.get("/task-costs", protect, async (req, res) => {
           cost,
         };
       }
+      const assignedBy = getUserCost(task.assignedBy);
       const assignedTo = getUserCost(task.assignedTo);
       const firstVerifier = getUserCost(task.verificationAssignedTo);
       const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
@@ -1109,6 +1110,7 @@ router.get("/task-costs", protect, async (req, res) => {
         0
       );
       const totalCost =
+        (assignedBy?.cost || 0) +
         (assignedTo?.cost || 0) +
         (firstVerifier?.cost || 0) +
         (secondVerifier?.cost || 0) +
@@ -1119,6 +1121,7 @@ router.get("/task-costs", protect, async (req, res) => {
       result.push({
         taskId: task._id,
         title: task.title,
+        assignedBy,
         assignedTo,
         firstVerifier,
         secondVerifier,
@@ -1162,7 +1165,7 @@ router.get("/task-costs/billed", protect, async (req, res) => {
     // Get tasks with pagination
     const tasks = await Task.find(taskFilter)
       .populate(
-        "assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
+        "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
         "firstName lastName hourlyRate"
       )
       .skip(skip)
@@ -1233,6 +1236,7 @@ router.get("/task-costs/billed", protect, async (req, res) => {
           cost,
         };
       }
+      const assignedBy = getUserCost(task.assignedBy);
       const assignedTo = getUserCost(task.assignedTo);
       const firstVerifier = getUserCost(task.verificationAssignedTo);
       const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
@@ -1256,6 +1260,7 @@ router.get("/task-costs/billed", protect, async (req, res) => {
         0
       );
       const totalCost =
+        (assignedBy?.cost || 0) +
         (assignedTo?.cost || 0) +
         (firstVerifier?.cost || 0) +
         (secondVerifier?.cost || 0) +
@@ -1266,6 +1271,7 @@ router.get("/task-costs/billed", protect, async (req, res) => {
       result.push({
         taskId: task._id,
         title: task.title,
+        assignedBy,
         assignedTo,
         firstVerifier,
         secondVerifier,
@@ -1309,7 +1315,7 @@ router.get("/task-costs/unbilled", protect, async (req, res) => {
     // Get tasks with pagination
     const tasks = await Task.find(taskFilter)
       .populate(
-        "assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
+        "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
         "firstName lastName hourlyRate"
       )
       .skip(skip)
@@ -1380,6 +1386,7 @@ router.get("/task-costs/unbilled", protect, async (req, res) => {
           cost,
         };
       }
+      const assignedBy = getUserCost(task.assignedBy);
       const assignedTo = getUserCost(task.assignedTo);
       const firstVerifier = getUserCost(task.verificationAssignedTo);
       const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
@@ -1403,6 +1410,7 @@ router.get("/task-costs/unbilled", protect, async (req, res) => {
         0
       );
       const totalCost =
+        (assignedBy?.cost || 0) +
         (assignedTo?.cost || 0) +
         (firstVerifier?.cost || 0) +
         (secondVerifier?.cost || 0) +
@@ -1413,6 +1421,7 @@ router.get("/task-costs/unbilled", protect, async (req, res) => {
       result.push({
         taskId: task._id,
         title: task.title,
+        assignedBy,
         assignedTo,
         firstVerifier,
         secondVerifier,
@@ -1459,7 +1468,7 @@ router.get("/task-costs/completed-billed", protect, async (req, res) => {
     // Get tasks with pagination
     const tasks = await Task.find(taskFilter)
       .populate(
-        "assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
+        "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
         "firstName lastName hourlyRate"
       )
       .skip(skip)
@@ -1530,6 +1539,7 @@ router.get("/task-costs/completed-billed", protect, async (req, res) => {
           cost,
         };
       }
+      const assignedBy = getUserCost(task.assignedBy);
       const assignedTo = getUserCost(task.assignedTo);
       const firstVerifier = getUserCost(task.verificationAssignedTo);
       const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
@@ -1553,6 +1563,7 @@ router.get("/task-costs/completed-billed", protect, async (req, res) => {
         0
       );
       const totalCost =
+        (assignedBy?.cost || 0) +
         (assignedTo?.cost || 0) +
         (firstVerifier?.cost || 0) +
         (secondVerifier?.cost || 0) +
@@ -1563,6 +1574,7 @@ router.get("/task-costs/completed-billed", protect, async (req, res) => {
       result.push({
         taskId: task._id,
         title: task.title,
+        assignedBy,
         assignedTo,
         firstVerifier,
         secondVerifier,
@@ -1609,7 +1621,7 @@ router.get("/task-costs/completed-unbilled", protect, async (req, res) => {
     // Get tasks with pagination
     const tasks = await Task.find(taskFilter)
       .populate(
-        "assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
+        "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
         "firstName lastName hourlyRate"
       )
       .skip(skip)
@@ -1680,6 +1692,7 @@ router.get("/task-costs/completed-unbilled", protect, async (req, res) => {
           cost,
         };
       }
+      const assignedBy = getUserCost(task.assignedBy);
       const assignedTo = getUserCost(task.assignedTo);
       const firstVerifier = getUserCost(task.verificationAssignedTo);
       const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
@@ -1703,6 +1716,7 @@ router.get("/task-costs/completed-unbilled", protect, async (req, res) => {
         0
       );
       const totalCost =
+        (assignedBy?.cost || 0) +
         (assignedTo?.cost || 0) +
         (firstVerifier?.cost || 0) +
         (secondVerifier?.cost || 0) +
@@ -1713,6 +1727,7 @@ router.get("/task-costs/completed-unbilled", protect, async (req, res) => {
       result.push({
         taskId: task._id,
         title: task.title,
+        assignedBy,
         assignedTo,
         firstVerifier,
         secondVerifier,
@@ -1770,7 +1785,7 @@ router.get("/task-costs/billed/user/:userId", protect, async (req, res) => {
     // Get tasks with pagination
     const tasks = await Task.find(taskFilter)
       .populate(
-        "assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
+        "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
         "firstName lastName hourlyRate"
       )
       .skip(skip)
@@ -1825,6 +1840,7 @@ router.get("/task-costs/billed/user/:userId", protect, async (req, res) => {
         };
       }
 
+      const assignedBy = getUserCost(task.assignedBy);
       const assignedTo = getUserCost(task.assignedTo);
       const firstVerifier = getUserCost(task.verificationAssignedTo);
       const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
@@ -1847,6 +1863,7 @@ router.get("/task-costs/billed/user/:userId", protect, async (req, res) => {
         0
       );
       const totalCost =
+        (assignedBy?.cost || 0) +
         (assignedTo?.cost || 0) +
         (firstVerifier?.cost || 0) +
         (secondVerifier?.cost || 0) +
@@ -1858,6 +1875,7 @@ router.get("/task-costs/billed/user/:userId", protect, async (req, res) => {
       result.push({
         taskId: task._id,
         title: task.title,
+        assignedBy,
         assignedTo,
         firstVerifier,
         secondVerifier,
@@ -1911,7 +1929,7 @@ router.get("/task-costs/unbilled/user/:userId", protect, async (req, res) => {
 
     const tasks = await Task.find(taskFilter)
       .populate(
-        "assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
+        "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
         "firstName lastName hourlyRate"
       )
       .skip(skip)
@@ -1965,6 +1983,7 @@ router.get("/task-costs/unbilled/user/:userId", protect, async (req, res) => {
         };
       }
 
+      const assignedBy = getUserCost(task.assignedBy);
       const assignedTo = getUserCost(task.assignedTo);
       const firstVerifier = getUserCost(task.verificationAssignedTo);
       const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
@@ -1987,6 +2006,7 @@ router.get("/task-costs/unbilled/user/:userId", protect, async (req, res) => {
         0
       );
       const totalCost =
+        (assignedBy?.cost || 0) +
         (assignedTo?.cost || 0) +
         (firstVerifier?.cost || 0) +
         (secondVerifier?.cost || 0) +
@@ -1998,6 +2018,7 @@ router.get("/task-costs/unbilled/user/:userId", protect, async (req, res) => {
       result.push({
         taskId: task._id,
         title: task.title,
+        assignedBy,
         assignedTo,
         firstVerifier,
         secondVerifier,
@@ -2108,6 +2129,7 @@ router.get(
           };
         }
 
+        const assignedBy = getUserCost(task.assignedBy);
         const assignedTo = getUserCost(task.assignedTo);
         const firstVerifier = getUserCost(task.verificationAssignedTo);
         const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
@@ -2130,6 +2152,7 @@ router.get(
           0
         );
         const totalCost =
+          (assignedBy?.cost || 0) +
           (assignedTo?.cost || 0) +
           (firstVerifier?.cost || 0) +
           (secondVerifier?.cost || 0) +
@@ -2141,6 +2164,7 @@ router.get(
         result.push({
           taskId: task._id,
           title: task.title,
+          assignedBy,
           assignedTo,
           firstVerifier,
           secondVerifier,
@@ -2252,6 +2276,7 @@ router.get(
           };
         }
 
+        const assignedBy = getUserCost(task.assignedBy);
         const assignedTo = getUserCost(task.assignedTo);
         const firstVerifier = getUserCost(task.verificationAssignedTo);
         const secondVerifier = getUserCost(task.secondVerificationAssignedTo);
@@ -2274,6 +2299,7 @@ router.get(
           0
         );
         const totalCost =
+          (assignedBy?.cost || 0) +
           (assignedTo?.cost || 0) +
           (firstVerifier?.cost || 0) +
           (secondVerifier?.cost || 0) +
@@ -2285,6 +2311,7 @@ router.get(
         result.push({
           taskId: task._id,
           title: task.title,
+          assignedBy,
           assignedTo,
           firstVerifier,
           secondVerifier,
