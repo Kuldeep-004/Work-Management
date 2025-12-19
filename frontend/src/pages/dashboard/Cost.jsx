@@ -758,6 +758,41 @@ const Cost = () => {
     }
   };
 
+  // Helper function to calculate unique user total cost
+  const calculateUniqueUserCost = (task) => {
+    const uniqueUserCosts = new Map();
+
+    // Collect all users and their costs
+    const allUsers = [
+      { name: task.assignedBy?.name, cost: task.assignedBy?.cost },
+      { name: task.assignedTo?.name, cost: task.assignedTo?.cost },
+      { name: task.firstVerifier?.name, cost: task.firstVerifier?.cost },
+      { name: task.secondVerifier?.name, cost: task.secondVerifier?.cost },
+      { name: task.thirdVerifier?.name, cost: task.thirdVerifier?.cost },
+      { name: task.fourthVerifier?.name, cost: task.fourthVerifier?.cost },
+      { name: task.fifthVerifier?.name, cost: task.fifthVerifier?.cost },
+      ...(task.guides || []).map((guide) => ({
+        name: guide.name,
+        cost: guide.cost,
+      })),
+    ];
+
+    // Add costs only for unique users (based on name)
+    allUsers.forEach(({ name, cost }) => {
+      if (name && cost !== undefined && cost !== null) {
+        if (!uniqueUserCosts.has(name)) {
+          uniqueUserCosts.set(name, cost);
+        }
+      }
+    });
+
+    // Sum all unique user costs
+    return Array.from(uniqueUserCosts.values()).reduce(
+      (sum, cost) => sum + cost,
+      0
+    );
+  };
+
   // Function to render table cell content based on column type
   const renderCellContent = (task, columnId) => {
     switch (columnId) {
@@ -806,9 +841,10 @@ const Cost = () => {
           <span className="text-gray-400">-</span>
         );
       case "totalCost":
+        const uniqueTotalCost = calculateUniqueUserCost(task);
         return (
           <span className="font-bold text-green-700">
-            ₹{task.totalCost.toFixed(2)}
+            ₹{uniqueTotalCost.toFixed(2)}
           </span>
         );
       default:
@@ -1031,7 +1067,8 @@ const Cost = () => {
                 </div>
                 <div className="mt-4 text-right">
                   <p className="text-xl font-bold text-green-700">
-                    Total Cost: ₹{selectedTask.totalCost.toFixed(2)}
+                    Total Cost: ₹
+                    {calculateUniqueUserCost(selectedTask).toFixed(2)}
                   </p>
                 </div>
               </div>

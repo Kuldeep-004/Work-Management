@@ -1,17 +1,17 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import toast from 'react-hot-toast';
-import defaultProfile from '../assets/avatar.jpg';
-import FileUpload from './FileUpload';
-import FileList from './FileList';
-import { API_BASE_URL } from '../apiConfig';
-import TaskStatusDropdown from './TaskStatusDropdown';
-import ITRProgressTable from './ITRProgressTable';
+import { useState, useMemo, useRef, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import toast from "react-hot-toast";
+import defaultProfile from "../assets/avatar.jpg";
+import FileUpload from "./FileUpload";
+import FileList from "./FileList";
+import { API_BASE_URL } from "../apiConfig";
+import TaskStatusDropdown from "./TaskStatusDropdown";
+import ITRProgressTable from "./ITRProgressTable";
 
 // Accept new props for edit mode
 const CreateTask = ({
   users = [],
-  mode = 'create',
+  mode = "create",
   initialData = null,
   isOpen = false,
   onClose = () => {},
@@ -21,31 +21,31 @@ const CreateTask = ({
 }) => {
   const { user: loggedInUser, isAuthenticated } = useAuth();
   const [isWorkTypeModalOpen, setIsWorkTypeModalOpen] = useState(false);
-  const [workTypeFormData, setWorkTypeFormData] = useState({ name: '' });
+  const [workTypeFormData, setWorkTypeFormData] = useState({ name: "" });
   const [clients, setClients] = useState([]);
   const [clientGroups, setClientGroups] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
   const [priorities, setPriorities] = useState([]);
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    clientName: '',
-    clientGroup: '',
+    title: "",
+    description: "",
+    clientName: "",
+    clientGroup: "",
     workType: [],
     assignedTo: [],
     guides: [], // Add guides field
-    priority: '',
-    inwardEntryDate: '',
-    inwardEntryTime: '',
-    dueDate: '',
-    targetDate: '',
+    priority: "",
+    inwardEntryDate: "",
+    inwardEntryTime: "",
+    dueDate: "",
+    targetDate: "",
     billed: false, // default to No (Internal Works)
-    status: 'yet_to_start' // default to yet_to_start
+    status: "yet_to_start", // default to yet_to_start
   });
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [selectedGuides, setSelectedGuides] = useState([]); // Add selected guides state
-  const [searchTerm, setSearchTerm] = useState('');
-  const [guideSearchTerm, setGuideSearchTerm] = useState(''); // Add guide search term
+  const [searchTerm, setSearchTerm] = useState("");
+  const [guideSearchTerm, setGuideSearchTerm] = useState(""); // Add guide search term
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isGuideDropdownOpen, setIsGuideDropdownOpen] = useState(false); // Add guide dropdown state
   const assignSearchInputRef = useRef(null);
@@ -63,7 +63,7 @@ const CreateTask = ({
     }
   }, [isGuideDropdownOpen]);
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
-  const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [clientSearchTerm, setClientSearchTerm] = useState("");
   const modalRef = useRef(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [taskFiles, setTaskFiles] = useState([]);
@@ -83,43 +83,45 @@ const CreateTask = ({
   // Function to get current date and time in required format
   const getCurrentDateTime = () => {
     const now = new Date();
-    
+
     // Format date as YYYY-MM-DD
-    const date = now.toISOString().split('T')[0];
-    
+    const date = now.toISOString().split("T")[0];
+
     // Format time as HH:MM in 12-hour format
     const hours = now.getHours();
     const minutes = now.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const ampm = hours >= 12 ? "PM" : "AM";
     const displayHours = hours % 12 || 12;
-    const time = `${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-    
+    const time = `${displayHours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")} ${ampm}`;
+
     return { date, time };
   };
 
   // Function to convert 12-hour time to 24-hour format for backend
   const convertTo24Hour = (time12h) => {
-    const [time, modifier] = time12h.split(' ');
-    let [hours, minutes] = time.split(':');
-    
+    const [time, modifier] = time12h.split(" ");
+    let [hours, minutes] = time.split(":");
+
     hours = parseInt(hours, 10);
-    
+
     if (hours === 12) {
-      hours = modifier === 'PM' ? 12 : 0;
-    } else if (modifier === 'PM') {
+      hours = modifier === "PM" ? 12 : 0;
+    } else if (modifier === "PM") {
       hours = hours + 12;
     }
-    
-    return `${hours.toString().padStart(2, '0')}:${minutes}`;
+
+    return `${hours.toString().padStart(2, "0")}:${minutes}`;
   };
 
   // Function to convert 24-hour time to 12-hour format for display
   const convertTo12Hour = (time24h) => {
-    const [hours, minutes] = time24h.split(':');
+    const [hours, minutes] = time24h.split(":");
     const hour = parseInt(hours, 10);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const ampm = hour >= 12 ? "PM" : "AM";
     const displayHour = hour % 12 || 12;
-    return `${displayHour.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    return `${displayHour.toString().padStart(2, "0")}:${minutes} ${ampm}`;
   };
 
   // Fetch clients, client groups, work types, and priorities
@@ -136,39 +138,48 @@ const CreateTask = ({
         setClients(clientsData);
 
         // Fetch client groups
-        const groupsResponse = await fetch(`${API_BASE_URL}/api/clients/groups`, {
-          headers: {
-            Authorization: `Bearer ${loggedInUser.token}`,
-          },
-        });
+        const groupsResponse = await fetch(
+          `${API_BASE_URL}/api/clients/groups`,
+          {
+            headers: {
+              Authorization: `Bearer ${loggedInUser.token}`,
+            },
+          }
+        );
         const groupsData = await groupsResponse.json();
         setClientGroups(groupsData);
 
         // Fetch work types
-        const workTypesResponse = await fetch(`${API_BASE_URL}/api/clients/work-types`, {
-          headers: {
-            Authorization: `Bearer ${loggedInUser.token}`,
-          },
-        });
+        const workTypesResponse = await fetch(
+          `${API_BASE_URL}/api/clients/work-types`,
+          {
+            headers: {
+              Authorization: `Bearer ${loggedInUser.token}`,
+            },
+          }
+        );
         const workTypesData = await workTypesResponse.json();
         setWorkTypes(workTypesData);
 
         // Fetch priorities and merge with defaults
         try {
-          const prioritiesResponse = await fetch(`${API_BASE_URL}/api/priorities`, {
-            headers: {
-              Authorization: `Bearer ${loggedInUser.token}`,
-            },
-          });
+          const prioritiesResponse = await fetch(
+            `${API_BASE_URL}/api/priorities`,
+            {
+              headers: {
+                Authorization: `Bearer ${loggedInUser.token}`,
+              },
+            }
+          );
           const prioritiesData = await prioritiesResponse.json();
           setPriorities(prioritiesData);
         } catch (priorityError) {
-          console.error('Error fetching priorities:', priorityError);
+          console.error("Error fetching priorities:", priorityError);
           setPriorities([]);
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
-        toast.error('Failed to fetch required data');
+        console.error("Error fetching data:", error);
+        toast.error("Failed to fetch required data");
       }
     };
 
@@ -180,16 +191,24 @@ const CreateTask = ({
   // Filter clients based on search term
   const filteredClients = useMemo(() => {
     if (!clientSearchTerm) return clients;
-    return clients.filter(client => 
-      client.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) ||
-      (client.group && client.group.name.toLowerCase().includes(clientSearchTerm.toLowerCase()))
+    return clients.filter(
+      (client) =>
+        client.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) ||
+        (client.group &&
+          client.group.name
+            .toLowerCase()
+            .includes(clientSearchTerm.toLowerCase()))
     );
   }, [clients, clientSearchTerm]);
 
   // Handle click outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target) && !event.target.closest('.work-type-modal')) {
+      if (
+        modalRef.current &&
+        !modalRef.current.contains(event.target) &&
+        !event.target.closest(".work-type-modal")
+      ) {
         onClose();
         setIsDropdownOpen(false);
         setIsClientDropdownOpen(false);
@@ -197,11 +216,11 @@ const CreateTask = ({
     };
 
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isOpen, onClose]);
 
@@ -211,45 +230,55 @@ const CreateTask = ({
 
     // Check total number of files
     if (selectedFiles.length + newFiles.length > MAX_FILES) {
-      errors.push(`Maximum ${MAX_FILES} files allowed. You are trying to add ${newFiles.length} file(s) but already have ${selectedFiles.length}.`);
+      errors.push(
+        `Maximum ${MAX_FILES} files allowed. You are trying to add ${newFiles.length} file(s) but already have ${selectedFiles.length}.`
+      );
     }
 
     // Check individual file sizes and total size
     let totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
-    newFiles.forEach(file => {
+    newFiles.forEach((file) => {
       if (file.size > MAX_FILE_SIZE) {
-        errors.push(`${file.name} is ${(file.size / 1024 / 1024).toFixed(2)}MB and exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`);
+        errors.push(
+          `${file.name} is ${(file.size / 1024 / 1024).toFixed(
+            2
+          )}MB and exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`
+        );
       }
       totalSize += file.size;
     });
 
     if (totalSize > MAX_TOTAL_SIZE) {
-      errors.push(`Total size ${(totalSize / 1024 / 1024).toFixed(2)}MB exceeds ${MAX_TOTAL_SIZE / 1024 / 1024}MB limit`);
+      errors.push(
+        `Total size ${(totalSize / 1024 / 1024).toFixed(2)}MB exceeds ${
+          MAX_TOTAL_SIZE / 1024 / 1024
+        }MB limit`
+      );
     }
 
     // Check file types
     const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-powerpoint',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-      'text/plain'
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "text/plain",
     ];
 
-    newFiles.forEach(file => {
+    newFiles.forEach((file) => {
       if (!allowedTypes.includes(file.type)) {
         errors.push(`${file.name} (${file.type}) is not a supported file type`);
       }
     });
 
     if (errors.length > 0) {
-      errors.forEach(error => toast.error(error, { duration: 5000 }));
+      errors.forEach((error) => toast.error(error, { duration: 5000 }));
       return false;
     }
 
@@ -262,110 +291,133 @@ const CreateTask = ({
 
     // Convert FileList to Array and validate
     const newFiles = Array.from(files);
-    console.log('Selected files:', newFiles); // Debug log
+    console.log("Selected files:", newFiles); // Debug log
 
     if (validateFiles(newFiles)) {
-      setSelectedFiles(prev => {
+      setSelectedFiles((prev) => {
         const updatedFiles = [...prev, ...newFiles];
-        console.log('Updated selected files:', updatedFiles); // Debug log
+        console.log("Updated selected files:", updatedFiles); // Debug log
         return updatedFiles;
       });
     }
     // Reset the input value to allow selecting the same file again
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
   };
 
   const removeSelectedFile = (index) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Prefill formData if in edit mode
   useEffect(() => {
-    if (mode === 'edit' && initialData && isOpen) {
-      let inwardEntryTime = '';
+    if (mode === "edit" && initialData && isOpen) {
+      let inwardEntryTime = "";
       if (initialData.inwardEntryTime) {
         inwardEntryTime = initialData.inwardEntryTime;
       } else if (initialData.inwardEntryDate) {
         const dateObj = new Date(initialData.inwardEntryDate);
-        const hours = dateObj.getHours().toString().padStart(2, '0');
-        const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+        const hours = dateObj.getHours().toString().padStart(2, "0");
+        const minutes = dateObj.getMinutes().toString().padStart(2, "0");
         inwardEntryTime = `${hours}:${minutes}`;
       }
-      const convertedTime = inwardEntryTime ? convertTo12Hour(inwardEntryTime) : '';
+      const convertedTime = inwardEntryTime
+        ? convertTo12Hour(inwardEntryTime)
+        : "";
       setFormData({
-        title: initialData.title || '',
-        description: initialData.description || '',
-        clientName: initialData.clientName || '',
-        clientGroup: initialData.clientGroup || '',
-        workType: Array.isArray(initialData.workType) ? initialData.workType : [],
-        assignedTo: Array.isArray(initialData.assignedTo)
-          ? initialData.assignedTo.map(u => typeof u === 'string' ? u : u._id)
-          : initialData.assignedTo
-            ? [typeof initialData.assignedTo === 'string' ? initialData.assignedTo : initialData.assignedTo._id]
-            : [],
-        guides: Array.isArray(initialData.guides)
-          ? initialData.guides.map(g => typeof g === 'string' ? g : g._id)
+        title: initialData.title || "",
+        description: initialData.description || "",
+        clientName: initialData.clientName || "",
+        clientGroup: initialData.clientGroup || "",
+        workType: Array.isArray(initialData.workType)
+          ? initialData.workType
           : [],
-        priority: initialData.priority || 'regular',
-        inwardEntryDate: initialData.inwardEntryDate ? initialData.inwardEntryDate.split('T')[0] : '',
+        assignedTo: Array.isArray(initialData.assignedTo)
+          ? initialData.assignedTo.map((u) =>
+              typeof u === "string" ? u : u._id
+            )
+          : initialData.assignedTo
+          ? [
+              typeof initialData.assignedTo === "string"
+                ? initialData.assignedTo
+                : initialData.assignedTo._id,
+            ]
+          : [],
+        guides: Array.isArray(initialData.guides)
+          ? initialData.guides.map((g) => (typeof g === "string" ? g : g._id))
+          : [],
+        priority: initialData.priority || "regular",
+        inwardEntryDate: initialData.inwardEntryDate
+          ? initialData.inwardEntryDate.split("T")[0]
+          : "",
         inwardEntryTime: convertedTime,
-        dueDate: initialData.dueDate ? initialData.dueDate.split('T')[0] : '',
-        targetDate: initialData.targetDate ? initialData.targetDate.split('T')[0] : '',
-        billed: typeof initialData.billed === 'boolean' ? initialData.billed : true,
-        status: initialData.status || 'in_progress'
+        dueDate: initialData.dueDate ? initialData.dueDate.split("T")[0] : "",
+        targetDate: initialData.targetDate
+          ? initialData.targetDate.split("T")[0]
+          : "",
+        billed:
+          typeof initialData.billed === "boolean" ? initialData.billed : true,
+        status: initialData.status || "in_progress",
       });
-      setClientSearchTerm(initialData.clientName || '');
+      setClientSearchTerm(initialData.clientName || "");
       const assignedToRaw = Array.isArray(initialData.assignedTo)
         ? initialData.assignedTo
         : initialData.assignedTo
-          ? [initialData.assignedTo]
-          : [];
-      const assignedUserIds = assignedToRaw.map(u => typeof u === 'string' ? u : u._id);
-      console.log('[EditModal-FIX] assignedToRaw:', assignedToRaw);
-      console.log('[EditModal-FIX] users:', users);
-      console.log('[EditModal-FIX] assignedUserIds:', assignedUserIds);
-      const selected = usersWithCurrent.filter(u => assignedUserIds.includes(u._id));
-      console.log('[EditModal-FIX] selectedUsers to set:', selected);
+        ? [initialData.assignedTo]
+        : [];
+      const assignedUserIds = assignedToRaw.map((u) =>
+        typeof u === "string" ? u : u._id
+      );
+      console.log("[EditModal-FIX] assignedToRaw:", assignedToRaw);
+      console.log("[EditModal-FIX] users:", users);
+      console.log("[EditModal-FIX] assignedUserIds:", assignedUserIds);
+      const selected = usersWithCurrent.filter((u) =>
+        assignedUserIds.includes(u._id)
+      );
+      console.log("[EditModal-FIX] selectedUsers to set:", selected);
       setSelectedUsers(selected);
-      
+
       // Set guides if available
-      const guidesRaw = Array.isArray(initialData.guides) ? initialData.guides : [];
-      const guideIds = guidesRaw.map(g => typeof g === 'string' ? g : g._id);
-      const selectedGuidesData = usersWithCurrent.filter(u => guideIds.includes(u._id));
+      const guidesRaw = Array.isArray(initialData.guides)
+        ? initialData.guides
+        : [];
+      const guideIds = guidesRaw.map((g) =>
+        typeof g === "string" ? g : g._id
+      );
+      const selectedGuidesData = usersWithCurrent.filter((u) =>
+        guideIds.includes(u._id)
+      );
       setSelectedGuides(selectedGuidesData);
-      
+
       // Set multi-user assignment toggle based on number of assigned users
       setIsMultiUserAssign(assignedUserIds.length > 1);
-    } else if (mode === 'create' && isOpen) {
-      const { date, time } = getCurrentDateTime();
-      
+    } else if (mode === "create" && isOpen) {
       // Only reset form data if it's not already initialized (when modal first opens)
-      setFormData(prev => {
+      setFormData((prev) => {
         // If the form already has data (user has been using it), don't reset the status
-        if (prev.title || prev.status !== 'yet_to_start') {
+        if (prev.title || prev.status !== "yet_to_start") {
           return prev; // Keep existing data
         }
         // Initialize form for first time
         return {
-          title: '',
-          description: '',
-          clientName: '',
-          clientGroup: '',
+          title: "",
+          description: "",
+          clientName: "",
+          clientGroup: "",
           workType: [],
           assignedTo: [],
           guides: [],
-          priority: 'Today',
-          inwardEntryDate: date,
-          inwardEntryTime: time,
-          dueDate: '',
-          targetDate: '',
+          priority: "Today",
+          inwardEntryDate: "",
+          inwardEntryTime: "",
+          dueDate: "",
+          targetDate: "",
           billed: false,
-          status: 'yet_to_start' // Use yet_to_start as default
+          status: "yet_to_start", // Use yet_to_start as default
         };
       });
-      setClientSearchTerm('');
+      setClientSearchTerm("");
       setSelectedUsers([]);
       setSelectedGuides([]);
       setIsMultiUserAssign(false); // Reset multi-user toggle for create mode
@@ -375,7 +427,7 @@ const CreateTask = ({
   // Ensure selectedUsers is set for edit mode when users are loaded
   useEffect(() => {
     if (
-      mode === 'edit' &&
+      mode === "edit" &&
       initialData &&
       isOpen &&
       users.length > 0 &&
@@ -385,23 +437,44 @@ const CreateTask = ({
       const assignedToRaw = Array.isArray(initialData.assignedTo)
         ? initialData.assignedTo
         : initialData.assignedTo
-          ? [initialData.assignedTo]
-          : [];
-      const assignedUserIds = assignedToRaw.map(u => typeof u === 'string' ? u : u._id);
-      console.log('[EditModal-FIX][users effect] assignedToRaw:', assignedToRaw);
-      console.log('[EditModal-FIX][users effect] users:', users);
-      console.log('[EditModal-FIX][users effect] assignedUserIds:', assignedUserIds);
-      const selected = usersWithCurrent.filter(u => assignedUserIds.includes(u._id));
-      console.log('[EditModal-FIX][users effect] selectedUsers to set:', selected);
+        ? [initialData.assignedTo]
+        : [];
+      const assignedUserIds = assignedToRaw.map((u) =>
+        typeof u === "string" ? u : u._id
+      );
+      console.log(
+        "[EditModal-FIX][users effect] assignedToRaw:",
+        assignedToRaw
+      );
+      console.log("[EditModal-FIX][users effect] users:", users);
+      console.log(
+        "[EditModal-FIX][users effect] assignedUserIds:",
+        assignedUserIds
+      );
+      const selected = usersWithCurrent.filter((u) =>
+        assignedUserIds.includes(u._id)
+      );
+      console.log(
+        "[EditModal-FIX][users effect] selectedUsers to set:",
+        selected
+      );
       setSelectedUsers(selected);
-      
+
       // Set guides if available
-      if (Array.isArray(initialData.guides) && initialData.guides.length > 0 && selectedGuides.length === 0) {
-        const guideIds = initialData.guides.map(g => typeof g === 'string' ? g : g._id);
-        const selectedGuidesData = usersWithCurrent.filter(u => guideIds.includes(u._id));
+      if (
+        Array.isArray(initialData.guides) &&
+        initialData.guides.length > 0 &&
+        selectedGuides.length === 0
+      ) {
+        const guideIds = initialData.guides.map((g) =>
+          typeof g === "string" ? g : g._id
+        );
+        const selectedGuidesData = usersWithCurrent.filter((u) =>
+          guideIds.includes(u._id)
+        );
         setSelectedGuides(selectedGuidesData);
       }
-      
+
       // Set multi-user assignment toggle based on number of assigned users
       setIsMultiUserAssign(assignedUserIds.length > 1);
     }
@@ -411,52 +484,42 @@ const CreateTask = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isAuthenticated()) {
-      toast.error('Please login to create tasks');
+      toast.error("Please login to create tasks");
       return;
     }
 
     // Validate required fields
     if (!formData.title.trim()) {
-      toast.error('Task Title is required');
+      toast.error("Task Title is required");
       return;
     }
 
-
     if (!formData.clientName.trim()) {
-      toast.error('Client Name is required');
+      toast.error("Client Name is required");
       return;
     }
     // Validate that clientName matches a real client
     const clientExists = clients.some(
-      c => c.name.trim().toLowerCase() === formData.clientName.trim().toLowerCase()
+      (c) =>
+        c.name.trim().toLowerCase() === formData.clientName.trim().toLowerCase()
     );
     if (!clientExists) {
-      toast.error('Please select a valid client from the list.');
-      return;
-    }
-
-    if (!formData.inwardEntryDate) {
-      toast.error('Inward Entry Date is required');
-      return;
-    }
-
-    if (!formData.inwardEntryTime) {
-      toast.error('Inward Entry Time is required');
+      toast.error("Please select a valid client from the list.");
       return;
     }
 
     if (formData.assignedTo.length === 0) {
-      toast.error('Please select at least one user to assign the task to');
+      toast.error("Please select at least one user to assign the task to");
       return;
     }
 
     if (formData.workType.length === 0) {
-      toast.error('Please select at least one work type');
+      toast.error("Please select at least one work type");
       return;
     }
 
     if (formData.billed !== true && formData.billed !== false) {
-      toast.error('Please select whether the task is billed or not');
+      toast.error("Please select whether the task is billed or not");
       return;
     }
 
@@ -464,13 +527,14 @@ const CreateTask = ({
       setUploading(true);
 
       // Combine date and time into a Date object and send as UTC ISO string
-      let combinedInwardEntryDate = formData.inwardEntryDate;
+      let combinedInwardEntryDate = null;
       if (formData.inwardEntryDate && formData.inwardEntryTime) {
         const time24 = convertTo24Hour(formData.inwardEntryTime);
-        const [h, m] = time24.split(':');
+        const [h, m] = time24.split(":");
         // Validate date string
         const dateValid = !isNaN(Date.parse(formData.inwardEntryDate));
-        const hourValid = !isNaN(Number(h)) && Number(h) >= 0 && Number(h) <= 23;
+        const hourValid =
+          !isNaN(Number(h)) && Number(h) >= 0 && Number(h) <= 23;
         const minValid = !isNaN(Number(m)) && Number(m) >= 0 && Number(m) <= 59;
         if (dateValid && hourValid && minValid) {
           const dt = new Date(formData.inwardEntryDate);
@@ -478,42 +542,55 @@ const CreateTask = ({
           if (!isNaN(dt.getTime())) {
             combinedInwardEntryDate = dt.toISOString();
           } else {
-            toast.error('Invalid date/time selected.');
+            toast.error("Invalid date/time selected.");
             setUploading(false);
             return;
           }
         } else {
-          toast.error('Please provide a valid Inward Entry Date and Time.');
+          toast.error("Please provide a valid Inward Entry Date and Time.");
           setUploading(false);
           return;
         }
-      } else if (mode === 'edit' && initialData && initialData.inwardEntryDate) {
+      } else if (
+        mode === "edit" &&
+        initialData &&
+        initialData.inwardEntryDate
+      ) {
         // If editing and user did not change date/time, use the original ISO string
         combinedInwardEntryDate = initialData.inwardEntryDate;
-      } else {
-        // If either date or time is missing, do not send an invalid date
-        toast.error('Both Inward Entry Date and Time are required.');
+      } else if (formData.inwardEntryDate || formData.inwardEntryTime) {
+        // If only one is provided, show error
+        toast.error(
+          "Please provide both Inward Entry Date and Time, or leave both empty."
+        );
         setUploading(false);
         return;
       }
+      // If both are empty, combinedInwardEntryDate remains null
       // Log for debugging
-      console.log('Submitting task with inwardEntryDate:', combinedInwardEntryDate);
+      console.log(
+        "Submitting task with inwardEntryDate:",
+        combinedInwardEntryDate
+      );
 
       // Handle assignedTo differently for create vs edit mode
       let assignedToData;
-      if (mode === 'edit') {
+      if (mode === "edit") {
         // For edit mode, send only the first user to update the current task
-        assignedToData = formData.assignedTo.length > 0 ? formData.assignedTo[0] : null;
-        
+        assignedToData =
+          formData.assignedTo.length > 0 ? formData.assignedTo[0] : null;
+
         // Validate that we have at least one user assigned
         if (!assignedToData) {
-          toast.error('Please select at least one user to assign the task to');
+          toast.error("Please select at least one user to assign the task to");
           setUploading(false);
           return;
         }
       } else {
         // For create mode, send the array as usual
-        assignedToData = Array.isArray(formData.assignedTo) ? formData.assignedTo.filter(Boolean) : [formData.assignedTo].filter(Boolean);
+        assignedToData = Array.isArray(formData.assignedTo)
+          ? formData.assignedTo.filter(Boolean)
+          : [formData.assignedTo].filter(Boolean);
       }
 
       const taskData = {
@@ -521,25 +598,25 @@ const CreateTask = ({
         inwardEntryDate: combinedInwardEntryDate,
         assignedTo: assignedToData,
         inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
-        billed: formData.billed
+        billed: formData.billed,
       };
 
       let response, updatedTask;
-      if (mode === 'edit' && initialData && initialData._id) {
+      if (mode === "edit" && initialData && initialData._id) {
         response = await fetch(`${API_BASE_URL}/api/tasks/${initialData._id}`, {
-          method: 'PUT',
+          method: "PUT",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${loggedInUser.token}`,
           },
           body: JSON.stringify(taskData),
         });
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to update task');
+          throw new Error(errorData.message || "Failed to update task");
         }
         updatedTask = await response.json();
-        
+
         // If there are additional users to assign, create new tasks for them
         if (formData.assignedTo.length > 1) {
           const additionalUsers = formData.assignedTo.slice(1); // Skip the first user
@@ -548,40 +625,49 @@ const CreateTask = ({
             inwardEntryDate: combinedInwardEntryDate,
             assignedTo: additionalUsers,
             inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
-            billed: formData.billed
+            billed: formData.billed,
           };
-          
+
           try {
-            const additionalResponse = await fetch(`${API_BASE_URL}/api/tasks`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${loggedInUser.token}`,
-              },
-              body: JSON.stringify(additionalTaskData),
-            });
-            
+            const additionalResponse = await fetch(
+              `${API_BASE_URL}/api/tasks`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${loggedInUser.token}`,
+                },
+                body: JSON.stringify(additionalTaskData),
+              }
+            );
+
             if (additionalResponse.ok) {
               const additionalTasks = await additionalResponse.json();
-              toast.success(`Task updated and ${additionalTasks.length} additional task(s) created for other users`);
+              toast.success(
+                `Task updated and ${additionalTasks.length} additional task(s) created for other users`
+              );
             } else {
-              toast.warning('Task updated but failed to create additional tasks for other users');
+              toast.warning(
+                "Task updated but failed to create additional tasks for other users"
+              );
             }
           } catch (additionalError) {
-            console.error('Error creating additional tasks:', additionalError);
-            toast.warning('Task updated but failed to create additional tasks for other users');
+            console.error("Error creating additional tasks:", additionalError);
+            toast.warning(
+              "Task updated but failed to create additional tasks for other users"
+            );
           }
         } else {
-          toast.success('Task updated successfully');
+          toast.success("Task updated successfully");
         }
-        
+
         if (onSubmit) onSubmit(updatedTask);
         onClose();
       } else {
         const response = await fetch(`${API_BASE_URL}/api/tasks`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${loggedInUser.token}`,
           },
           body: JSON.stringify(taskData),
@@ -589,30 +675,38 @@ const CreateTask = ({
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to create task');
+          throw new Error(errorData.message || "Failed to create task");
         }
 
         const createdTasks = await response.json();
-        console.log('Tasks created:', createdTasks); // Debug log
-        
-        if (createdTasks && Array.isArray(createdTasks) && createdTasks.length > 0) {
+        console.log("Tasks created:", createdTasks); // Debug log
+
+        if (
+          createdTasks &&
+          Array.isArray(createdTasks) &&
+          createdTasks.length > 0
+        ) {
           toast.success(`${createdTasks.length} task(s) created successfully`);
-          
+
           for (const task of createdTasks) {
             if (task && task._id) {
               if (selectedFiles.length > 0) {
-                console.log('Starting file upload for task:', task._id); // Debug log
+                console.log("Starting file upload for task:", task._id); // Debug log
                 try {
                   await uploadFiles(task._id);
                   toast.success(`Files uploaded for task: ${task.title}`);
                 } catch (uploadError) {
-                  console.error('File upload error:', uploadError); // Debug log
-                  toast.error(`Task created but file upload failed for ${task.title}: ${uploadError.message}`);
+                  console.error("File upload error:", uploadError); // Debug log
+                  toast.error(
+                    `Task created but file upload failed for ${task.title}: ${uploadError.message}`
+                  );
                 }
               }
             } else {
-              console.error('Invalid task ID received for one of the tasks');
-              toast.error('An error occurred while processing one of the created tasks.');
+              console.error("Invalid task ID received for one of the tasks");
+              toast.error(
+                "An error occurred while processing one of the created tasks."
+              );
             }
           }
           // Call onSubmit after all file uploads and before closing the modal
@@ -620,12 +714,14 @@ const CreateTask = ({
           // Close the modal after successful task creation and file uploads
           onClose();
         } else {
-          console.error('Invalid task ID received:', createdTasks);
-          toast.error('An error occurred while creating the task. Invalid ID received.');
+          console.error("Invalid task ID received:", createdTasks);
+          toast.error(
+            "An error occurred while creating the task. Invalid ID received."
+          );
         }
       }
     } catch (error) {
-      console.error('Error creating task:', error);
+      console.error("Error creating task:", error);
       toast.error(error.message);
       setCreatedTaskId(null);
     } finally {
@@ -636,12 +732,12 @@ const CreateTask = ({
   const handleAccept = async (e) => {
     e.preventDefault();
     if (!isAuthenticated()) {
-      toast.error('Please login to update tasks');
+      toast.error("Please login to update tasks");
       return;
     }
 
     if (!initialData || !initialData._id) {
-      toast.error('Task ID not found');
+      toast.error("Task ID not found");
       return;
     }
 
@@ -650,13 +746,18 @@ const CreateTask = ({
       // First, update the task with current form data
       let combinedInwardEntryDate;
       if (formData.inwardEntryDate && formData.inwardEntryTime) {
-        const [h, m] = formData.inwardEntryTime.replace(/(AM|PM)/, '').split(':').map(s => s.trim());
-        const isPM = formData.inwardEntryTime.toUpperCase().includes('PM');
+        const [h, m] = formData.inwardEntryTime
+          .replace(/(AM|PM)/, "")
+          .split(":")
+          .map((s) => s.trim());
+        const isPM = formData.inwardEntryTime.toUpperCase().includes("PM");
         let hour24 = parseInt(h, 10);
         if (isPM && hour24 !== 12) hour24 += 12;
         else if (!isPM && hour24 === 12) hour24 = 0;
 
-        const dateValid = formData.inwardEntryDate && !isNaN(new Date(formData.inwardEntryDate));
+        const dateValid =
+          formData.inwardEntryDate &&
+          !isNaN(new Date(formData.inwardEntryDate));
         const hourValid = !isNaN(hour24) && hour24 >= 0 && hour24 <= 23;
         const minValid = !isNaN(Number(m)) && Number(m) >= 0 && Number(m) <= 59;
         if (dateValid && hourValid && minValid) {
@@ -665,29 +766,30 @@ const CreateTask = ({
           if (!isNaN(dt.getTime())) {
             combinedInwardEntryDate = dt.toISOString();
           } else {
-            toast.error('Invalid date/time selected.');
+            toast.error("Invalid date/time selected.");
             setUploading(false);
             return;
           }
         } else {
-          toast.error('Please provide a valid Inward Entry Date and Time.');
+          toast.error("Please provide a valid Inward Entry Date and Time.");
           setUploading(false);
           return;
         }
       } else if (initialData && initialData.inwardEntryDate) {
         combinedInwardEntryDate = initialData.inwardEntryDate;
       } else {
-        toast.error('Both Inward Entry Date and Time are required.');
+        toast.error("Both Inward Entry Date and Time are required.");
         setUploading(false);
         return;
       }
 
       // Handle assignedTo - use only the first user for the update (same logic as handleSubmit)
-      let assignedToData = formData.assignedTo.length > 0 ? formData.assignedTo[0] : null;
-      
+      let assignedToData =
+        formData.assignedTo.length > 0 ? formData.assignedTo[0] : null;
+
       // Validate that we have at least one user assigned
       if (!assignedToData) {
-        toast.error('Please select at least one user to assign the task to');
+        toast.error("Please select at least one user to assign the task to");
         setUploading(false);
         return;
       }
@@ -697,22 +799,25 @@ const CreateTask = ({
         inwardEntryDate: combinedInwardEntryDate,
         assignedTo: assignedToData,
         inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
-        billed: formData.billed
+        billed: formData.billed,
       };
 
       // Update the task
-      const updateResponse = await fetch(`${API_BASE_URL}/api/tasks/${initialData._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${loggedInUser.token}`,
-        },
-        body: JSON.stringify(taskData),
-      });
+      const updateResponse = await fetch(
+        `${API_BASE_URL}/api/tasks/${initialData._id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${loggedInUser.token}`,
+          },
+          body: JSON.stringify(taskData),
+        }
+      );
 
       if (!updateResponse.ok) {
         const errorData = await updateResponse.json();
-        throw new Error(errorData.message || 'Failed to update task');
+        throw new Error(errorData.message || "Failed to update task");
       }
 
       const updatedTask = await updateResponse.json();
@@ -725,54 +830,62 @@ const CreateTask = ({
           inwardEntryDate: combinedInwardEntryDate,
           assignedTo: additionalUsers,
           inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
-          billed: formData.billed
+          billed: formData.billed,
         };
-        
+
         try {
           const additionalResponse = await fetch(`${API_BASE_URL}/api/tasks`, {
-            method: 'POST',
+            method: "POST",
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               Authorization: `Bearer ${loggedInUser.token}`,
             },
             body: JSON.stringify(additionalTaskData),
           });
-          
+
           if (additionalResponse.ok) {
             const additionalTasks = await additionalResponse.json();
-            console.log(`Created ${additionalTasks.length} additional task(s) for other users`);
+            console.log(
+              `Created ${additionalTasks.length} additional task(s) for other users`
+            );
           } else {
-            console.warn('Failed to create additional tasks for other users');
+            console.warn("Failed to create additional tasks for other users");
           }
         } catch (additionalError) {
-          console.error('Error creating additional tasks:', additionalError);
+          console.error("Error creating additional tasks:", additionalError);
         }
       }
 
       // Then approve the task
-      const approveResponse = await fetch(`${API_BASE_URL}/api/tasks/${initialData._id}/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${loggedInUser.token}`,
-        },
-        body: JSON.stringify({ action: 'approve' }),
-      });
+      const approveResponse = await fetch(
+        `${API_BASE_URL}/api/tasks/${initialData._id}/verify`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${loggedInUser.token}`,
+          },
+          body: JSON.stringify({ action: "approve" }),
+        }
+      );
 
       if (!approveResponse.ok) {
         const errorData = await approveResponse.json();
-        throw new Error(errorData.message || 'Failed to approve task');
+        throw new Error(errorData.message || "Failed to approve task");
       }
 
-      const successMessage = formData.assignedTo.length > 1 
-        ? `Task updated and approved successfully. ${formData.assignedTo.length - 1} additional task(s) created for other users.`
-        : 'Task updated and approved successfully';
-      
+      const successMessage =
+        formData.assignedTo.length > 1
+          ? `Task updated and approved successfully. ${
+              formData.assignedTo.length - 1
+            } additional task(s) created for other users.`
+          : "Task updated and approved successfully";
+
       toast.success(successMessage);
       if (onSubmit) onSubmit(updatedTask);
       onClose();
     } catch (error) {
-      console.error('Error updating and approving task:', error);
+      console.error("Error updating and approving task:", error);
       toast.error(error.message);
     } finally {
       setUploading(false);
@@ -781,100 +894,110 @@ const CreateTask = ({
 
   const uploadFiles = async (taskId) => {
     if (!taskId) {
-      throw new Error('Invalid task ID');
+      throw new Error("Invalid task ID");
     }
 
     if (!selectedFiles.length) {
-      console.log('No files to upload'); // Debug log
+      console.log("No files to upload"); // Debug log
       return;
     }
 
-    console.log('Uploading files for task:', taskId, 'Files:', selectedFiles); // Debug log
+    console.log("Uploading files for task:", taskId, "Files:", selectedFiles); // Debug log
     setUploadProgress({});
-    
+
     // Upload files in smaller batches to avoid timeout
     const batchSize = 2; // Reduced batch size for better reliability
     const allFailedFiles = [];
-    
+
     for (let i = 0; i < selectedFiles.length; i += batchSize) {
       const batch = selectedFiles.slice(i, i + batchSize);
       const formData = new FormData();
-      
-      batch.forEach(file => {
-        formData.append('files', file);
+
+      batch.forEach((file) => {
+        formData.append("files", file);
       });
 
       try {
-        console.log('Uploading batch:', batch); // Debug log
-        
+        console.log("Uploading batch:", batch); // Debug log
+
         // Update progress to show uploading
         batch.forEach((_, index) => {
-          setUploadProgress(prev => ({
+          setUploadProgress((prev) => ({
             ...prev,
-            [i + index]: 'uploading'
+            [i + index]: "uploading",
           }));
         });
-        
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
-        
-        const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/files`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${loggedInUser.token}`,
-          },
-          body: formData,
-          signal: controller.signal
-        });
+
+        const response = await fetch(
+          `${API_BASE_URL}/api/tasks/${taskId}/files`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${loggedInUser.token}`,
+            },
+            body: formData,
+            signal: controller.signal,
+          }
+        );
 
         clearTimeout(timeoutId);
 
         if (!response.ok) {
           const error = await response.json();
-          throw new Error(error.message || 'Failed to upload files');
+          throw new Error(error.message || "Failed to upload files");
         }
 
         const result = await response.json();
-        console.log('Upload response:', result); // Debug log
-        
+        console.log("Upload response:", result); // Debug log
+
         // Handle partial success (207 status)
         if (result.failedFiles && result.failedFiles.length > 0) {
           allFailedFiles.push(...result.failedFiles);
-          console.warn('Some files failed to upload:', result.failedFiles);
+          console.warn("Some files failed to upload:", result.failedFiles);
         }
-        
+
         // Get uploaded files from response
         const uploadedFiles = result.files || result.uploadedFiles || [];
-        
-        setTaskFiles(prev => {
+
+        setTaskFiles((prev) => {
           const updatedFiles = [...prev, ...uploadedFiles];
-          console.log('Updated task files:', updatedFiles); // Debug log
+          console.log("Updated task files:", updatedFiles); // Debug log
           return updatedFiles;
         });
-        
+
         // Update progress for this batch
         batch.forEach((_, index) => {
-          setUploadProgress(prev => ({
+          setUploadProgress((prev) => ({
             ...prev,
-            [i + index]: 'completed'
+            [i + index]: "completed",
           }));
         });
-        
       } catch (error) {
         console.error(`Failed to upload batch starting at index ${i}:`, error); // Debug log
-        
+
         // Handle timeout
-        if (error.name === 'AbortError') {
-          toast.error(`Upload timeout for ${batch.map(f => f.name).join(', ')}. Files may be too large or connection is slow.`);
+        if (error.name === "AbortError") {
+          toast.error(
+            `Upload timeout for ${batch
+              .map((f) => f.name)
+              .join(", ")}. Files may be too large or connection is slow.`
+          );
         } else {
-          toast.error(`Failed to upload ${batch.map(f => f.name).join(', ')}: ${error.message}`);
+          toast.error(
+            `Failed to upload ${batch.map((f) => f.name).join(", ")}: ${
+              error.message
+            }`
+          );
         }
-        
+
         // Mark batch as failed
         batch.forEach((file, index) => {
-          setUploadProgress(prev => ({
+          setUploadProgress((prev) => ({
             ...prev,
-            [i + index]: 'failed'
+            [i + index]: "failed",
           }));
           allFailedFiles.push({ filename: file.name, error: error.message });
         });
@@ -884,95 +1007,106 @@ const CreateTask = ({
     // Clear selected files only after all uploads are attempted
     setSelectedFiles([]);
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
-    
+
     // Show summary if there were any failures
     if (allFailedFiles.length > 0) {
-      const failedNames = allFailedFiles.map(f => f.filename).join(', ');
+      const failedNames = allFailedFiles.map((f) => f.filename).join(", ");
       toast.error(`Failed to upload: ${failedNames}`);
     }
   };
 
   const handleAssignedToChange = (userId) => {
-    const user = usersWithCurrent.find(u => u._id === userId);
+    const user = usersWithCurrent.find((u) => u._id === userId);
     if (!user) return;
 
-    setFormData(prev => {
+    setFormData((prev) => {
       const newAssignedTo = prev.assignedTo.includes(userId)
-        ? prev.assignedTo.filter(id => id !== userId)
+        ? prev.assignedTo.filter((id) => id !== userId)
         : [...prev.assignedTo, userId];
-      setSelectedUsers(usersWithCurrent.filter(u => newAssignedTo.includes(u._id)));
+      setSelectedUsers(
+        usersWithCurrent.filter((u) => newAssignedTo.includes(u._id))
+      );
       setIsDropdownOpen(false); // Close dropdown after each selection
       return { ...prev, assignedTo: newAssignedTo };
     });
   };
 
   const handleGuideChange = (userId) => {
-    const user = usersWithCurrent.find(u => u._id === userId);
+    const user = usersWithCurrent.find((u) => u._id === userId);
     if (!user) return;
 
-    setFormData(prev => {
+    setFormData((prev) => {
       const newGuides = prev.guides.includes(userId)
-        ? prev.guides.filter(id => id !== userId)
+        ? prev.guides.filter((id) => id !== userId)
         : [...prev.guides, userId];
-      setSelectedGuides(usersWithCurrent.filter(u => newGuides.includes(u._id)));
+      setSelectedGuides(
+        usersWithCurrent.filter((u) => newGuides.includes(u._id))
+      );
       return { ...prev, guides: newGuides };
     });
   };
 
   const handleWorkTypeChange = (type) => {
-    setFormData(prev => {
+    setFormData((prev) => {
       const newWorkType = prev.workType.includes(type)
-        ? prev.workType.filter(t => t !== type)
+        ? prev.workType.filter((t) => t !== type)
         : [...prev.workType, type];
-      
+
       return { ...prev, workType: newWorkType };
     });
   };
 
   const handleClientNameChange = (clientId) => {
-    const selectedClient = clients.find(client => client._id === clientId);
-    
+    const selectedClient = clients.find((client) => client._id === clientId);
+
     if (selectedClient) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         clientName: selectedClient.name,
         clientGroup: selectedClient.group.name,
-        workType: selectedClient.workOffered.map(wt => wt.name)
+        workType: selectedClient.workOffered.map((wt) => wt.name),
       }));
     } else {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
-        clientName: '',
-        clientGroup: '',
-        workType: []
+        clientName: "",
+        clientGroup: "",
+        workType: [],
       }));
     }
     setIsClientDropdownOpen(false);
   };
 
-  const selectedUserDisplay = selectedUsers.length > 0
-    ? `${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''} selected`
-    : 'Select users';
+  const selectedUserDisplay =
+    selectedUsers.length > 0
+      ? `${selectedUsers.length} user${
+          selectedUsers.length > 1 ? "s" : ""
+        } selected`
+      : "Select users";
 
   // Ensure current user is always in the users list for assignment
   const usersWithCurrent = useMemo(() => {
     if (!loggedInUser) return users;
-    if (users.some(u => u._id === loggedInUser._id)) return users;
+    if (users.some((u) => u._id === loggedInUser._id)) return users;
     return [loggedInUser, ...users];
   }, [users, loggedInUser]);
 
   // Filter users based on role-based permissions
-  const filteredUsers = usersWithCurrent.filter(user => {
+  const filteredUsers = usersWithCurrent.filter((user) => {
     // First filter by search term
-    const matchesSearch = `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = `${user.firstName} ${user.lastName}`
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
   // Filter guides based on search term
-  const filteredGuides = usersWithCurrent.filter(user => {
-    const matchesSearch = `${user.firstName} ${user.lastName}`.toLowerCase().includes(guideSearchTerm.toLowerCase());
+  const filteredGuides = usersWithCurrent.filter((user) => {
+    const matchesSearch = `${user.firstName} ${user.lastName}`
+      .toLowerCase()
+      .includes(guideSearchTerm.toLowerCase());
     return matchesSearch;
   });
 
@@ -980,48 +1114,48 @@ const CreateTask = ({
     e.preventDefault();
     try {
       const response = await fetch(`${API_BASE_URL}/api/clients/work-types`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${loggedInUser.token}`,
         },
         body: JSON.stringify(workTypeFormData),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create work type');
+        throw new Error("Failed to create work type");
       }
 
       const newWorkType = await response.json();
-      setWorkTypes(prev => [...prev, newWorkType]);
+      setWorkTypes((prev) => [...prev, newWorkType]);
       setIsWorkTypeModalOpen(false);
-      setWorkTypeFormData({ name: '' });
-      toast.success('Work type created successfully');
+      setWorkTypeFormData({ name: "" });
+      toast.success("Work type created successfully");
     } catch (error) {
       toast.error(error.message);
     }
   };
 
   const handleFileDeleted = (fileId) => {
-    setTaskFiles(prev => prev.filter(f => f._id !== fileId));
+    setTaskFiles((prev) => prev.filter((f) => f._id !== fileId));
   };
 
   const handleOpenModal = () => {
     const { date, time } = getCurrentDateTime();
     setFormData({
-      title: '',
-      description: '',
-      clientName: '',
-      clientGroup: '',
+      title: "",
+      description: "",
+      clientName: "",
+      clientGroup: "",
       workType: [],
       assignedTo: [],
-      priority: 'today',
+      priority: "today",
       inwardEntryDate: date,
       inwardEntryTime: time,
-      dueDate: '',
-      targetDate: '',
+      dueDate: "",
+      targetDate: "",
       billed: false,
-      status: 'yet_to_start' // Use yet_to_start as default
+      status: "yet_to_start", // Use yet_to_start as default
     });
     setIsModalOpen(true);
   };
@@ -1029,20 +1163,20 @@ const CreateTask = ({
   const handleClose = () => {
     setIsModalOpen(false);
     setFormData({
-      title: '',
-      description: '',
-      clientName: '',
-      clientGroup: '',
+      title: "",
+      description: "",
+      clientName: "",
+      clientGroup: "",
       workType: [],
       assignedTo: [],
       guides: [],
-      priority: 'today',
-      inwardEntryDate: '',
-      inwardEntryTime: '',
-      dueDate: '',
-      targetDate: '',
+      priority: "today",
+      inwardEntryDate: "",
+      inwardEntryTime: "",
+      dueDate: "",
+      targetDate: "",
       billed: false,
-      status: 'yet_to_start' // Use yet_to_start as default
+      status: "yet_to_start", // Use yet_to_start as default
     });
     setSelectedFiles([]);
     setTaskFiles([]);
@@ -1051,22 +1185,24 @@ const CreateTask = ({
     setSelectedGuides([]);
   };
 
-  const filteredWorkTypes   = useMemo(() => {
+  const filteredWorkTypes = useMemo(() => {
     if (!workTypeSearchTerm) return workTypes;
-    return workTypes.filter(type => type.name.toLowerCase().includes(workTypeSearchTerm.toLowerCase()));
+    return workTypes.filter((type) =>
+      type.name.toLowerCase().includes(workTypeSearchTerm.toLowerCase())
+    );
   }, [workTypes, workTypeSearchTerm]);
 
   useEffect(() => {
     const handleClickOutsideDropdown = (event) => {
-      if (!event.target.closest('.work-type-dropdown')) {
+      if (!event.target.closest(".work-type-dropdown")) {
         setTimeout(() => setIsWorkTypeDropdownOpen(false), 100);
       }
     };
     if (isWorkTypeDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutsideDropdown);
+      document.addEventListener("mousedown", handleClickOutsideDropdown);
     }
     return () => {
-      document.removeEventListener('mousedown', handleClickOutsideDropdown);
+      document.removeEventListener("mousedown", handleClickOutsideDropdown);
     };
   }, [isWorkTypeDropdownOpen]);
 
@@ -1077,7 +1213,9 @@ const CreateTask = ({
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">{mode === 'edit' ? 'Edit Task' : 'Create New Task'}</h2>
+              <h2 className="text-xl font-semibold">
+                {mode === "edit" ? "Edit Task" : "Create New Task"}
+              </h2>
               <button
                 onClick={onClose}
                 className="text-gray-500 hover:text-gray-700"
@@ -1090,7 +1228,8 @@ const CreateTask = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Client Name & Work In Brief  <span className="text-red-500">*</span>
+                    Client Name & Work In Brief{" "}
+                    <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1113,7 +1252,11 @@ const CreateTask = ({
                       onChange={(e) => {
                         const value = e.target.value;
                         setClientSearchTerm(value);
-                        setFormData(prev => ({ ...prev, clientName: value, clientGroup: value === '' ? '' : prev.clientGroup }));
+                        setFormData((prev) => ({
+                          ...prev,
+                          clientName: value,
+                          clientGroup: value === "" ? "" : prev.clientGroup,
+                        }));
                         setIsClientDropdownOpen(true);
                       }}
                       onFocus={() => setIsClientDropdownOpen(true)}
@@ -1129,26 +1272,39 @@ const CreateTask = ({
                               className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
                               onClick={() => {
                                 // Check if client group is one of the internal work groups
-                                const internalWorkGroups = ['Hari Agarwal and Associates', 'Dreamlabs', 'SFS'];
-                                const clientGroupName = client?.group ? client?.group?.name : '';
-                                const isInternalWorkGroup = internalWorkGroups.includes(clientGroupName);
-                                
-                                setFormData(prev => ({ 
-                                  ...prev, 
+                                const internalWorkGroups = [
+                                  "Hari Agarwal and Associates",
+                                  "Dreamlabs",
+                                  "SFS",
+                                ];
+                                const clientGroupName = client?.group
+                                  ? client?.group?.name
+                                  : "";
+                                const isInternalWorkGroup =
+                                  internalWorkGroups.includes(clientGroupName);
+
+                                setFormData((prev) => ({
+                                  ...prev,
                                   clientName: client.name,
                                   clientGroup: clientGroupName,
-                                  billed: isInternalWorkGroup ? true : false // Set to true for internal work groups
+                                  billed: isInternalWorkGroup ? true : false, // Set to true for internal work groups
                                 }));
                                 setClientSearchTerm(client.name);
                                 setIsClientDropdownOpen(false);
                               }}
                             >
-                              <div className="font-medium text-gray-900">{client.name}</div>
-                              <div className="text-sm text-gray-500">{client.group ? client.group.name : 'No Group'}</div>
+                              <div className="font-medium text-gray-900">
+                                {client.name}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {client.group ? client.group.name : "No Group"}
+                              </div>
                             </div>
                           ))
                         ) : (
-                          <div className="px-4 py-2 text-gray-500">No clients found</div>
+                          <div className="px-4 py-2 text-gray-500">
+                            No clients found
+                          </div>
                         )}
                       </div>
                     )}
@@ -1180,8 +1336,12 @@ const CreateTask = ({
                   >
                     <option value="">Select Priority</option>
                     {priorities.map((priority) => (
-                      <option key={priority._id || priority.name} value={priority.name}>
-                        {priority.name.charAt(0).toUpperCase() + priority.name.slice(1).replace(/([A-Z])/g, ' $1')}
+                      <option
+                        key={priority._id || priority.name}
+                        value={priority.name}
+                      >
+                        {priority.name.charAt(0).toUpperCase() +
+                          priority.name.slice(1).replace(/([A-Z])/g, " $1")}
                       </option>
                     ))}
                   </select>
@@ -1189,31 +1349,49 @@ const CreateTask = ({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Inward Entry Date <span className="text-red-500">*</span>
+                    Inward Entry Date
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="date"
                       value={formData.inwardEntryDate}
                       onChange={(e) =>
-                        setFormData({ ...formData, inwardEntryDate: e.target.value })
+                        setFormData({
+                          ...formData,
+                          inwardEntryDate: e.target.value,
+                        })
                       }
                       className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                     <div className="flex items-center space-x-2">
                       <select
-                        value={formData.inwardEntryTime.split(' ')[0]?.split(':')[0]?.padStart(2, '0') || '12'}
+                        value={
+                          formData.inwardEntryTime
+                            .split(" ")[0]
+                            ?.split(":")[0]
+                            ?.padStart(2, "0") || "00"
+                        }
                         onChange={(e) => {
-                          const timeParts = formData.inwardEntryTime.split(' ');
-                          let [hour, minutes] = (timeParts[0] || '12:00').split(':');
-                          const ampm = timeParts[1] || 'AM';
-                          const newHour = e.target.value.padStart(2, '0');
-                          const newTime = `${newHour}:${(minutes || '00').padStart(2, '0')} ${ampm}`;
-                          setFormData({ ...formData, inwardEntryTime: newTime });
+                          const timeParts = formData.inwardEntryTime.split(" ");
+                          let [hour, minutes] = (timeParts[0] || "00:00").split(
+                            ":"
+                          );
+                          const ampm = timeParts[1] || "AM";
+                          const newHour = e.target.value.padStart(2, "0");
+                          const newTime = `${newHour}:${(
+                            minutes || "00"
+                          ).padStart(2, "0")} ${ampm}`;
+                          setFormData({
+                            ...formData,
+                            inwardEntryTime: newTime,
+                          });
                         }}
                         className="w-1/3 border rounded-md px-2 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
-                        {Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0')).map(hour => (
+                        <option value="00">00</option>
+                        {Array.from({ length: 12 }, (_, i) =>
+                          (i + 1).toString().padStart(2, "0")
+                        ).map((hour) => (
                           <option key={hour} value={hour}>
                             {hour}
                           </option>
@@ -1221,30 +1399,48 @@ const CreateTask = ({
                       </select>
                       <span className="text-gray-500">:</span>
                       <select
-                        value={formData.inwardEntryTime.split(' ')[0]?.split(':')[1]?.padStart(2, '0') || '00'}
+                        value={
+                          formData.inwardEntryTime
+                            .split(" ")[0]
+                            ?.split(":")[1]
+                            ?.padStart(2, "0") || "00"
+                        }
                         onChange={(e) => {
-                          const timeParts = formData.inwardEntryTime.split(' ');
-                          let [hours, minute] = (timeParts[0] || '12:00').split(':');
-                          const ampm = timeParts[1] || 'AM';
-                          const newMinute = e.target.value.padStart(2, '0');
-                          const newTime = `${(hours || '12').padStart(2, '0')}:${newMinute} ${ampm}`;
-                          setFormData({ ...formData, inwardEntryTime: newTime });
+                          const timeParts = formData.inwardEntryTime.split(" ");
+                          let [hours, minute] = (timeParts[0] || "00:00").split(
+                            ":"
+                          );
+                          const ampm = timeParts[1] || "AM";
+                          const newMinute = e.target.value.padStart(2, "0");
+                          const newTime = `${(hours || "00").padStart(
+                            2,
+                            "0"
+                          )}:${newMinute} ${ampm}`;
+                          setFormData({
+                            ...formData,
+                            inwardEntryTime: newTime,
+                          });
                         }}
                         className="w-1/3 border rounded-md px-2 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
-                        {Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0')).map(minute => (
+                        {Array.from({ length: 60 }, (_, i) =>
+                          i.toString().padStart(2, "0")
+                        ).map((minute) => (
                           <option key={minute} value={minute}>
                             {minute}
                           </option>
                         ))}
                       </select>
                       <select
-                        value={formData.inwardEntryTime.split(' ')[1] || 'AM'}
+                        value={formData.inwardEntryTime.split(" ")[1] || "AM"}
                         onChange={(e) => {
-                          const timeParts = formData.inwardEntryTime.split(' ');
-                          const time = timeParts[0] || '12:00';
+                          const timeParts = formData.inwardEntryTime.split(" ");
+                          const time = timeParts[0] || "00:00";
                           const newTime = `${time} ${e.target.value}`;
-                          setFormData({ ...formData, inwardEntryTime: newTime });
+                          setFormData({
+                            ...formData,
+                            inwardEntryTime: newTime,
+                          });
                         }}
                         className="w-1/3 border rounded-md px-1 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
@@ -1288,12 +1484,30 @@ const CreateTask = ({
                     Internal Works <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={formData.billed === true ? 'yes' : formData.billed === false ? 'no' : ''}
-                    onChange={e => setFormData({ ...formData, billed: e.target.value === 'yes' ? true : e.target.value === 'no' ? false : '' })}
+                    value={
+                      formData.billed === true
+                        ? "yes"
+                        : formData.billed === false
+                        ? "no"
+                        : ""
+                    }
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        billed:
+                          e.target.value === "yes"
+                            ? true
+                            : e.target.value === "no"
+                            ? false
+                            : "",
+                      })
+                    }
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >
-                    <option value="" disabled>Select internal works status</option>
+                    <option value="" disabled>
+                      Select internal works status
+                    </option>
                     <option value="yes">Yes</option>
                     <option value="no">No</option>
                   </select>
@@ -1331,17 +1545,26 @@ const CreateTask = ({
                                       if (isMultiUserAssign) {
                                         handleAssignedToChange(user._id);
                                       } else {
-                                        setFormData(prev => ({ ...prev, assignedTo: [user._id] }));
+                                        setFormData((prev) => ({
+                                          ...prev,
+                                          assignedTo: [user._id],
+                                        }));
                                         setSelectedUsers([user]);
                                         setIsDropdownOpen(false);
                                       }
                                     }}
-                                    className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${formData.assignedTo.includes(user._id) ? 'bg-blue-50' : ''}`}
+                                    className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${
+                                      formData.assignedTo.includes(user._id)
+                                        ? "bg-blue-50"
+                                        : ""
+                                    }`}
                                   >
                                     <div className="flex items-center">
                                       <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium mr-3 overflow-hidden">
-                                        <img 
-                                          src={user.photo?.url || defaultProfile} 
+                                        <img
+                                          src={
+                                            user.photo?.url || defaultProfile
+                                          }
                                           alt={`${user.firstName} ${user.lastName}`}
                                           className="w-full h-full object-cover"
                                         />
@@ -1350,13 +1573,17 @@ const CreateTask = ({
                                         <div className="font-medium text-gray-900">
                                           {user.firstName} {user.lastName}
                                         </div>
-                                        <div className="text-sm text-gray-500">{user.group}</div>
+                                        <div className="text-sm text-gray-500">
+                                          {user.group}
+                                        </div>
                                       </div>
                                     </div>
                                   </button>
                                 ))
                               ) : (
-                                <div className="px-4 py-2 text-gray-500 text-center">No users found</div>
+                                <div className="px-4 py-2 text-gray-500 text-center">
+                                  No users found
+                                </div>
                               )}
                             </div>
                           </div>
@@ -1370,12 +1597,19 @@ const CreateTask = ({
                             {selectedUserDisplay}
                           </span>
                           <svg
-                            className={`w-5 h-5 text-gray-400 transition-transform ${isDropdownOpen ? 'transform rotate-180' : ''}`}
+                            className={`w-5 h-5 text-gray-400 transition-transform ${
+                              isDropdownOpen ? "transform rotate-180" : ""
+                            }`}
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
                           >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M19 9l-7 7-7-7"
+                            />
                           </svg>
                         </button>
                       </div>
@@ -1383,30 +1617,44 @@ const CreateTask = ({
                         type="button"
                         aria-pressed={isMultiUserAssign}
                         onClick={() => {
-                          setIsMultiUserAssign(v => {
+                          setIsMultiUserAssign((v) => {
                             const next = !v;
                             if (!next && formData.assignedTo.length > 1) {
-                              setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.slice(0, 1) }));
-                              setSelectedUsers(usersWithCurrent.filter(u => u._id === formData.assignedTo[0]));
+                              setFormData((prev) => ({
+                                ...prev,
+                                assignedTo: prev.assignedTo.slice(0, 1),
+                              }));
+                              setSelectedUsers(
+                                usersWithCurrent.filter(
+                                  (u) => u._id === formData.assignedTo[0]
+                                )
+                              );
                             }
                             return next;
                           });
                         }}
-                        className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiUserAssign ? 'bg-blue-500' : 'bg-gray-200'}`}
+                        className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${
+                          isMultiUserAssign ? "bg-blue-500" : "bg-gray-200"
+                        }`}
                         tabIndex={0}
                       >
                         <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiUserAssign ? 'translate-x-5' : 'translate-x-1'}`}
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                            isMultiUserAssign
+                              ? "translate-x-5"
+                              : "translate-x-1"
+                          }`}
                         />
                       </button>
-                      <span className="ml-2 text-xs text-gray-500">Multiple</span>
+                      <span className="ml-2 text-xs text-gray-500">
+                        Multiple
+                      </span>
                     </div>
-                    
-                    
+
                     {/* Absolutely position chips below dropdown, not affecting Team Head */}
                     {selectedUsers.length > 0 && (
                       <div className="absolute left-0 w-full mt-2 flex flex-wrap gap-2 z-10">
-                        {selectedUsers.map(user => (
+                        {selectedUsers.map((user) => (
                           <span
                             key={user._id}
                             className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
@@ -1416,17 +1664,37 @@ const CreateTask = ({
                               type="button"
                               onClick={() => {
                                 if (isMultiUserAssign) {
-                                  setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.filter(id => id !== user._id) }));
-                                  setSelectedUsers(prev => prev.filter(u => u._id !== user._id));
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    assignedTo: prev.assignedTo.filter(
+                                      (id) => id !== user._id
+                                    ),
+                                  }));
+                                  setSelectedUsers((prev) =>
+                                    prev.filter((u) => u._id !== user._id)
+                                  );
                                 } else {
-                                  setFormData(prev => ({ ...prev, assignedTo: [] }));
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    assignedTo: [],
+                                  }));
                                   setSelectedUsers([]);
                                 }
                               }}
                               className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200"
                             >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              <svg
+                                className="w-3 h-3"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M6 18L18 6M6 6l12 12"
+                                />
                               </svg>
                             </button>
                           </span>
@@ -1436,20 +1704,22 @@ const CreateTask = ({
                   </div>
                   {/* Team Head */}
                   <div className="flex-1 flex flex-col justify-end">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Team Head</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Team Head
+                    </label>
                     <input
                       type="text"
                       value={(() => {
                         // Collect all unique team heads and admins for the teams of selected users
                         const headsMap = {};
-                        selectedUsers.forEach(u => {
+                        selectedUsers.forEach((u) => {
                           if (!u.team) return;
                           // Find all users in the same team with role 'Team Head' or 'Admin'
-                          users.forEach(x => {
+                          users.forEach((x) => {
                             if (
                               x.team &&
                               x.team.toString() === u.team.toString() &&
-                              (x.role === 'Team Head' || x.role === 'Admin')
+                              (x.role === "Team Head" || x.role === "Admin")
                             ) {
                               headsMap[x._id] = x;
                             }
@@ -1457,8 +1727,10 @@ const CreateTask = ({
                         });
                         // If no team heads or admins found, return empty string
                         const heads = Object.values(headsMap);
-                        if (heads.length === 0) return '';
-                        return heads.map(h => `${h.firstName} ${h.lastName}`).join(', ');
+                        if (heads.length === 0) return "";
+                        return heads
+                          .map((h) => `${h.firstName} ${h.lastName}`)
+                          .join(", ");
                       })()}
                       className="w-full border rounded-md px-3 py-2 bg-gray-50 text-gray-700"
                       readOnly
@@ -1470,7 +1742,7 @@ const CreateTask = ({
                 {/* Guides Selection */}
                 <div className="md:col-span-2 mt-2 w-[410px]">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Guides 
+                    Guides
                   </label>
                   <div className="relative">
                     {isGuideDropdownOpen && (
@@ -1493,12 +1765,16 @@ const CreateTask = ({
                                 key={user._id}
                                 type="button"
                                 onClick={() => handleGuideChange(user._id)}
-                                className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${formData.guides.includes(user._id) ? 'bg-blue-50' : ''}`}
+                                className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${
+                                  formData.guides.includes(user._id)
+                                    ? "bg-blue-50"
+                                    : ""
+                                }`}
                               >
                                 <div className="flex items-center">
                                   <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium mr-3 overflow-hidden">
-                                    <img 
-                                      src={user.photo?.url || defaultProfile} 
+                                    <img
+                                      src={user.photo?.url || defaultProfile}
                                       alt={`${user.firstName} ${user.lastName}`}
                                       className="w-full h-full object-cover"
                                     />
@@ -1507,46 +1783,69 @@ const CreateTask = ({
                                     <div className="font-medium text-gray-900">
                                       {user.firstName} {user.lastName}
                                     </div>
-                                    <div className="text-sm text-gray-500">{user.group}</div>
+                                    <div className="text-sm text-gray-500">
+                                      {user.group}
+                                    </div>
                                   </div>
                                   {formData.guides.includes(user._id) && (
-                                    <svg className="ml-auto w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    <svg
+                                      className="ml-auto w-5 h-5 text-blue-600"
+                                      fill="currentColor"
+                                      viewBox="0 0 20 20"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                        clipRule="evenodd"
+                                      />
                                     </svg>
                                   )}
                                 </div>
                               </button>
                             ))
                           ) : (
-                            <div className="px-4 py-2 text-gray-500 text-center">No users found</div>
+                            <div className="px-4 py-2 text-gray-500 text-center">
+                              No users found
+                            </div>
                           )}
                         </div>
                       </div>
                     )}
                     <button
                       type="button"
-                      onClick={() => setIsGuideDropdownOpen(!isGuideDropdownOpen)}
+                      onClick={() =>
+                        setIsGuideDropdownOpen(!isGuideDropdownOpen)
+                      }
                       className="w-full flex items-center justify-between border rounded-md px-3 py-2 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <span className="text-gray-700">
-                        {selectedGuides.length > 0 
-                          ? `${selectedGuides.length} guide${selectedGuides.length > 1 ? 's' : ''} selected`
-                          : 'Select guides'}
+                        {selectedGuides.length > 0
+                          ? `${selectedGuides.length} guide${
+                              selectedGuides.length > 1 ? "s" : ""
+                            } selected`
+                          : "Select guides"}
                       </span>
                       <svg
-                        className={`w-5 h-5 text-gray-400 transition-transform ${isGuideDropdownOpen ? 'transform rotate-180' : ''}`}
+                        className={`w-5 h-5 text-gray-400 transition-transform ${
+                          isGuideDropdownOpen ? "transform rotate-180" : ""
+                        }`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
                       >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M19 9l-7 7-7-7"
+                        />
                       </svg>
                     </button>
-                    
+
                     {/* Selected guides chips */}
                     {selectedGuides.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {selectedGuides.map(guide => (
+                        {selectedGuides.map((guide) => (
                           <span
                             key={guide._id}
                             className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
@@ -1555,13 +1854,30 @@ const CreateTask = ({
                             <button
                               type="button"
                               onClick={() => {
-                                setFormData(prev => ({ ...prev, guides: prev.guides.filter(id => id !== guide._id) }));
-                                setSelectedGuides(prev => prev.filter(g => g._id !== guide._id));
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  guides: prev.guides.filter(
+                                    (id) => id !== guide._id
+                                  ),
+                                }));
+                                setSelectedGuides((prev) =>
+                                  prev.filter((g) => g._id !== guide._id)
+                                );
                               }}
                               className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-green-200"
                             >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              <svg
+                                className="w-3 h-3"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M6 18L18 6M6 6l12 12"
+                                />
                               </svg>
                             </button>
                           </span>
@@ -1583,7 +1899,7 @@ const CreateTask = ({
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
-                
+
                 {/* Description/Notes */}
                 <div className="md:col-span-2 mt-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1591,7 +1907,9 @@ const CreateTask = ({
                   </label>
                   <textarea
                     value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, description: e.target.value })
+                    }
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     rows="3"
                     placeholder="Enter task description or notes..."
@@ -1607,22 +1925,40 @@ const CreateTask = ({
                       onClick={() => setIsWorkTypeDropdownOpen(true)}
                     >
                       {formData.workType.length === 0 && (
-                        <span className="text-gray-400">Select or search work type...</span>
+                        <span className="text-gray-400">
+                          Select or search work type...
+                        </span>
                       )}
-                      {formData.workType.map(type => (
+                      {formData.workType.map((type) => (
                         <span
                           key={type}
                           className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-400"
                         >
                           {type}
-                          {formData.workType.includes(type) && <span className="float-right text-blue-600">✔</span>}
+                          {formData.workType.includes(type) && (
+                            <span className="float-right text-blue-600">✔</span>
+                          )}
                           <button
                             type="button"
-                            onClick={e => { e.preventDefault(); e.stopPropagation(); handleWorkTypeChange(type); }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleWorkTypeChange(type);
+                            }}
                             className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200"
                           >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            <svg
+                              className="w-3 h-3"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M6 18L18 6M6 6l12 12"
+                              />
                             </svg>
                           </button>
                         </span>
@@ -1631,7 +1967,7 @@ const CreateTask = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setWorkTypeFormData({ name: '' });
+                        setWorkTypeFormData({ name: "" });
                         setIsWorkTypeModalOpen(true);
                         setIsWorkTypeDropdownOpen(false);
                       }}
@@ -1643,19 +1979,28 @@ const CreateTask = ({
                       type="button"
                       aria-pressed={isMultiWorkTypeAssign}
                       onClick={() => {
-                        setIsMultiWorkTypeAssign(v => {
+                        setIsMultiWorkTypeAssign((v) => {
                           const next = !v;
                           if (!next && formData.workType.length > 1) {
-                            setFormData(prev => ({ ...prev, workType: prev.workType.slice(0, 1) }));
+                            setFormData((prev) => ({
+                              ...prev,
+                              workType: prev.workType.slice(0, 1),
+                            }));
                           }
                           return next;
                         });
                       }}
-                      className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiWorkTypeAssign ? 'bg-blue-500' : 'bg-gray-200'}`}
+                      className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${
+                        isMultiWorkTypeAssign ? "bg-blue-500" : "bg-gray-200"
+                      }`}
                       tabIndex={0}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiWorkTypeAssign ? 'translate-x-5' : 'translate-x-1'}`}
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                          isMultiWorkTypeAssign
+                            ? "translate-x-5"
+                            : "translate-x-1"
+                        }`}
                       />
                     </button>
                     <span className="ml-2 text-xs text-gray-500">Multiple</span>
@@ -1666,35 +2011,50 @@ const CreateTask = ({
                             type="text"
                             placeholder="Search work type..."
                             value={workTypeSearchTerm}
-                            onChange={e => setWorkTypeSearchTerm(e.target.value)}
+                            onChange={(e) =>
+                              setWorkTypeSearchTerm(e.target.value)
+                            }
                             className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             autoFocus
                           />
                         </div>
                         <div className="py-1">
                           {filteredWorkTypes.length > 0 ? (
-                            filteredWorkTypes.map(type => (
+                            filteredWorkTypes.map((type) => (
                               <button
                                 key={type._id}
                                 type="button"
-                                className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 cursor-pointer ${formData.workType.includes(type.name) ? 'bg-blue-50' : ''}`}
-                                onClick={e => {
+                                className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 cursor-pointer ${
+                                  formData.workType.includes(type.name)
+                                    ? "bg-blue-50"
+                                    : ""
+                                }`}
+                                onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
                                   if (isMultiWorkTypeAssign) {
                                     handleWorkTypeChange(type.name);
                                   } else {
-                                    setFormData(prev => ({ ...prev, workType: [type.name] }));
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      workType: [type.name],
+                                    }));
                                     setIsWorkTypeDropdownOpen(false);
                                   }
                                 }}
                               >
                                 {type.name}
-                                {formData.workType.includes(type.name) && <span className="float-right text-blue-600">✔</span>}
+                                {formData.workType.includes(type.name) && (
+                                  <span className="float-right text-blue-600">
+                                    ✔
+                                  </span>
+                                )}
                               </button>
                             ))
                           ) : (
-                            <div className="px-4 py-2 text-gray-500">No work types found</div>
+                            <div className="px-4 py-2 text-gray-500">
+                              No work types found
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1703,12 +2063,15 @@ const CreateTask = ({
                 </div>
               </div>
               {/* Enhanced File selection section */}
-              {(mode !== 'edit' || (mode === 'edit' && !hideFileSection)) && (
+              {(mode !== "edit" || (mode === "edit" && !hideFileSection)) && (
                 <div className="border-t pt-4 mt-4">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium">Attach Files (Optional)</h3>
+                    <h3 className="text-lg font-medium">
+                      Attach Files (Optional)
+                    </h3>
                     <div className="text-sm text-gray-500">
-                      Max {MAX_FILES} files, {MAX_FILE_SIZE / 1024 / 1024}MB per file, {MAX_TOTAL_SIZE / 1024 / 1024}MB total
+                      Max {MAX_FILES} files, {MAX_FILE_SIZE / 1024 / 1024}MB per
+                      file, {MAX_TOTAL_SIZE / 1024 / 1024}MB total
                     </div>
                   </div>
                   <div className="space-y-4">
@@ -1724,8 +2087,18 @@ const CreateTask = ({
                             accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif"
                           />
                           <div className="text-center">
-                            <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                              <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            <svg
+                              className="mx-auto h-12 w-12 text-gray-400"
+                              stroke="currentColor"
+                              fill="none"
+                              viewBox="0 0 48 48"
+                            >
+                              <path
+                                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
                             </svg>
                             <p className="mt-1 text-sm text-gray-600">
                               Click to select files or drag and drop
@@ -1745,18 +2118,30 @@ const CreateTask = ({
                         </div>
                         <ul className="divide-y">
                           {selectedFiles.map((file, index) => (
-                            <li key={index} className="p-3 flex items-center justify-between hover:bg-gray-50">
+                            <li
+                              key={index}
+                              className="p-3 flex items-center justify-between hover:bg-gray-50"
+                            >
                               <div className="flex items-center space-x-3">
                                 <span className="text-gray-500">
-                                  {file.type.startsWith('image/') ? '🖼️' : 
-                                    file.type.includes('pdf') ? '📄' :
-                                    file.type.includes('word') ? '📝' :
-                                    file.type.includes('excel') || file.type.includes('spreadsheet') ? '📊' :
-                                    file.type.includes('powerpoint') || file.type.includes('presentation') ? '📑' :
-                                    '📎'}
+                                  {file.type.startsWith("image/")
+                                    ? "🖼️"
+                                    : file.type.includes("pdf")
+                                    ? "📄"
+                                    : file.type.includes("word")
+                                    ? "📝"
+                                    : file.type.includes("excel") ||
+                                      file.type.includes("spreadsheet")
+                                    ? "📊"
+                                    : file.type.includes("powerpoint") ||
+                                      file.type.includes("presentation")
+                                    ? "📑"
+                                    : "📎"}
                                 </span>
                                 <div>
-                                  <p className="text-sm font-medium text-gray-700">{file.name}</p>
+                                  <p className="text-sm font-medium text-gray-700">
+                                    {file.name}
+                                  </p>
                                   <p className="text-xs text-gray-500">
                                     {(file.size / 1024 / 1024).toFixed(2)} MB
                                   </p>
@@ -1778,40 +2163,46 @@ const CreateTask = ({
 
                     {uploading && (
                       <div className="mt-4">
-                        <div className="text-sm text-gray-600 mb-2">Uploading files...</div>
+                        <div className="text-sm text-gray-600 mb-2">
+                          Uploading files...
+                        </div>
                         <div className="space-y-2">
                           {selectedFiles.map((file, index) => (
-                            <div key={index} className="flex items-center space-x-2">
+                            <div
+                              key={index}
+                              className="flex items-center space-x-2"
+                            >
                               <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full ${
-                                    uploadProgress[index] === 'completed' 
-                                      ? 'bg-green-500' 
-                                      : uploadProgress[index] === 'failed'
-                                      ? 'bg-red-500'
-                                      : uploadProgress[index] === 'uploading'
-                                      ? 'bg-blue-500 animate-pulse'
-                                      : 'bg-gray-300'
+                                    uploadProgress[index] === "completed"
+                                      ? "bg-green-500"
+                                      : uploadProgress[index] === "failed"
+                                      ? "bg-red-500"
+                                      : uploadProgress[index] === "uploading"
+                                      ? "bg-blue-500 animate-pulse"
+                                      : "bg-gray-300"
                                   }`}
-                                  style={{ 
-                                    width: uploadProgress[index] === 'completed' 
-                                      ? '100%' 
-                                      : uploadProgress[index] === 'uploading' 
-                                      ? '50%' 
-                                      : uploadProgress[index] === 'failed'
-                                      ? '100%'
-                                      : '0%' 
+                                  style={{
+                                    width:
+                                      uploadProgress[index] === "completed"
+                                        ? "100%"
+                                        : uploadProgress[index] === "uploading"
+                                        ? "50%"
+                                        : uploadProgress[index] === "failed"
+                                        ? "100%"
+                                        : "0%",
                                   }}
                                 />
                               </div>
                               <span className="text-xs text-gray-500 min-w-[80px]">
-                                {uploadProgress[index] === 'completed' 
-                                  ? '✓ Done' 
-                                  : uploadProgress[index] === 'failed'
-                                  ? '✗ Failed'
-                                  : uploadProgress[index] === 'uploading'
-                                  ? 'Uploading...'
-                                  : 'Waiting...'}
+                                {uploadProgress[index] === "completed"
+                                  ? "✓ Done"
+                                  : uploadProgress[index] === "failed"
+                                  ? "✗ Failed"
+                                  : uploadProgress[index] === "uploading"
+                                  ? "Uploading..."
+                                  : "Waiting..."}
                               </span>
                             </div>
                           ))}
@@ -1823,9 +2214,11 @@ const CreateTask = ({
               )}
 
               {/* Read-only Task Info Section - Only show in edit mode */}
-              {mode === 'edit' && initialData && (
+              {mode === "edit" && initialData && (
                 <div className="border-t pt-4 mt-4">
-                  <h3 className="text-lg font-medium text-gray-700 mb-4">Task Information</h3>
+                  <h3 className="text-lg font-medium text-gray-700 mb-4">
+                    Task Information
+                  </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Assigned By */}
                     <div>
@@ -1835,9 +2228,11 @@ const CreateTask = ({
                       <input
                         type="text"
                         value={
-                          initialData.assignedBy 
-                            ? `${initialData.assignedBy.firstName || ''} ${initialData.assignedBy.lastName || ''}`.trim()
-                            : 'N/A'
+                          initialData.assignedBy
+                            ? `${initialData.assignedBy.firstName || ""} ${
+                                initialData.assignedBy.lastName || ""
+                              }`.trim()
+                            : "N/A"
                         }
                         className="w-full border rounded-md px-3 py-2 bg-gray-50 text-gray-700 cursor-not-allowed"
                         readOnly
@@ -1853,16 +2248,19 @@ const CreateTask = ({
                       <input
                         type="text"
                         value={
-                          initialData.createdAt 
-                            ? new Date(initialData.createdAt).toLocaleString('en-US', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                hour12: true
-                              })
-                            : 'N/A'
+                          initialData.createdAt
+                            ? new Date(initialData.createdAt).toLocaleString(
+                                "en-US",
+                                {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  hour12: true,
+                                }
+                              )
+                            : "N/A"
                         }
                         className="w-full border rounded-md px-3 py-2 bg-gray-50 text-gray-700 cursor-not-allowed"
                         readOnly
@@ -1877,30 +2275,30 @@ const CreateTask = ({
                       </label>
                       <input
                         type="text"
-                        value={
-                          (() => {
-                            if (initialData.approvedBy) {
-                              const firstName = initialData.approvedBy.firstName || '';
-                              const lastName = initialData.approvedBy.lastName || '';
-                              const fullName = `${firstName} ${lastName}`.trim();
-                              
-                              if (fullName) {
-                                return fullName;
-                              }
-                              
-                              // Fallback to email if name is not available
-                              if (initialData.approvedBy.email) {
-                                return initialData.approvedBy.email;
-                              }
-                              
-                              return 'Verifier';
+                        value={(() => {
+                          if (initialData.approvedBy) {
+                            const firstName =
+                              initialData.approvedBy.firstName || "";
+                            const lastName =
+                              initialData.approvedBy.lastName || "";
+                            const fullName = `${firstName} ${lastName}`.trim();
+
+                            if (fullName) {
+                              return fullName;
                             }
-                            
-                            return initialData.verificationStatus === 'completed'
-                              ? 'Approved (User Unknown)'
-                              : 'Not Yet Approved';
-                          })()
-                        }
+
+                            // Fallback to email if name is not available
+                            if (initialData.approvedBy.email) {
+                              return initialData.approvedBy.email;
+                            }
+
+                            return "Verifier";
+                          }
+
+                          return initialData.verificationStatus === "completed"
+                            ? "Approved (User Unknown)"
+                            : "Not Yet Approved";
+                        })()}
                         className="w-full border rounded-md px-3 py-2 bg-gray-50 text-gray-700 cursor-not-allowed"
                         readOnly
                         disabled
@@ -1911,26 +2309,31 @@ const CreateTask = ({
               )}
 
               {/* ITR Progress Table - only show for tasks with ITR work type in edit mode */}
-              {mode === 'edit' && initialData && (
+              {mode === "edit" &&
+                initialData &&
                 (() => {
                   // Only show for tasks with work type 'Prep of Income Tax Returns ITR - Non Tax Audit'
-                  const hasRequiredWorkType = Array.isArray(initialData.workType) &&
-                    initialData.workType.some(wt => {
-                      const workTypeName = typeof wt === 'string' ? wt : wt.name || '';
-                      return workTypeName.trim().toLowerCase() === 'prep of income tax returns itr - non tax audit'.toLowerCase();
+                  const hasRequiredWorkType =
+                    Array.isArray(initialData.workType) &&
+                    initialData.workType.some((wt) => {
+                      const workTypeName =
+                        typeof wt === "string" ? wt : wt.name || "";
+                      return (
+                        workTypeName.trim().toLowerCase() ===
+                        "prep of income tax returns itr - non tax audit".toLowerCase()
+                      );
                     });
                   return hasRequiredWorkType ? (
-                    <ITRProgressTable 
+                    <ITRProgressTable
                       taskId={initialData._id}
                       initialData={initialData}
                       onUpdate={(updatedTask) => {
                         // Optionally handle the updated task data
-                        console.log('ITR progress updated:', updatedTask);
+                        console.log("ITR progress updated:", updatedTask);
                       }}
                     />
                   ) : null;
-                })()
-              )}
+                })()}
 
               <div className="flex justify-end space-x-4 mt-6">
                 <button
@@ -1941,24 +2344,30 @@ const CreateTask = ({
                 >
                   Cancel
                 </button>
-                {mode === 'edit' && showAcceptButton && (
+                {mode === "edit" && showAcceptButton && (
                   <button
                     type="button"
                     onClick={handleAccept}
                     disabled={uploading}
                     className={`px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700
-                      ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
-                    {uploading ? 'Accepting...' : 'Accept'}
+                    {uploading ? "Accepting..." : "Accept"}
                   </button>
                 )}
                 <button
                   type="submit"
                   disabled={uploading}
                   className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700
-                    ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  {uploading ? (mode === 'edit' ? 'Updating...' : 'Creating Task...') : (mode === 'edit' ? 'Update Task' : 'Create Task')}
+                  {uploading
+                    ? mode === "edit"
+                      ? "Updating..."
+                      : "Creating Task..."
+                    : mode === "edit"
+                    ? "Update Task"
+                    : "Create Task"}
                 </button>
               </div>
             </form>
@@ -1971,7 +2380,9 @@ const CreateTask = ({
                     taskId={createdTaskId}
                     files={taskFiles}
                     onFileDeleted={(fileId) => {
-                      setTaskFiles(prev => prev.filter(f => f._id !== fileId));
+                      setTaskFiles((prev) =>
+                        prev.filter((f) => f._id !== fileId)
+                      );
                     }}
                   />
                   <div className="flex justify-end">
@@ -1992,7 +2403,10 @@ const CreateTask = ({
       {/* Add Work Type Modal */}
       {isWorkTypeModalOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 work-type-modal">
-          <div className="bg-white rounded-lg p-8 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="bg-white rounded-lg p-8 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-2xl font-bold mb-6">Add New Work Type</h2>
             <form onSubmit={handleWorkTypeSubmit} className="space-y-4">
               <div>
@@ -2002,7 +2416,12 @@ const CreateTask = ({
                 <input
                   type="text"
                   value={workTypeFormData.name}
-                  onChange={(e) => setWorkTypeFormData({ ...workTypeFormData, name: e.target.value })}
+                  onChange={(e) =>
+                    setWorkTypeFormData({
+                      ...workTypeFormData,
+                      name: e.target.value,
+                    })
+                  }
                   className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   required
                 />
@@ -2031,4 +2450,4 @@ const CreateTask = ({
   );
 };
 
-export default CreateTask; 
+export default CreateTask;
