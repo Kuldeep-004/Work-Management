@@ -7,8 +7,11 @@ import {
   MagnifyingGlassIcon,
   EyeIcon,
   ChevronDownIcon,
+  ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
 import { API_BASE_URL, saveTabState, fetchTabState } from "../../apiConfig";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 const Cost = () => {
   const { user, token } = useAuth();
@@ -838,6 +841,197 @@ const Cost = () => {
     return `${hours}h ${mins}m`;
   };
 
+  const generatePDF = () => {
+    if (!selectedTask || !taskDetails) return;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let yPosition = 20;
+
+    // Title
+    doc.setFontSize(18);
+    doc.setFont(undefined, "bold");
+    doc.text("Task Report", pageWidth / 2, yPosition, { align: "center" });
+    yPosition += 10;
+
+    // Task Title
+    doc.setFontSize(14);
+    doc.setFont(undefined, "bold");
+    doc.text("Task: ", 14, yPosition);
+    doc.setFont(undefined, "normal");
+    const taskTitle = selectedTask.title || "N/A";
+    const titleLines = doc.splitTextToSize(taskTitle, pageWidth - 50);
+    doc.text(titleLines, 35, yPosition);
+    yPosition += titleLines.length * 7 + 5;
+
+    // Task Overview Section
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
+    doc.text("Task Overview", 14, yPosition);
+    yPosition += 8;
+
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    const overviewData = [
+      ["Client:", taskDetails.clientName || "N/A"],
+      ["Work Type:", taskDetails.workType || "N/A"],
+      ["Status:", taskDetails.status || "N/A"],
+      ["Priority:", taskDetails.priority || "N/A"],
+    ];
+
+    overviewData.forEach(([label, value]) => {
+      doc.setFont(undefined, "bold");
+      doc.text(label, 20, yPosition);
+      doc.setFont(undefined, "normal");
+      doc.text(value, 60, yPosition);
+      yPosition += 6;
+    });
+
+    if (taskDetails.description) {
+      yPosition += 2;
+      doc.setFont(undefined, "bold");
+      doc.text("Description:", 20, yPosition);
+      yPosition += 6;
+      doc.setFont(undefined, "normal");
+      const descLines = doc.splitTextToSize(
+        taskDetails.description,
+        pageWidth - 40
+      );
+      doc.text(descLines, 20, yPosition);
+      yPosition += descLines.length * 6 + 8;
+    } else {
+      yPosition += 8;
+    }
+
+    // Hours Breakdown Section
+    if (yPosition > 250) {
+      doc.addPage();
+      yPosition = 20;
+    }
+
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
+    doc.text("Hours Breakdown", 14, yPosition);
+    yPosition += 8;
+
+    const hoursData = [];
+    if (selectedTask.assignedBy) {
+      hoursData.push([
+        "Assigned By",
+        selectedTask.assignedBy.name,
+        `${selectedTask.assignedBy.hours}h`,
+      ]);
+    }
+    if (selectedTask.assignedTo) {
+      hoursData.push([
+        "Assigned To",
+        selectedTask.assignedTo.name,
+        `${selectedTask.assignedTo.hours}h`,
+      ]);
+    }
+    if (selectedTask.firstVerifier) {
+      hoursData.push([
+        "First Verifier",
+        selectedTask.firstVerifier.name,
+        `${selectedTask.firstVerifier.hours}h`,
+      ]);
+    }
+    if (selectedTask.secondVerifier) {
+      hoursData.push([
+        "Second Verifier",
+        selectedTask.secondVerifier.name,
+        `${selectedTask.secondVerifier.hours}h`,
+      ]);
+    }
+    if (selectedTask.thirdVerifier) {
+      hoursData.push([
+        "Third Verifier",
+        selectedTask.thirdVerifier.name,
+        `${selectedTask.thirdVerifier.hours}h`,
+      ]);
+    }
+    if (selectedTask.fourthVerifier) {
+      hoursData.push([
+        "Fourth Verifier",
+        selectedTask.fourthVerifier.name,
+        `${selectedTask.fourthVerifier.hours}h`,
+      ]);
+    }
+    if (selectedTask.fifthVerifier) {
+      hoursData.push([
+        "Fifth Verifier",
+        selectedTask.fifthVerifier.name,
+        `${selectedTask.fifthVerifier.hours}h`,
+      ]);
+    }
+    if (selectedTask.guides && selectedTask.guides.length > 0) {
+      selectedTask.guides.forEach((guide, idx) => {
+        hoursData.push([`Guide ${idx + 1}`, guide.name, `${guide.hours}h`]);
+      });
+    }
+
+    if (hoursData.length > 0) {
+      doc.autoTable({
+        startY: yPosition,
+        head: [["Role", "Name", "Hours"]],
+        body: hoursData,
+        theme: "grid",
+        headStyles: { fillColor: [59, 130, 246], fontSize: 10 },
+        styles: { fontSize: 9 },
+        margin: { left: 14 },
+      });
+      yPosition = doc.lastAutoTable.finalY + 10;
+    }
+
+    // Timeslots Section
+    if (yPosition > 200) {
+      doc.addPage();
+      yPosition = 20;
+    }
+
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
+    doc.text("Timeslots", 14, yPosition);
+    yPosition += 8;
+
+    if (taskTimeslots.length > 0) {
+      const timeslotData = taskTimeslots.map((slot) => [
+        slot.userName,
+        slot.userRole,
+        new Date(slot.date).toLocaleDateString(),
+        `${slot.startTime} - ${slot.endTime}`,
+        formatTime(slot.duration),
+        slot.workDescription || "-",
+      ]);
+
+      doc.autoTable({
+        startY: yPosition,
+        head: [
+          ["User", "Role", "Date", "Time Slot", "Duration", "Description"],
+        ],
+        body: timeslotData,
+        theme: "grid",
+        headStyles: { fillColor: [59, 130, 246], fontSize: 9 },
+        styles: { fontSize: 8, cellPadding: 2 },
+        margin: { left: 14 },
+        columnStyles: {
+          5: { cellWidth: 45 },
+        },
+      });
+    } else {
+      doc.setFontSize(10);
+      doc.setFont(undefined, "normal");
+      doc.text("No timeslots found for this task", 20, yPosition);
+    }
+
+    // Save PDF
+    const fileName = `TaskReport_${selectedTask.taskId}_${
+      taskDetails.clientName || "Report"
+    }_${new Date().toISOString().split("T")[0]}.pdf`;
+    doc.save(fileName);
+    toast.success("PDF downloaded successfully!");
+  };
+
   const TaskDetailModal = () => {
     if (!showTaskModal || !selectedTask) return null;
 
@@ -848,29 +1042,38 @@ const Cost = () => {
             <h3 className="text-2xl font-bold text-gray-900">
               Task Analysis: {selectedTask.title}
             </h3>
-            <button
-              onClick={() => {
-                setShowTaskModal(false);
-                setSelectedTask(null);
-                setTaskDetails(null);
-                setTaskTimeslots([]);
-              }}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <div className="flex items-center gap-3">
+              <button
+                onClick={generatePDF}
+                className="text-blue-600 hover:text-blue-800 transition-colors"
+                title="Download PDF"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
+                <ArrowDownTrayIcon className="w-6 h-6" />
+              </button>
+              <button
+                onClick={() => {
+                  setShowTaskModal(false);
+                  setSelectedTask(null);
+                  setTaskDetails(null);
+                  setTaskTimeslots([]);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {taskDetailsLoading ? (

@@ -7,8 +7,11 @@ import {
   MagnifyingGlassIcon,
   EyeIcon,
   ChevronDownIcon,
+  ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
 import { API_BASE_URL, saveTabState, fetchTabState } from "../../apiConfig";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 const Cost = () => {
   const { user, token } = useAuth();
@@ -881,6 +884,235 @@ const Cost = () => {
     return `${hours}h ${mins}m`;
   };
 
+  const generatePDF = () => {
+    if (!selectedTask || !taskDetails) return;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let yPosition = 20;
+
+    // Title
+    doc.setFontSize(18);
+    doc.setFont(undefined, "bold");
+    doc.text("Task Analysis Report", pageWidth / 2, yPosition, {
+      align: "center",
+    });
+    yPosition += 10;
+
+    // Task Title
+    doc.setFontSize(14);
+    doc.setFont(undefined, "bold");
+    doc.text("Task: ", 14, yPosition);
+    doc.setFont(undefined, "normal");
+    const taskTitle = selectedTask.title || "N/A";
+    const titleLines = doc.splitTextToSize(taskTitle, pageWidth - 50);
+    doc.text(titleLines, 35, yPosition);
+    yPosition += titleLines.length * 7 + 5;
+
+    // Task Overview Section
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
+    doc.text("Task Overview", 14, yPosition);
+    yPosition += 8;
+
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    const overviewData = [
+      ["Client:", taskDetails.clientName || "N/A"],
+      ["Work Type:", taskDetails.workType || "N/A"],
+      ["Status:", taskDetails.status || "N/A"],
+      ["Priority:", taskDetails.priority || "N/A"],
+    ];
+
+    overviewData.forEach(([label, value]) => {
+      doc.setFont(undefined, "bold");
+      doc.text(label, 20, yPosition);
+      doc.setFont(undefined, "normal");
+      doc.text(value, 60, yPosition);
+      yPosition += 6;
+    });
+
+    if (taskDetails.description) {
+      yPosition += 2;
+      doc.setFont(undefined, "bold");
+      doc.text("Description:", 20, yPosition);
+      yPosition += 6;
+      doc.setFont(undefined, "normal");
+      const descLines = doc.splitTextToSize(
+        taskDetails.description,
+        pageWidth - 40
+      );
+      doc.text(descLines, 20, yPosition);
+      yPosition += descLines.length * 6 + 8;
+    } else {
+      yPosition += 8;
+    }
+
+    // Cost Breakdown Section
+    if (yPosition > 250) {
+      doc.addPage();
+      yPosition = 20;
+    }
+
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
+    doc.text("Cost Breakdown", 14, yPosition);
+    yPosition += 8;
+
+    const costData = [];
+    if (selectedTask.assignedBy) {
+      costData.push([
+        "Assigned By",
+        selectedTask.assignedBy.name,
+        `${selectedTask.assignedBy.hours}h`,
+        selectedTask.assignedBy.hourlyRate,
+        selectedTask.assignedBy.cost.toFixed(2),
+      ]);
+    }
+    if (selectedTask.assignedTo) {
+      costData.push([
+        "Assigned To",
+        selectedTask.assignedTo.name,
+        `${selectedTask.assignedTo.hours}h`,
+        selectedTask.assignedTo.hourlyRate,
+        selectedTask.assignedTo.cost.toFixed(2),
+      ]);
+    }
+    if (selectedTask.firstVerifier) {
+      costData.push([
+        "First Verifier",
+        selectedTask.firstVerifier.name,
+        `${selectedTask.firstVerifier.hours}h`,
+        selectedTask.firstVerifier.hourlyRate,
+        selectedTask.firstVerifier.cost.toFixed(2),
+      ]);
+    }
+    if (selectedTask.secondVerifier) {
+      costData.push([
+        "Second Verifier",
+        selectedTask.secondVerifier.name,
+        `${selectedTask.secondVerifier.hours}h`,
+        selectedTask.secondVerifier.hourlyRate,
+        selectedTask.secondVerifier.cost.toFixed(2),
+      ]);
+    }
+    if (selectedTask.thirdVerifier) {
+      costData.push([
+        "Third Verifier",
+        selectedTask.thirdVerifier.name,
+        `${selectedTask.thirdVerifier.hours}h`,
+        selectedTask.thirdVerifier.hourlyRate,
+        selectedTask.thirdVerifier.cost.toFixed(2),
+      ]);
+    }
+    if (selectedTask.fourthVerifier) {
+      costData.push([
+        "Fourth Verifier",
+        selectedTask.fourthVerifier.name,
+        `${selectedTask.fourthVerifier.hours}h`,
+        selectedTask.fourthVerifier.hourlyRate,
+        selectedTask.fourthVerifier.cost.toFixed(2),
+      ]);
+    }
+    if (selectedTask.fifthVerifier) {
+      costData.push([
+        "Fifth Verifier",
+        selectedTask.fifthVerifier.name,
+        `${selectedTask.fifthVerifier.hours}h`,
+        selectedTask.fifthVerifier.hourlyRate,
+        selectedTask.fifthVerifier.cost.toFixed(2),
+      ]);
+    }
+    if (selectedTask.guides && selectedTask.guides.length > 0) {
+      selectedTask.guides.forEach((guide, idx) => {
+        costData.push([
+          `Guide ${idx + 1}`,
+          guide.name,
+          `${guide.hours}h`,
+          guide.hourlyRate,
+          guide.cost.toFixed(2),
+        ]);
+      });
+    }
+
+    if (costData.length > 0) {
+      doc.autoTable({
+        startY: yPosition,
+        head: [["Role", "Name", "Hours", "Rate", "Cost"]],
+        body: costData,
+        theme: "grid",
+        headStyles: { fillColor: [59, 130, 246], fontSize: 10 },
+        styles: { fontSize: 9 },
+        margin: { left: 14 },
+      });
+      yPosition = doc.lastAutoTable.finalY + 10;
+    }
+
+    // Total Cost
+    const totalCost = calculateUniqueUserCost(selectedTask);
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
+    doc.text(`Total Cost: ${totalCost.toFixed(2)}`, pageWidth - 60, yPosition);
+    yPosition += 10;
+
+    // Timeslots Section
+    if (yPosition > 200) {
+      doc.addPage();
+      yPosition = 20;
+    }
+
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
+    doc.text("Timeslots", 14, yPosition);
+    yPosition += 8;
+
+    if (taskTimeslots.length > 0) {
+      const timeslotData = taskTimeslots.map((slot) => [
+        slot.userName,
+        slot.userRole,
+        new Date(slot.date).toLocaleDateString(),
+        `${slot.startTime} - ${slot.endTime}`,
+        formatTime(slot.duration),
+        slot.workDescription || "-",
+        slot.cost?.toFixed(2) || "0.00",
+      ]);
+
+      doc.autoTable({
+        startY: yPosition,
+        head: [
+          [
+            "User",
+            "Role",
+            "Date",
+            "Time Slot",
+            "Duration",
+            "Description",
+            "Cost",
+          ],
+        ],
+        body: timeslotData,
+        theme: "grid",
+        headStyles: { fillColor: [59, 130, 246], fontSize: 9 },
+        styles: { fontSize: 8, cellPadding: 2 },
+        margin: { left: 14 },
+        columnStyles: {
+          5: { cellWidth: 40 },
+        },
+      });
+    } else {
+      doc.setFontSize(10);
+      doc.setFont(undefined, "normal");
+      doc.text("No timeslots found for this task", 20, yPosition);
+    }
+
+    // Save PDF
+    const fileName = `Task_${selectedTask.taskId}_${
+      taskDetails.clientName || "Report"
+    }_${new Date().toISOString().split("T")[0]}.pdf`;
+    doc.save(fileName);
+    toast.success("PDF downloaded successfully!");
+  };
+
   const TaskDetailModal = () => {
     if (!showTaskModal || !selectedTask) return null;
 
@@ -891,29 +1123,38 @@ const Cost = () => {
             <h3 className="text-2xl font-bold text-gray-900">
               Task Analysis: {selectedTask.title}
             </h3>
-            <button
-              onClick={() => {
-                setShowTaskModal(false);
-                setSelectedTask(null);
-                setTaskDetails(null);
-                setTaskTimeslots([]);
-              }}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <div className="flex items-center gap-3">
+              <button
+                onClick={generatePDF}
+                className="text-blue-600 hover:text-blue-800 transition-colors"
+                title="Download PDF"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
+                <ArrowDownTrayIcon className="w-6 h-6" />
+              </button>
+              <button
+                onClick={() => {
+                  setShowTaskModal(false);
+                  setSelectedTask(null);
+                  setTaskDetails(null);
+                  setTaskTimeslots([]);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {taskDetailsLoading ? (
