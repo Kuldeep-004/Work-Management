@@ -548,7 +548,7 @@ router.get("/subordinates", protect, async (req, res) => {
           .status(400)
           .json({ message: "Team Head user does not have a team assigned" });
       }
-      // All users in the same team (including self for Team Head, only approved)
+      // All users in the same team (including self for Team Head, only approved, exclude deleted)
       subordinates = await User.find({
         team: req.user.team,
         isEmailVerified: true,
@@ -572,7 +572,7 @@ router.get("/subordinates", protect, async (req, res) => {
         subordinates = [];
       }
     } else if (req.user.role === "Admin") {
-      // Admins: all approved users
+      // Admins: all approved users (exclude deleted)
       subordinates = await User.find({ status: "approved" }).select(
         "_id firstName lastName email role team photo"
       );
@@ -710,7 +710,7 @@ router.get("/subordinates-list", protect, async (req, res) => {
           .status(400)
           .json({ message: "Team Head user does not have a team assigned" });
       }
-      // All users in the same team (excluding self and Admins for Team Head, only approved)
+      // All users in the same team (excluding self and Admins for Team Head, only approved, exclude deleted)
       subordinates = await User.find({
         team: req.user.team,
         isEmailVerified: true,
@@ -733,7 +733,7 @@ router.get("/subordinates-list", protect, async (req, res) => {
         subordinates = [];
       }
     } else if (req.user.role === "Admin") {
-      // Admins: all approved users
+      // Admins: all approved users (exclude deleted)
       subordinates = await User.find({ status: "approved" }).select(
         "_id firstName lastName email role team"
       );
@@ -786,7 +786,7 @@ router.get("/subordinates-status/:date", protect, async (req, res) => {
           .status(400)
           .json({ message: "Team Head user does not have a team assigned" });
       }
-      // Exclude self and Admins for Team Head, only approved users
+      // Exclude self and Admins for Team Head, only approved users (exclude deleted)
       subordinates = await User.find({
         team: req.user.team,
         isEmailVerified: true,

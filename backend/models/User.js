@@ -1,19 +1,19 @@
-import mongoose from 'mongoose';
-import bcrypt from 'bcryptjs';
+import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 
 const userSchema = new mongoose.Schema(
   {
     firstName: {
       type: String,
-      required: function() {
+      required: function () {
         return this.isEmailVerified;
-      }
+      },
     },
     lastName: {
       type: String,
-      required: function() {
-        return this.isEmailVerified;  
-      }
+      required: function () {
+        return this.isEmailVerified;
+      },
     },
     email: {
       type: String,
@@ -24,9 +24,9 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: function() {
+      required: function () {
         return this.isEmailVerified; // Only required after email verification
-      }
+      },
     },
     photo: {
       public_id: {
@@ -34,31 +34,31 @@ const userSchema = new mongoose.Schema(
       },
       url: {
         type: String,
-      }
+      },
     },
     team: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Team'
+      ref: "Team",
     },
     role: {
-      type: String, 
-      enum: ['Fresher', 'Senior', 'Team Head', 'Admin'],
-      default: 'Fresher',
+      type: String,
+      enum: ["Fresher", "Senior", "Team Head", "Admin"],
+      default: "Fresher",
     },
     role2: {
       type: [String],
-      enum: ['None', 'TimeSheet Verifier', 'Task Verifier'],
-      default: ['None'],
+      enum: ["None", "TimeSheet Verifier", "Task Verifier"],
+      default: ["None"],
     },
     timesheetView: {
       type: String,
-      enum: ['default', 'team'],
-      default: 'default',
+      enum: ["default", "team"],
+      default: "default",
     },
     status: {
       type: String,
-      enum: ['pending', 'approved', 'rejected'],
-      default: 'pending'
+      enum: ["pending", "approved", "rejected", "deleted"],
+      default: "pending",
     },
     otp: {
       code: String,
@@ -90,24 +90,24 @@ const userSchema = new mongoose.Schema(
     },
     notificationPermission: {
       type: String,
-      enum: ['default', 'granted', 'denied'],
-      default: 'default',
+      enum: ["default", "granted", "denied"],
+      default: "default",
     },
   },
   {
     timestamps: true,
-  } 
+  }
 );
 
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
 
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (error) {
-    next(error);  
+    next(error);
   }
 });
 
@@ -115,6 +115,6 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-const User = mongoose.model('User', userSchema);
+const User = mongoose.model("User", userSchema);
 
-export default User; 
+export default User;

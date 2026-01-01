@@ -236,12 +236,10 @@ router.get("/received/user/:userId/counts", protect, async (req, res) => {
   try {
     // Check if current user has permission (Admin or Team Head)
     if (!["Admin", "Team Head"].includes(req.user.role)) {
-      return res
-        .status(403)
-        .json({
-          message:
-            "Access denied. Only Admin and Team Head can view other users' task counts.",
-        });
+      return res.status(403).json({
+        message:
+          "Access denied. Only Admin and Team Head can view other users' task counts.",
+      });
     }
 
     const { userId } = req.params;
@@ -898,12 +896,10 @@ router.post("/", protect, canAssignTask, async (req, res) => {
         "combined:",
         combinedInwardEntryDate
       );
-      return res
-        .status(400)
-        .json({
-          message:
-            "Invalid inwardEntryDate. Please provide a valid date and time.",
-        });
+      return res.status(400).json({
+        message:
+          "Invalid inwardEntryDate. Please provide a valid date and time.",
+      });
     }
 
     for (const userId of assignedTo) {
@@ -1000,12 +996,10 @@ router.put("/:id", protect, async (req, res) => {
       isNaN(combinedInwardEntryDate.getTime()) ||
       combinedInwardEntryDate.toString() === "Invalid Date"
     ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Invalid inwardEntryDate. Please provide a valid date and time.",
-        });
+      return res.status(400).json({
+        message:
+          "Invalid inwardEntryDate. Please provide a valid date and time.",
+      });
     }
     req.body.inwardEntryDate = combinedInwardEntryDate;
   }
@@ -1128,12 +1122,10 @@ router.patch("/:taskId/status", protect, async (req, res) => {
 
     // Enforce selfVerification check before allowing completion
     if (status === "completed" && !task.selfVerification) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Self verification must be completed before marking this task as completed.",
-        });
+      return res.status(400).json({
+        message:
+          "Self verification must be completed before marking this task as completed.",
+      });
     }
 
     // If changing from completed to any other status, reset selfVerification to false
@@ -1820,12 +1812,10 @@ router.post("/:taskId/complete", protect, async (req, res) => {
 
     // Enforce selfVerification check before allowing completion
     if (!task.selfVerification) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Self verification must be completed before marking this task as completed.",
-        });
+      return res.status(400).json({
+        message:
+          "Self verification must be completed before marking this task as completed.",
+      });
     }
 
     // Update task
@@ -2402,9 +2392,10 @@ router.get("/head-dashboard", protect, async (req, res) => {
         .status(403)
         .json({ message: "Only Seniors can access this endpoint" });
     }
-    // Get all users who are not Admin or Senior
+    // Get all users who are not Admin or Senior (exclude deleted users)
     const users = await User.find({
       role: { $nin: ["Admin", "Senior"] },
+      status: "approved",
     }).select("_id");
     const userIds = users.map((u) => u._id.toString());
     // Include self
@@ -2442,10 +2433,11 @@ router.get("/team-head-dashboard", protect, async (req, res) => {
         .status(400)
         .json({ message: "Team Head user does not have a team assigned" });
     }
-    // Find all users in the same team
+    // Find all users in the same team (exclude deleted users)
     const teamUsers = await User.find({
       team: req.user.team,
       isEmailVerified: true,
+      status: "approved",
     }).select("_id");
     const teamUserIds = teamUsers.map((u) => u._id.toString());
     // Include self
@@ -2990,12 +2982,10 @@ router.get("/received/user/:userId", protect, async (req, res) => {
   try {
     // Check if current user has permission (Admin or Team Head)
     if (!["Admin", "Team Head"].includes(req.user.role)) {
-      return res
-        .status(403)
-        .json({
-          message:
-            "Access denied. Only Admin and Team Head can view other users' tasks.",
-        });
+      return res.status(403).json({
+        message:
+          "Access denied. Only Admin and Team Head can view other users' tasks.",
+      });
     }
 
     const { userId } = req.params;
@@ -3138,12 +3128,10 @@ router.get("/received/user/:userId/guidance", protect, async (req, res) => {
   try {
     // Check if current user has permission (Admin or Team Head)
     if (!["Admin", "Team Head"].includes(req.user.role)) {
-      return res
-        .status(403)
-        .json({
-          message:
-            "Access denied. Only Admin and Team Head can view other users' tasks.",
-        });
+      return res.status(403).json({
+        message:
+          "Access denied. Only Admin and Team Head can view other users' tasks.",
+      });
     }
 
     const { userId } = req.params;
