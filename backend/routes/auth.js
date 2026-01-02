@@ -1,15 +1,15 @@
-import express from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
-import { generateOTP, sendOTPEmail } from '../utils/emailUtils.js';
-import Team from '../models/Team.js';
-import ActivityLogger from '../utils/activityLogger.js';
+import express from "express";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
+import { generateOTP, sendOTPEmail } from "../utils/emailUtils.js";
+import Team from "../models/Team.js";
+import ActivityLogger from "../utils/activityLogger.js";
 
 const router = express.Router();
 
 // Request OTP for registration
-router.post('/request-otp', async (req, res) => {
+router.post("/request-otp", async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -17,11 +17,11 @@ router.post('/request-otp', async (req, res) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       if (existingUser.isEmailVerified) {
-        return res.status(400).json({ message: 'User already exists. Please login instead.' });
+        return res
+          .status(400)
+          .json({ message: "User already exists. Please login instead." });
       }
-      
-     
-      
+
       // If user exists but not verified, delete the old record
       await User.deleteOne({ email });
     }
@@ -35,23 +35,23 @@ router.post('/request-otp', async (req, res) => {
       email,
       otp: {
         code: otp,
-        expiresAt: otpExpiry
+        expiresAt: otpExpiry,
       },
-      isEmailVerified: false
+      isEmailVerified: false,
     });
 
     // Send OTP email
     try {
       await sendOTPEmail(email, otp);
-      res.status(200).json({ 
-        message: 'OTP sent successfully',
+      res.status(200).json({
+        message: "OTP sent successfully",
         otp: otp, // Include OTP in response for development
-        expiresIn: 600 // 10 minutes in seconds
+        expiresIn: 600, // 10 minutes in seconds
       });
     } catch (emailError) {
       // Delete the temporary user if email sending fails
       await User.deleteOne({ email });
-      throw new Error('Failed to send OTP email. Please try again.');
+      throw new Error("Failed to send OTP email. Please try again.");
     }
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -59,36 +59,40 @@ router.post('/request-otp', async (req, res) => {
 });
 
 // Verify OTP and complete registration
-router.post('/verify-otp', async (req, res) => {
+router.post("/verify-otp", async (req, res) => {
   try {
     const { email, otp, firstName, lastName, password } = req.body;
 
     // Validate required fields
     if (!firstName || !lastName || !password) {
-      return res.status(400).json({ message: 'All fields are required for registration' });
+      return res
+        .status(400)
+        .json({ message: "All fields are required for registration" });
     }
 
     // Find user with the provided email
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: 'Invalid email' });
+      return res.status(400).json({ message: "Invalid email" });
     }
 
     // Check if OTP exists and is valid
     if (!user.otp || !user.otp.code || !user.otp.expiresAt) {
-      return res.status(400).json({ message: 'No OTP requested' });
+      return res.status(400).json({ message: "No OTP requested" });
     }
 
     // Check if OTP has expired
     if (new Date() > user.otp.expiresAt) {
       // Delete expired OTP user
       await User.deleteOne({ email });
-      return res.status(400).json({ message: 'OTP has expired. Please request a new OTP.' });
+      return res
+        .status(400)
+        .json({ message: "OTP has expired. Please request a new OTP." });
     }
 
     // Verify OTP
     if (user.otp.code !== otp) {
-      return res.status(400).json({ message: 'Invalid OTP' });
+      return res.status(400).json({ message: "Invalid OTP" });
     }
 
     // Update user with registration details
@@ -99,17 +103,17 @@ router.post('/verify-otp', async (req, res) => {
     user.otp = undefined; // Clear OTP after successful verification
 
     // Assign admin role to specific email
-    if (email === 'kalariyakuldeep8238@gmail.com') {
-      user.role = 'Admin';
-      user.status = 'approved'; // Auto-approve admin user
+    if (email === "kalariyakuldeep8238@gmail.com") {
+      user.role = "Admin";
+      user.status = "approved"; // Auto-approve admin user
     }
 
     await user.save();
 
     // Instead of creating token, return success message
     res.status(201).json({
-      message: 'Registration successful! Please login to continue.',
-      success: true
+      message: "Registration successful! Please login to continue.",
+      success: true,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -117,42 +121,61 @@ router.post('/verify-otp', async (req, res) => {
 });
 
 // Login user
-router.post('/login', async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
     // Find user
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: 'Invalid email or password' });
+      return res.status(400).json({ message: "Invalid email or password" });
     }
 
     // Check if email is verified
     if (!user.isEmailVerified) {
-      return res.status(400).json({ message: 'Please verify your email first' });
+      return res
+        .status(400)
+        .json({ message: "Please verify your email first" });
     }
 
     // Check if user is approved
-    if (user.status === 'pending') {
-      return res.status(403).json({ message: 'Your account is pending approval. Please wait for Admin approval.' });
+    if (user.status === "pending") {
+      return res
+        .status(403)
+        .json({
+          message:
+            "Your account is pending approval. Please wait for Admin approval.",
+        });
     }
 
-    if (user.status === 'rejected') {
-      return res.status(403).json({ message: 'Your account has been rejected by the administrator. Please contact Admin for more information.' });
+    if (user.status === "rejected") {
+      return res
+        .status(403)
+        .json({
+          message:
+            "Your account has been rejected by the administrator. Please contact Admin for more information.",
+        });
+    }
+
+    if (user.status === "deleted") {
+      return res
+        .status(403)
+        .json({
+          message:
+            "This account has been deactivated. Please contact Admin for more information.",
+        });
     }
 
     // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid email or password' });
+      return res.status(400).json({ message: "Invalid email or password" });
     }
 
     // Create token
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '30d' }
-    );
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "30d",
+    });
 
     res.json({
       _id: user._id,
@@ -165,35 +188,36 @@ router.post('/login', async (req, res) => {
       status: user.status,
       isEmailVerified: user.isEmailVerified,
       photo: user.photo,
-      token
+      token,
     });
 
     // Log login activity
     await ActivityLogger.logAuthActivity(
       user._id,
-      'user_login',
+      "user_login",
       `${user.firstName} ${user.lastName} logged in`,
       req,
       {
         userRole: user.role,
-        loginTime: new Date()
+        loginTime: new Date(),
       }
     );
-
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
 // Request OTP for password reset
-router.post('/request-reset-otp', async (req, res) => {
+router.post("/request-reset-otp", async (req, res) => {
   try {
     const { email, newPassword } = req.body;
 
     // Find user
     const user = await User.findOne({ email });
     if (!user || !user.isEmailVerified) {
-      return res.status(400).json({ message: 'No verified user found with this email.' });
+      return res
+        .status(400)
+        .json({ message: "No verified user found with this email." });
     }
 
     // Generate OTP
@@ -204,18 +228,18 @@ router.post('/request-reset-otp', async (req, res) => {
     user.otp = {
       code: otp,
       expiresAt: otpExpiry,
-      newPassword // Store new password temporarily
+      newPassword, // Store new password temporarily
     };
     await user.save();
 
     // Send OTP email
     try {
       await sendOTPEmail(email, otp);
-      res.status(200).json({ message: 'OTP sent successfully' });
+      res.status(200).json({ message: "OTP sent successfully" });
     } catch (emailError) {
       user.otp = undefined;
       await user.save();
-      throw new Error('Failed to send OTP email. Please try again.');
+      throw new Error("Failed to send OTP email. Please try again.");
     }
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -223,26 +247,28 @@ router.post('/request-reset-otp', async (req, res) => {
 });
 
 // Verify OTP and reset password
-router.post('/verify-reset-otp', async (req, res) => {
+router.post("/verify-reset-otp", async (req, res) => {
   try {
     const { email, newPassword, otp } = req.body;
 
     // Find user
     const user = await User.findOne({ email });
     if (!user || !user.otp || !user.otp.code || !user.otp.expiresAt) {
-      return res.status(400).json({ message: 'No OTP requested' });
+      return res.status(400).json({ message: "No OTP requested" });
     }
 
     // Check if OTP has expired
     if (new Date() > user.otp.expiresAt) {
       user.otp = undefined;
       await user.save();
-      return res.status(400).json({ message: 'OTP has expired. Please request a new OTP.' });
+      return res
+        .status(400)
+        .json({ message: "OTP has expired. Please request a new OTP." });
     }
 
     // Verify OTP
     if (user.otp.code !== otp) {
-      return res.status(400).json({ message: 'Invalid OTP' });
+      return res.status(400).json({ message: "Invalid OTP" });
     }
 
     // Update password and clear OTP
@@ -250,10 +276,10 @@ router.post('/verify-reset-otp', async (req, res) => {
     user.otp = undefined;
     await user.save();
 
-    res.status(200).json({ message: 'Password reset successful' });
+    res.status(200).json({ message: "Password reset successful" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-export default router; 
+export default router;
