@@ -122,7 +122,6 @@ const Cost = () => {
     let isMounted = true;
     (async () => {
       try {
-        console.log("Loading tab states for all cost management tabs...");
         const [
           billedTabState,
           unbilledTabState,
@@ -134,12 +133,6 @@ const Cost = () => {
           fetchTabState("costManagementCompletedBilled", user.token),
           fetchTabState("costManagementCompletedUnbilled", user.token),
         ]);
-        console.log("Loaded cost management tab states:", {
-          billedTabState,
-          unbilledTabState,
-          completedBilledTabState,
-          completedUnbilledTabState,
-        });
         if (isMounted) {
           // Set billed columns and selectedUserId
           if (
@@ -148,16 +141,8 @@ const Cost = () => {
             Array.isArray(billedTabState.visibleColumns) &&
             billedTabState.visibleColumns.length > 0
           ) {
-            console.log(
-              "Setting billed columns from saved state:",
-              billedTabState.visibleColumns
-            );
             setBilledVisibleColumns(billedTabState.visibleColumns);
           } else {
-            console.log(
-              "Using default visible columns for billed:",
-              DEFAULT_VISIBLE_COLUMNS
-            );
             setBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
           if (billedTabState && billedTabState.selectedUserId !== undefined) {
@@ -171,16 +156,8 @@ const Cost = () => {
             Array.isArray(unbilledTabState.visibleColumns) &&
             unbilledTabState.visibleColumns.length > 0
           ) {
-            console.log(
-              "Setting unbilled columns from saved state:",
-              unbilledTabState.visibleColumns
-            );
             setUnbilledVisibleColumns(unbilledTabState.visibleColumns);
           } else {
-            console.log(
-              "Using default visible columns for unbilled:",
-              DEFAULT_VISIBLE_COLUMNS
-            );
             setUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
           if (
@@ -197,18 +174,10 @@ const Cost = () => {
             Array.isArray(completedBilledTabState.visibleColumns) &&
             completedBilledTabState.visibleColumns.length > 0
           ) {
-            console.log(
-              "Setting completed billed columns from saved state:",
-              completedBilledTabState.visibleColumns
-            );
             setCompletedBilledVisibleColumns(
-              completedBilledTabState.visibleColumns
+              completedBilledTabState.visibleColumns,
             );
           } else {
-            console.log(
-              "Using default visible columns for completed billed:",
-              DEFAULT_VISIBLE_COLUMNS
-            );
             setCompletedBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
           if (
@@ -216,7 +185,7 @@ const Cost = () => {
             completedBilledTabState.selectedUserId !== undefined
           ) {
             setCompletedBilledSelectedUserId(
-              completedBilledTabState.selectedUserId
+              completedBilledTabState.selectedUserId,
             );
           }
 
@@ -227,18 +196,10 @@ const Cost = () => {
             Array.isArray(completedUnbilledTabState.visibleColumns) &&
             completedUnbilledTabState.visibleColumns.length > 0
           ) {
-            console.log(
-              "Setting completed unbilled columns from saved state:",
-              completedUnbilledTabState.visibleColumns
-            );
             setCompletedUnbilledVisibleColumns(
-              completedUnbilledTabState.visibleColumns
+              completedUnbilledTabState.visibleColumns,
             );
           } else {
-            console.log(
-              "Using default visible columns for completed unbilled:",
-              DEFAULT_VISIBLE_COLUMNS
-            );
             setCompletedUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
           if (
@@ -246,14 +207,13 @@ const Cost = () => {
             completedUnbilledTabState.selectedUserId !== undefined
           ) {
             setCompletedUnbilledSelectedUserId(
-              completedUnbilledTabState.selectedUserId
+              completedUnbilledTabState.selectedUserId,
             );
           }
         }
       } catch (error) {
         console.error("Error loading tab state:", error);
         if (isMounted) {
-          console.log("Error occurred, setting default columns for all tabs");
           setBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           setUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           setCompletedBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
@@ -261,7 +221,6 @@ const Cost = () => {
         }
       } finally {
         if (isMounted) {
-          console.log("Tab state loading complete, setting tabsLoaded to true");
           setTabsLoaded(true);
         }
       }
@@ -275,21 +234,15 @@ const Cost = () => {
   useEffect(() => {
     if (!user?.token || !tabsLoaded || billedVisibleColumns.length === 0)
       return;
-    console.log(
-      "Saving billed visible columns to backend:",
-      billedVisibleColumns
-    );
     saveTabState(
       "costManagementBilled",
       {
         visibleColumns: billedVisibleColumns,
         selectedUserId: billedSelectedUserId,
       },
-      user.token
+      user.token,
     )
-      .then(() => {
-        console.log("Successfully saved billed tab state");
-      })
+      .then(() => {})
       .catch((error) => {
         console.error("Error saving billed tab state:", error);
       });
@@ -298,21 +251,15 @@ const Cost = () => {
   useEffect(() => {
     if (!user?.token || !tabsLoaded || unbilledVisibleColumns.length === 0)
       return;
-    console.log(
-      "Saving unbilled visible columns to backend:",
-      unbilledVisibleColumns
-    );
     saveTabState(
       "costManagementUnbilled",
       {
         visibleColumns: unbilledVisibleColumns,
         selectedUserId: unbilledSelectedUserId,
       },
-      user.token
+      user.token,
     )
-      .then(() => {
-        console.log("Successfully saved unbilled tab state");
-      })
+      .then(() => {})
       .catch((error) => {
         console.error("Error saving unbilled tab state:", error);
       });
@@ -325,21 +272,15 @@ const Cost = () => {
       completedBilledVisibleColumns.length === 0
     )
       return;
-    console.log(
-      "Saving completed billed visible columns to backend:",
-      completedBilledVisibleColumns
-    );
     saveTabState(
       "costManagementCompletedBilled",
       {
         visibleColumns: completedBilledVisibleColumns,
         selectedUserId: completedBilledSelectedUserId,
       },
-      user.token
+      user.token,
     )
-      .then(() => {
-        console.log("Successfully saved completed billed tab state");
-      })
+      .then(() => {})
       .catch((error) => {
         console.error("Error saving completed billed tab state:", error);
       });
@@ -357,21 +298,15 @@ const Cost = () => {
       completedUnbilledVisibleColumns.length === 0
     )
       return;
-    console.log(
-      "Saving completed unbilled visible columns to backend:",
-      completedUnbilledVisibleColumns
-    );
     saveTabState(
       "costManagementCompletedUnbilled",
       {
         visibleColumns: completedUnbilledVisibleColumns,
         selectedUserId: completedUnbilledSelectedUserId,
       },
-      user.token
+      user.token,
     )
-      .then(() => {
-        console.log("Successfully saved completed unbilled tab state");
-      })
+      .then(() => {})
       .catch((error) => {
         console.error("Error saving completed unbilled tab state:", error);
       });
@@ -571,7 +506,7 @@ const Cost = () => {
       unbilledSelectedUserId,
       completedBilledSelectedUserId,
       completedUnbilledSelectedUserId,
-    ]
+    ],
   );
 
   // Load more tasks function
@@ -609,7 +544,7 @@ const Cost = () => {
         root: null,
         rootMargin: "200px", // Load more when 200px from bottom
         threshold: 0.01,
-      }
+      },
     );
 
     observer.observe(triggerElement);
@@ -636,7 +571,7 @@ const Cost = () => {
         `${API_BASE_URL}/api/timesheets/task/${taskId}/timeslots`,
         {
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
       );
       const timeslots = await timeslotsRes.json();
       setTaskTimeslots(timeslots);
@@ -664,7 +599,7 @@ const Cost = () => {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ hourlyRate: Number(hourlyRateInput) }),
-        }
+        },
       );
       if (!res.ok) throw new Error("Failed to update");
       toast.success("Hourly rate updated");
@@ -741,22 +676,17 @@ const Cost = () => {
   };
 
   const toggleColumn = (columnId) => {
-    console.log("Toggling column:", columnId);
     const currentColumns = getCurrentVisibleColumns();
-    console.log("Previous visible columns:", currentColumns);
 
     if (currentColumns.includes(columnId)) {
       // Don't allow hiding all columns
       if (currentColumns.length <= 1) {
-        console.log("Cannot hide last column");
         return;
       }
       const newColumns = currentColumns.filter((id) => id !== columnId);
-      console.log("New visible columns (removed):", newColumns);
       setCurrentVisibleColumns(newColumns);
     } else {
       const newColumns = [...currentColumns, columnId];
-      console.log("New visible columns (added):", newColumns);
       setCurrentVisibleColumns(newColumns);
     }
   };
@@ -792,7 +722,7 @@ const Cost = () => {
     // Sum all unique user costs
     return Array.from(uniqueUserCosts.values()).reduce(
       (sum, cost) => sum + cost,
-      0
+      0,
     );
   };
 
@@ -871,11 +801,87 @@ const Cost = () => {
     fetchTaskDetails(task.taskId);
   };
 
+  // Function to merge timeslots users into cost breakdown
+  const getMergedCostBreakdown = () => {
+    if (!selectedTask || !taskTimeslots || taskTimeslots.length === 0) {
+      return selectedTask;
+    }
+
+    // Get all user names that are already in the cost breakdown
+    const existingUsers = new Set();
+    if (selectedTask.assignedBy?.name)
+      existingUsers.add(selectedTask.assignedBy.name);
+    if (selectedTask.assignedTo?.name)
+      existingUsers.add(selectedTask.assignedTo.name);
+    if (selectedTask.firstVerifier?.name)
+      existingUsers.add(selectedTask.firstVerifier.name);
+    if (selectedTask.secondVerifier?.name)
+      existingUsers.add(selectedTask.secondVerifier.name);
+    if (selectedTask.thirdVerifier?.name)
+      existingUsers.add(selectedTask.thirdVerifier.name);
+    if (selectedTask.fourthVerifier?.name)
+      existingUsers.add(selectedTask.fourthVerifier.name);
+    if (selectedTask.fifthVerifier?.name)
+      existingUsers.add(selectedTask.fifthVerifier.name);
+    if (selectedTask.guides) {
+      selectedTask.guides.forEach((guide) => existingUsers.add(guide.name));
+    }
+
+    // Aggregate timeslot data by user
+    const timeslotUserData = {};
+    taskTimeslots.forEach((slot) => {
+      if (!timeslotUserData[slot.userName]) {
+        timeslotUserData[slot.userName] = {
+          name: slot.userName,
+          hours: 0,
+          cost: 0,
+          duration: 0,
+        };
+      }
+      timeslotUserData[slot.userName].duration += slot.duration || 0;
+      timeslotUserData[slot.userName].cost += slot.cost || 0;
+    });
+
+    // Calculate hours from duration
+    Object.values(timeslotUserData).forEach((userData) => {
+      userData.hours = Math.round((userData.duration / 60) * 100) / 100;
+      if (userData.hours > 0 && userData.cost > 0) {
+        userData.hourlyRate =
+          Math.round((userData.cost / userData.hours) * 100) / 100;
+      } else {
+        userData.hourlyRate = 0;
+      }
+    });
+
+    // Find users who are in timeslots but not in cost breakdown
+    const missingUsers = [];
+    Object.values(timeslotUserData).forEach((userData) => {
+      if (!existingUsers.has(userData.name) && userData.hours > 0) {
+        missingUsers.push({
+          name: userData.name,
+          hours: userData.hours,
+          hourlyRate: userData.hourlyRate,
+          cost: userData.cost,
+        });
+      }
+    });
+
+    // If there are missing users, add them to guides
+    if (missingUsers.length > 0) {
+      return {
+        ...selectedTask,
+        guides: [...(selectedTask.guides || []), ...missingUsers],
+      };
+    }
+
+    return selectedTask;
+  };
+
   const filteredUsers = users.filter(
     (u) =>
       u.firstName.toLowerCase().includes(userSearch.toLowerCase()) ||
       u.lastName.toLowerCase().includes(userSearch.toLowerCase()) ||
-      u.email.toLowerCase().includes(userSearch.toLowerCase())
+      u.email.toLowerCase().includes(userSearch.toLowerCase()),
   );
 
   const formatTime = (minutes) => {
@@ -886,6 +892,9 @@ const Cost = () => {
 
   const generatePDF = () => {
     if (!selectedTask || !taskDetails) return;
+
+    // Get merged cost breakdown (includes users from timeslots who aren't in cost breakdown)
+    const mergedTask = getMergedCostBreakdown();
 
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -940,7 +949,7 @@ const Cost = () => {
       doc.setFont(undefined, "normal");
       const descLines = doc.splitTextToSize(
         taskDetails.description,
-        pageWidth - 40
+        pageWidth - 40,
       );
       doc.text(descLines, 20, yPosition);
       yPosition += descLines.length * 6 + 8;
@@ -960,71 +969,71 @@ const Cost = () => {
     yPosition += 8;
 
     const costData = [];
-    if (selectedTask.assignedBy) {
+    if (mergedTask.assignedBy) {
       costData.push([
         "Assigned By",
-        selectedTask.assignedBy.name,
-        `${selectedTask.assignedBy.hours}h`,
-        selectedTask.assignedBy.hourlyRate,
-        selectedTask.assignedBy.cost.toFixed(2),
+        mergedTask.assignedBy.name,
+        `${mergedTask.assignedBy.hours}h`,
+        mergedTask.assignedBy.hourlyRate,
+        mergedTask.assignedBy.cost.toFixed(2),
       ]);
     }
-    if (selectedTask.assignedTo) {
+    if (mergedTask.assignedTo) {
       costData.push([
         "Assigned To",
-        selectedTask.assignedTo.name,
-        `${selectedTask.assignedTo.hours}h`,
-        selectedTask.assignedTo.hourlyRate,
-        selectedTask.assignedTo.cost.toFixed(2),
+        mergedTask.assignedTo.name,
+        `${mergedTask.assignedTo.hours}h`,
+        mergedTask.assignedTo.hourlyRate,
+        mergedTask.assignedTo.cost.toFixed(2),
       ]);
     }
-    if (selectedTask.firstVerifier) {
+    if (mergedTask.firstVerifier) {
       costData.push([
         "First Verifier",
-        selectedTask.firstVerifier.name,
-        `${selectedTask.firstVerifier.hours}h`,
-        selectedTask.firstVerifier.hourlyRate,
-        selectedTask.firstVerifier.cost.toFixed(2),
+        mergedTask.firstVerifier.name,
+        `${mergedTask.firstVerifier.hours}h`,
+        mergedTask.firstVerifier.hourlyRate,
+        mergedTask.firstVerifier.cost.toFixed(2),
       ]);
     }
-    if (selectedTask.secondVerifier) {
+    if (mergedTask.secondVerifier) {
       costData.push([
         "Second Verifier",
-        selectedTask.secondVerifier.name,
-        `${selectedTask.secondVerifier.hours}h`,
-        selectedTask.secondVerifier.hourlyRate,
-        selectedTask.secondVerifier.cost.toFixed(2),
+        mergedTask.secondVerifier.name,
+        `${mergedTask.secondVerifier.hours}h`,
+        mergedTask.secondVerifier.hourlyRate,
+        mergedTask.secondVerifier.cost.toFixed(2),
       ]);
     }
-    if (selectedTask.thirdVerifier) {
+    if (mergedTask.thirdVerifier) {
       costData.push([
         "Third Verifier",
-        selectedTask.thirdVerifier.name,
-        `${selectedTask.thirdVerifier.hours}h`,
-        selectedTask.thirdVerifier.hourlyRate,
-        selectedTask.thirdVerifier.cost.toFixed(2),
+        mergedTask.thirdVerifier.name,
+        `${mergedTask.thirdVerifier.hours}h`,
+        mergedTask.thirdVerifier.hourlyRate,
+        mergedTask.thirdVerifier.cost.toFixed(2),
       ]);
     }
-    if (selectedTask.fourthVerifier) {
+    if (mergedTask.fourthVerifier) {
       costData.push([
         "Fourth Verifier",
-        selectedTask.fourthVerifier.name,
-        `${selectedTask.fourthVerifier.hours}h`,
-        selectedTask.fourthVerifier.hourlyRate,
-        selectedTask.fourthVerifier.cost.toFixed(2),
+        mergedTask.fourthVerifier.name,
+        `${mergedTask.fourthVerifier.hours}h`,
+        mergedTask.fourthVerifier.hourlyRate,
+        mergedTask.fourthVerifier.cost.toFixed(2),
       ]);
     }
-    if (selectedTask.fifthVerifier) {
+    if (mergedTask.fifthVerifier) {
       costData.push([
         "Fifth Verifier",
-        selectedTask.fifthVerifier.name,
-        `${selectedTask.fifthVerifier.hours}h`,
-        selectedTask.fifthVerifier.hourlyRate,
-        selectedTask.fifthVerifier.cost.toFixed(2),
+        mergedTask.fifthVerifier.name,
+        `${mergedTask.fifthVerifier.hours}h`,
+        mergedTask.fifthVerifier.hourlyRate,
+        mergedTask.fifthVerifier.cost.toFixed(2),
       ]);
     }
-    if (selectedTask.guides && selectedTask.guides.length > 0) {
-      selectedTask.guides.forEach((guide, idx) => {
+    if (mergedTask.guides && mergedTask.guides.length > 0) {
+      mergedTask.guides.forEach((guide, idx) => {
         costData.push([
           `Guide ${idx + 1}`,
           guide.name,
@@ -1049,7 +1058,7 @@ const Cost = () => {
     }
 
     // Total Cost
-    const totalCost = calculateUniqueUserCost(selectedTask);
+    const totalCost = calculateUniqueUserCost(mergedTask);
     doc.setFontSize(12);
     doc.setFont(undefined, "bold");
     doc.text(`Total Cost: ${totalCost.toFixed(2)}`, pageWidth - 60, yPosition);
@@ -1116,12 +1125,15 @@ const Cost = () => {
   const TaskDetailModal = () => {
     if (!showTaskModal || !selectedTask) return null;
 
+    // Get merged cost breakdown (includes users from timeslots who aren't in cost breakdown)
+    const mergedTask = getMergedCostBreakdown();
+
     return (
       <div className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-2xl font-bold text-gray-900">
-              Task Analysis: {selectedTask.title}
+              Task Analysis: {mergedTask.title}
             </h3>
             <div className="flex items-center gap-3">
               <button
@@ -1202,100 +1214,100 @@ const Cost = () => {
               <div className="bg-blue-50 rounded-lg p-4">
                 <h4 className="text-lg font-semibold mb-3">Cost Breakdown</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {selectedTask.assignedBy && (
+                  {mergedTask.assignedBy && (
                     <div className="bg-white rounded p-3">
                       <p className="text-sm text-gray-600">Assigned By</p>
                       <p className="font-medium">
-                        {selectedTask.assignedBy.name}
+                        {mergedTask.assignedBy.name}
                       </p>
                       <p className="text-sm text-blue-600">
-                        {selectedTask.assignedBy.hours}h × ₹
-                        {selectedTask.assignedBy.hourlyRate} = ₹
-                        {selectedTask.assignedBy.cost.toFixed(2)}
+                        {mergedTask.assignedBy.hours}h × ₹
+                        {mergedTask.assignedBy.hourlyRate} = ₹
+                        {mergedTask.assignedBy.cost.toFixed(2)}
                       </p>
                     </div>
                   )}
-                  {selectedTask.assignedTo && (
+                  {mergedTask.assignedTo && (
                     <div className="bg-white rounded p-3">
                       <p className="text-sm text-gray-600">Assigned To</p>
                       <p className="font-medium">
-                        {selectedTask.assignedTo.name}
+                        {mergedTask.assignedTo.name}
                       </p>
                       <p className="text-sm text-blue-600">
-                        {selectedTask.assignedTo.hours}h × ₹
-                        {selectedTask.assignedTo.hourlyRate} = ₹
-                        {selectedTask.assignedTo.cost.toFixed(2)}
+                        {mergedTask.assignedTo.hours}h × ₹
+                        {mergedTask.assignedTo.hourlyRate} = ₹
+                        {mergedTask.assignedTo.cost.toFixed(2)}
                       </p>
                     </div>
                   )}
-                  {selectedTask.firstVerifier && (
+                  {mergedTask.firstVerifier && (
                     <div className="bg-white rounded p-3">
                       <p className="text-sm text-gray-600">First Verifier</p>
                       <p className="font-medium">
-                        {selectedTask.firstVerifier.name}
+                        {mergedTask.firstVerifier.name}
                       </p>
                       <p className="text-sm text-blue-600">
-                        {selectedTask.firstVerifier.hours}h × ₹
-                        {selectedTask.firstVerifier.hourlyRate} = ₹
-                        {selectedTask.firstVerifier.cost.toFixed(2)}
+                        {mergedTask.firstVerifier.hours}h × ₹
+                        {mergedTask.firstVerifier.hourlyRate} = ₹
+                        {mergedTask.firstVerifier.cost.toFixed(2)}
                       </p>
                     </div>
                   )}
-                  {selectedTask.secondVerifier && (
+                  {mergedTask.secondVerifier && (
                     <div className="bg-white rounded p-3">
                       <p className="text-sm text-gray-600">Second Verifier</p>
                       <p className="font-medium">
-                        {selectedTask.secondVerifier.name}
+                        {mergedTask.secondVerifier.name}
                       </p>
                       <p className="text-sm text-blue-600">
-                        {selectedTask.secondVerifier.hours}h × ₹
-                        {selectedTask.secondVerifier.hourlyRate} = ₹
-                        {selectedTask.secondVerifier.cost.toFixed(2)}
+                        {mergedTask.secondVerifier.hours}h × ₹
+                        {mergedTask.secondVerifier.hourlyRate} = ₹
+                        {mergedTask.secondVerifier.cost.toFixed(2)}
                       </p>
                     </div>
                   )}
-                  {selectedTask.thirdVerifier && (
+                  {mergedTask.thirdVerifier && (
                     <div className="bg-white rounded p-3">
                       <p className="text-sm text-gray-600">Third Verifier</p>
                       <p className="font-medium">
-                        {selectedTask.thirdVerifier.name}
+                        {mergedTask.thirdVerifier.name}
                       </p>
                       <p className="text-sm text-blue-600">
-                        {selectedTask.thirdVerifier.hours}h × ₹
-                        {selectedTask.thirdVerifier.hourlyRate} = ₹
-                        {selectedTask.thirdVerifier.cost.toFixed(2)}
+                        {mergedTask.thirdVerifier.hours}h × ₹
+                        {mergedTask.thirdVerifier.hourlyRate} = ₹
+                        {mergedTask.thirdVerifier.cost.toFixed(2)}
                       </p>
                     </div>
                   )}
-                  {selectedTask.fourthVerifier && (
+                  {mergedTask.fourthVerifier && (
                     <div className="bg-white rounded p-3">
                       <p className="text-sm text-gray-600">Fourth Verifier</p>
                       <p className="font-medium">
-                        {selectedTask.fourthVerifier.name}
+                        {mergedTask.fourthVerifier.name}
                       </p>
                       <p className="text-sm text-blue-600">
-                        {selectedTask.fourthVerifier.hours}h × ₹
-                        {selectedTask.fourthVerifier.hourlyRate} = ₹
-                        {selectedTask.fourthVerifier.cost.toFixed(2)}
+                        {mergedTask.fourthVerifier.hours}h × ₹
+                        {mergedTask.fourthVerifier.hourlyRate} = ₹
+                        {mergedTask.fourthVerifier.cost.toFixed(2)}
                       </p>
                     </div>
                   )}
-                  {selectedTask.fifthVerifier && (
+                  {mergedTask.fifthVerifier && (
                     <div className="bg-white rounded p-3">
                       <p className="text-sm text-gray-600">Fifth Verifier</p>
                       <p className="font-medium">
-                        {selectedTask.fifthVerifier.name}
+                        {mergedTask.fifthVerifier.name}
                       </p>
                       <p className="text-sm text-blue-600">
-                        {selectedTask.fifthVerifier.hours}h × ₹
-                        {selectedTask.fifthVerifier.hourlyRate} = ₹
-                        {selectedTask.fifthVerifier.cost.toFixed(2)}
+                        {mergedTask.fifthVerifier.hours}h × ₹
+                        {mergedTask.fifthVerifier.hourlyRate} = ₹
+                        {mergedTask.fifthVerifier.cost.toFixed(2)}
                       </p>
                     </div>
                   )}
-                  {selectedTask.guides &&
-                    selectedTask.guides.length > 0 &&
-                    selectedTask.guides.map((guide, idx) => (
+                  {mergedTask.guides &&
+                    mergedTask.guides.length > 0 &&
+                    mergedTask.guides.map((guide, idx) => (
                       <div key={idx} className="bg-white rounded p-3">
                         <p className="text-sm text-gray-600">Guide {idx + 1}</p>
                         <p className="font-medium">{guide.name}</p>
@@ -1309,7 +1321,7 @@ const Cost = () => {
                 <div className="mt-4 text-right">
                   <p className="text-xl font-bold text-green-700">
                     Total Cost: ₹
-                    {calculateUniqueUserCost(selectedTask).toFixed(2)}
+                    {calculateUniqueUserCost(mergedTask).toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -1522,7 +1534,7 @@ const Cost = () => {
                     {getCurrentSelectedUserId()
                       ? (() => {
                           const selectedUser = allUsers.find(
-                            (u) => u._id === getCurrentSelectedUserId()
+                            (u) => u._id === getCurrentSelectedUserId(),
                           );
                           return selectedUser
                             ? `${selectedUser.firstName} ${selectedUser.lastName}`
@@ -1627,7 +1639,7 @@ const Cost = () => {
                         <input
                           type="checkbox"
                           checked={getCurrentVisibleColumns().includes(
-                            column.id
+                            column.id,
                           )}
                           onChange={() => toggleColumn(column.id)}
                           className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -1655,7 +1667,7 @@ const Cost = () => {
                 <thead>
                   <tr>
                     {ALL_COLUMNS.filter((col) =>
-                      getCurrentVisibleColumns().includes(col.id)
+                      getCurrentVisibleColumns().includes(col.id),
                     ).map((column) => (
                       <th
                         key={column.id}
@@ -1693,7 +1705,7 @@ const Cost = () => {
                       {costs.map((task) => (
                         <tr key={task.taskId} className="hover:bg-gray-50">
                           {ALL_COLUMNS.filter((col) =>
-                            getCurrentVisibleColumns().includes(col.id)
+                            getCurrentVisibleColumns().includes(col.id),
                           ).map((column) => (
                             <td
                               key={column.id}
@@ -1781,7 +1793,7 @@ const Cost = () => {
                     {getCurrentSelectedUserId()
                       ? (() => {
                           const selectedUser = allUsers.find(
-                            (u) => u._id === getCurrentSelectedUserId()
+                            (u) => u._id === getCurrentSelectedUserId(),
                           );
                           return selectedUser
                             ? `${selectedUser.firstName} ${selectedUser.lastName}`
@@ -1886,7 +1898,7 @@ const Cost = () => {
                         <input
                           type="checkbox"
                           checked={getCurrentVisibleColumns().includes(
-                            column.id
+                            column.id,
                           )}
                           onChange={() => toggleColumn(column.id)}
                           className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -1914,7 +1926,7 @@ const Cost = () => {
                 <thead>
                   <tr>
                     {ALL_COLUMNS.filter((col) =>
-                      getCurrentVisibleColumns().includes(col.id)
+                      getCurrentVisibleColumns().includes(col.id),
                     ).map((column) => (
                       <th
                         key={column.id}
@@ -1952,7 +1964,7 @@ const Cost = () => {
                       {costs.map((task) => (
                         <tr key={task.taskId} className="hover:bg-gray-50">
                           {ALL_COLUMNS.filter((col) =>
-                            getCurrentVisibleColumns().includes(col.id)
+                            getCurrentVisibleColumns().includes(col.id),
                           ).map((column) => (
                             <td
                               key={column.id}
@@ -2042,7 +2054,7 @@ const Cost = () => {
                     {getCurrentSelectedUserId()
                       ? (() => {
                           const selectedUser = allUsers.find(
-                            (u) => u._id === getCurrentSelectedUserId()
+                            (u) => u._id === getCurrentSelectedUserId(),
                           );
                           return selectedUser
                             ? `${selectedUser.firstName} ${selectedUser.lastName}`
@@ -2147,7 +2159,7 @@ const Cost = () => {
                         <input
                           type="checkbox"
                           checked={getCurrentVisibleColumns().includes(
-                            column.id
+                            column.id,
                           )}
                           onChange={() => toggleColumn(column.id)}
                           className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -2175,7 +2187,7 @@ const Cost = () => {
                 <thead>
                   <tr>
                     {ALL_COLUMNS.filter((col) =>
-                      getCurrentVisibleColumns().includes(col.id)
+                      getCurrentVisibleColumns().includes(col.id),
                     ).map((column) => (
                       <th
                         key={column.id}
@@ -2213,7 +2225,7 @@ const Cost = () => {
                       {costs.map((task) => (
                         <tr key={task.taskId} className="hover:bg-gray-50">
                           {ALL_COLUMNS.filter((col) =>
-                            getCurrentVisibleColumns().includes(col.id)
+                            getCurrentVisibleColumns().includes(col.id),
                           ).map((column) => (
                             <td
                               key={column.id}
@@ -2303,7 +2315,7 @@ const Cost = () => {
                     {getCurrentSelectedUserId()
                       ? (() => {
                           const selectedUser = allUsers.find(
-                            (u) => u._id === getCurrentSelectedUserId()
+                            (u) => u._id === getCurrentSelectedUserId(),
                           );
                           return selectedUser
                             ? `${selectedUser.firstName} ${selectedUser.lastName}`
@@ -2408,7 +2420,7 @@ const Cost = () => {
                         <input
                           type="checkbox"
                           checked={getCurrentVisibleColumns().includes(
-                            column.id
+                            column.id,
                           )}
                           onChange={() => toggleColumn(column.id)}
                           className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -2436,7 +2448,7 @@ const Cost = () => {
                 <thead>
                   <tr>
                     {ALL_COLUMNS.filter((col) =>
-                      getCurrentVisibleColumns().includes(col.id)
+                      getCurrentVisibleColumns().includes(col.id),
                     ).map((column) => (
                       <th
                         key={column.id}
@@ -2474,7 +2486,7 @@ const Cost = () => {
                       {costs.map((task) => (
                         <tr key={task.taskId} className="hover:bg-gray-50">
                           {ALL_COLUMNS.filter((col) =>
-                            getCurrentVisibleColumns().includes(col.id)
+                            getCurrentVisibleColumns().includes(col.id),
                           ).map((column) => (
                             <td
                               key={column.id}
@@ -2572,8 +2584,8 @@ const Cost = () => {
                             u.status === "approved"
                               ? "bg-green-100 text-green-800"
                               : u.status === "pending"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-gray-100 text-gray-800"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-gray-100 text-gray-800"
                           }`}
                         >
                           {u.status}
