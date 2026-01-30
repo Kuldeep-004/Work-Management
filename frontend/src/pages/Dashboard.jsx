@@ -22,6 +22,7 @@ import UnBilledTasks from "./dashboard/UnBilledTasks";
 import TaskVerification from "./dashboard/TaskVerification";
 import ActivityLogs from "./dashboard/ActivityLogs";
 import Tutorials from "./dashboard/Tutorials";
+import LeaveManagement from "../components/LeaveManagement";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -55,6 +56,7 @@ const Dashboard = () => {
           />
           <Route path="billed-tasks" element={<BilledTasks />} />
           <Route path="unbilled-tasks" element={<UnBilledTasks />} />
+          <Route path="leave-management" element={<LeaveManagement />} />
           <Route path="*" element={<AdminDashboard />} />
         </Routes>
       </DashboardLayout>
@@ -83,6 +85,7 @@ const Dashboard = () => {
           <Route path="task-report" element={<TaskReport />} />
           <Route path="clients" element={<Clients />} />
           <Route path="timesheets" element={<Timesheets />} />
+          <Route path="leave-management" element={<LeaveManagement />} />
           <Route path="*" element={<AdminDashboard />} />
         </Routes>
       </DashboardLayout>
@@ -109,6 +112,7 @@ const Dashboard = () => {
           <Route path="task-report" element={<TaskReport />} />
           <Route path="clients" element={<Clients />} />
           <Route path="timesheets" element={<Timesheets />} />
+          <Route path="leave-management" element={<LeaveManagement />} />
           <Route path="*" element={<AdminDashboard />} />
           <Route path="task-verification" element={<TaskVerification />} />
         </Routes>
@@ -147,6 +151,7 @@ const Dashboard = () => {
         <Route path="task-report" element={<TaskReport />} />
         <Route path="clients" element={<Clients />} />
         <Route path="timesheets" element={<Timesheets />} />
+        <Route path="leave-management" element={<LeaveManagement />} />
         <Route path="*" element={<ReceivedTasks />} />
       </Routes>
     </DashboardLayout>

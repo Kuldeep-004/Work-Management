@@ -17,6 +17,7 @@ import {
   ClipboardDocumentCheckIcon, // Activity logs icon
   PlayIcon, // Tutorials icon
   DocumentChartBarIcon, // Task Report icon
+  CalendarDaysIcon, // Leave Management icon
 } from "@heroicons/react/24/outline";
 import TopBar from "../components/TopBar";
 import useOnlineStatus from "../hooks/useOnlineStatus";
@@ -142,6 +143,12 @@ const DashboardLayout = ({ children }) => {
             path: "/dashboard/unbilled-tasks",
           },
           {
+            id: "leave-management",
+            label: "Leave Management",
+            icon: CalendarDaysIcon,
+            path: "/dashboard/leave-management",
+          },
+          {
             id: "analytics",
             label: "Analytics",
             icon: ChartBarIcon,
@@ -236,7 +243,7 @@ const DashboardLayout = ({ children }) => {
             label: "All Users",
             icon: UserGroupIcon,
             path: "/dashboard/add-users",
-          }
+          },
         );
         break;
       case "Senior":
@@ -259,6 +266,12 @@ const DashboardLayout = ({ children }) => {
             label: "My Timesheets",
             icon: ClockIcon,
             path: "/dashboard/timesheets",
+          },
+          {
+            id: "leave-management",
+            label: "Leave Management",
+            icon: CalendarDaysIcon,
+            path: "/dashboard/leave-management",
           },
           {
             id: "notes",
@@ -301,7 +314,7 @@ const DashboardLayout = ({ children }) => {
             label: "Clients",
             icon: BuildingOfficeIcon,
             path: "/dashboard/clients",
-          }
+          },
         );
         break;
       case "Team Head":
@@ -330,6 +343,12 @@ const DashboardLayout = ({ children }) => {
             label: "Subordinate Timesheets",
             icon: ClipboardDocumentListIcon,
             path: "/dashboard/subordinate-timesheets",
+          },
+          {
+            id: "leave-management",
+            label: "Leave Management",
+            icon: CalendarDaysIcon,
+            path: "/dashboard/leave-management",
           },
           {
             id: "activity-logs",
@@ -378,7 +397,7 @@ const DashboardLayout = ({ children }) => {
             label: "Settings",
             icon: Cog6ToothIcon,
             path: "/dashboard/settings",
-          }
+          },
         );
         break;
       case "Fresher":
@@ -398,6 +417,12 @@ const DashboardLayout = ({ children }) => {
             path: "/dashboard/timesheets",
           },
           {
+            id: "leave-management",
+            label: "Leave Management",
+            icon: CalendarDaysIcon,
+            path: "/dashboard/leave-management",
+          },
+          {
             id: "notes",
             label: "Notes",
             icon: CheckCircleIcon,
@@ -426,7 +451,7 @@ const DashboardLayout = ({ children }) => {
             label: "Settings",
             icon: Cog6ToothIcon,
             path: "/dashboard/settings",
-          }
+          },
         );
         break;
       default: // For other users
@@ -444,6 +469,12 @@ const DashboardLayout = ({ children }) => {
             path: "/dashboard/timesheets",
           },
           {
+            id: "leave-management",
+            label: "Leave Management",
+            icon: CalendarDaysIcon,
+            path: "/dashboard/leave-management",
+          },
+          {
             id: "notes",
             label: "Notes",
             icon: CheckCircleIcon,
@@ -472,7 +503,7 @@ const DashboardLayout = ({ children }) => {
             label: "Settings",
             icon: Cog6ToothIcon,
             path: "/dashboard/settings",
-          }
+          },
         );
         break;
     }
@@ -560,8 +591,8 @@ const DashboardLayout = ({ children }) => {
                   isPendingTasksItem && hasPendingTasks
                     ? "text-red-500"
                     : isActive
-                    ? "text-white"
-                    : "text-gray-600 group-hover:text-gray-900";
+                      ? "text-white"
+                      : "text-gray-600 group-hover:text-gray-900";
 
                 return (
                   <button

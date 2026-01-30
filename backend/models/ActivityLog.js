@@ -1,10 +1,10 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const activityLogSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
     },
     action: {
@@ -12,112 +12,229 @@ const activityLogSchema = new mongoose.Schema(
       required: true,
       enum: [
         // Task actions
-        'task_created', 'task_updated', 'task_deleted', 'task_status_changed',
-        'task_priority_changed', 'task_assigned', 'task_unassigned', 'task_completed',
-        'task_verified', 'task_rejected', 'task_file_uploaded', 'task_file_deleted',
-        'task_comment_added', 'task_comment_updated', 'task_comment_deleted',
-        'task_due_date_changed', 'task_target_date_changed', 'task_billed_status_changed',
-        'task_custom_fields_updated', 'task_verification_accepted', 'task_verification_rejected',
+        "task_created",
+        "task_updated",
+        "task_deleted",
+        "task_status_changed",
+        "task_priority_changed",
+        "task_assigned",
+        "task_unassigned",
+        "task_completed",
+        "task_verified",
+        "task_rejected",
+        "task_file_uploaded",
+        "task_file_deleted",
+        "task_comment_added",
+        "task_comment_updated",
+        "task_comment_deleted",
+        "task_due_date_changed",
+        "task_target_date_changed",
+        "task_billed_status_changed",
+        "task_custom_fields_updated",
+        "task_verification_accepted",
+        "task_verification_rejected",
         // Custom column actions
-        'custom_column_created', 'custom_column_toggled',
-       'custom_column_deleted',
-        
+        "custom_column_created",
+        "custom_column_toggled",
+        "custom_column_deleted",
+
         // Task Status actions
-        'task_status_created', 'task_status_updated', 'task_status_deleted', 'task_status_reordered',
-        
+        "task_status_created",
+        "task_status_updated",
+        "task_status_deleted",
+        "task_status_reordered",
+
         // User actions
-        'user_created', 'user_updated', 'user_deleted', 'user_status_changed',
-        'user_role_changed', 'user_team_changed', 'user_approved', 'user_rejected',
-        'user_profile_updated', 'user_password_changed', 'user_login', 'user_logout',
-        'user_blocked', 'user_unblocked', 'user_verification_changed',
-        
+        "user_created",
+        "user_updated",
+        "user_deleted",
+        "user_status_changed",
+        "user_role_changed",
+        "user_team_changed",
+        "user_approved",
+        "user_rejected",
+        "user_profile_updated",
+        "user_password_changed",
+        "user_login",
+        "user_logout",
+        "user_blocked",
+        "user_unblocked",
+        "user_verification_changed",
+
         // Team actions
-        'team_created', 'team_updated', 'team_deleted', 'team_member_added',
-        'team_member_removed', 'team_head_changed',
-        
+        "team_created",
+        "team_updated",
+        "team_deleted",
+        "team_member_added",
+        "team_member_removed",
+        "team_head_changed",
+
         // Client actions
-        'client_created', 'client_updated', 'client_deleted', 'client_group_created',
-        'client_group_updated', 'client_group_deleted', 'client_work_type_added',
-        'client_work_type_removed',
-        
+        "client_created",
+        "client_updated",
+        "client_deleted",
+        "client_group_created",
+        "client_group_updated",
+        "client_group_deleted",
+        "client_work_type_added",
+        "client_work_type_removed",
+
         // Work Type actions
-        'work_type_created', 'work_type_updated', 'work_type_deleted',
+        "work_type_created",
+        "work_type_updated",
+        "work_type_deleted",
         // New work type propagation actions
-        'UPDATE_WORK_TYPE_WITH_TASK_PROPAGATION',
-        'DELETE_WORK_TYPE',
-        'UPDATE_WORK_TYPE_FAILED',
-        'BULK_UPDATE_WORK_TYPE_IN_TASKS',
-        'BULK_UPDATE_WORK_TYPE_FAILED',
-        
+        "UPDATE_WORK_TYPE_WITH_TASK_PROPAGATION",
+        "DELETE_WORK_TYPE",
+        "UPDATE_WORK_TYPE_FAILED",
+        "BULK_UPDATE_WORK_TYPE_IN_TASKS",
+        "BULK_UPDATE_WORK_TYPE_FAILED",
+
         // Priority actions
-        'priority_created', 'priority_updated', 'priority_deleted',
-        'priority_bulk_updated', 'priorities_order_updated',
-        
+        "priority_created",
+        "priority_updated",
+        "priority_deleted",
+        "priority_bulk_updated",
+        "priorities_order_updated",
+
         // Task Status actions
-        'task_status_created', 'task_status_updated', 'task_status_deleted', 'task_status_reordered',
-        'task_status_bulk_updated',
-        
+        "task_status_created",
+        "task_status_updated",
+        "task_status_deleted",
+        "task_status_reordered",
+        "task_status_bulk_updated",
+
         // Automation actions
-        'automation_created', 'automation_updated', 'automation_deleted',
-        'automation_executed', 'automation_triggered', 'automation_status_reset',
-        'automation_task_template_added', 'automation_task_template_created',
-        'automation_task_template_updated', 'automation_task_template_deleted',
-        
+        "automation_created",
+        "automation_updated",
+        "automation_deleted",
+        "automation_executed",
+        "automation_triggered",
+        "automation_status_reset",
+        "automation_task_template_added",
+        "automation_task_template_created",
+        "automation_task_template_updated",
+        "automation_task_template_deleted",
+
         // Timesheet actions
-        'timesheet_created', 'timesheet_updated', 'timesheet_deleted',
-        'timesheet_submitted', 'timesheet_approved', 'timesheet_rejected',
-        'timesheet_verified', 'timesheet_billed_status_changed', 'timesheet_returned', 'timesheet_entry_added', 'timesheet_entry_updated', 'timesheet_entry_deleted',
-        'timesheet_entry_approved', 'timesheet_entry_rejected',
-          
+        "timesheet_created",
+        "timesheet_updated",
+        "timesheet_deleted",
+        "timesheet_submitted",
+        "timesheet_approved",
+        "timesheet_rejected",
+        "timesheet_verified",
+        "timesheet_billed_status_changed",
+        "timesheet_returned",
+        "timesheet_entry_added",
+        "timesheet_entry_updated",
+        "timesheet_entry_deleted",
+        "timesheet_entry_approved",
+        "timesheet_entry_rejected",
+
         // Announcement actions
-        'announcement_created', 'announcement_updated', 'announcement_deleted',
-        'announcement_published', 'announcement_unpublished',
-        
+        "announcement_created",
+        "announcement_updated",
+        "announcement_deleted",
+        "announcement_published",
+        "announcement_unpublished",
+
         // Notification actions
-        'notification_created', 'notification_sent', 'notification_read',
-        'notification_deleted', 'notifications_mark_all_read', 'notifications_cleared',
-        'push_notification_unsubscribed',
-        
+        "notification_created",
+        "notification_sent",
+        "notification_read",
+        "notification_deleted",
+        "notifications_mark_all_read",
+        "notifications_cleared",
+        "push_notification_unsubscribed",
+
         // New action
-        'push_notification_subscribed',
-        
+        "push_notification_subscribed",
+
         // System actions
-        'system_backup_created', 'system_update',
-        'data_export', 'data_import', 'bulk_operation',
-        'database_backup_initiated', 'database_backup_completed', 'database_backup_failed',
-        'database_backup_processing_failed', 'database_backup_spawn_failed', 'database_backup_error',
-        'automated_database_backup_completed',
-        
+        "system_backup_created",
+        "system_update",
+        "data_export",
+        "data_import",
+        "bulk_operation",
+        "database_backup_initiated",
+        "database_backup_completed",
+        "database_backup_failed",
+        "database_backup_processing_failed",
+        "database_backup_spawn_failed",
+        "database_backup_error",
+        "automated_database_backup_completed",
+
         // Authentication actions
-        'password_reset_requested', 'password_reset_completed', 'email_verified',
-        'otp_generated', 'otp_verified', 'account_locked', 'account_unlocked',
-        
+        "password_reset_requested",
+        "password_reset_completed",
+        "email_verified",
+        "otp_generated",
+        "otp_verified",
+        "account_locked",
+        "account_unlocked",
+
         // File actions
-        'file_uploaded', 'file_downloaded', 'file_deleted', 'file_shared',
-        
+        "file_uploaded",
+        "file_downloaded",
+        "file_deleted",
+        "file_shared",
+
         // Settings actions
-        'settings_updated', 'configuration_changed', 'permission_changed',
-        
+        "settings_updated",
+        "configuration_changed",
+        "permission_changed",
+
         // Chat actions
-        'chat_created', 'chat_deleted', 'chat_participant_added', 'chat_participant_removed',
-        'chat_settings_updated', 'chat_left', 'message_sent', 'message_edited', 
-        'message_deleted', 'message_replied', 'message_forwarded', 'message_reacted'
-      ]
+        "chat_created",
+        "chat_deleted",
+        "chat_participant_added",
+        "chat_participant_removed",
+        "chat_settings_updated",
+        "chat_left",
+        "message_sent",
+        "message_edited",
+        "message_deleted",
+        "message_replied",
+        "message_forwarded",
+        "message_reacted",
+
+        // Leave actions
+        "leave_applied",
+        "leave_approved",
+        "leave_rejected",
+        "leave_deleted",
+      ],
     },
     entity: {
       type: String,
       required: true,
       enum: [
-        'Task', 'User', 'Team', 'Client', 'ClientGroup', 'WorkType', 
-        'Priority', 'TaskStatus', 'Automation', 'Timesheet', 'Announcement', 
-        'Notification', 'File', 'System', 'Settings', 'Chat', 'Message'
-      ]
+        "Task",
+        "User",
+        "Team",
+        "Client",
+        "ClientGroup",
+        "WorkType",
+        "Priority",
+        "TaskStatus",
+        "Automation",
+        "Timesheet",
+        "Announcement",
+        "Notification",
+        "File",
+        "System",
+        "Settings",
+        "Chat",
+        "Message",
+        "Leave",
+      ],
     },
     entityId: {
       type: mongoose.Schema.Types.ObjectId,
-      required: function() {
-        return this.entity !== 'System';
-      }
+      required: function () {
+        return this.entity !== "System";
+      },
     },
     description: {
       type: String,
@@ -154,24 +271,26 @@ const activityLogSchema = new mongoose.Schema(
     },
     severity: {
       type: String,
-      enum: ['low', 'medium', 'high', 'critical'],
-      default: 'medium',
+      enum: ["low", "medium", "high", "critical"],
+      default: "medium",
     },
     targetUser: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: false,
     },
-    relatedEntities: [{
-      entityType: String,
-      entityId: mongoose.Schema.Types.ObjectId,
-    }],
+    relatedEntities: [
+      {
+        entityType: String,
+        entityId: mongoose.Schema.Types.ObjectId,
+      },
+    ],
   },
   {
     timestamps: true,
     // Add TTL index for automatic deletion after 15 days
-    expireAfterSeconds: undefined // This is not used directly, but for clarity
-  }
+    expireAfterSeconds: undefined, // This is not used directly, but for clarity
+  },
 );
 
 // TTL index for automatic deletion after 15 days (1296000 seconds)
@@ -184,6 +303,6 @@ activityLogSchema.index({ action: 1, createdAt: -1 });
 activityLogSchema.index({ createdAt: -1 });
 activityLogSchema.index({ severity: 1, createdAt: -1 });
 
-const ActivityLog = mongoose.model('ActivityLog', activityLogSchema);
+const ActivityLog = mongoose.model("ActivityLog", activityLogSchema);
 
 export default ActivityLog;
