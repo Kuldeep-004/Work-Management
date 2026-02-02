@@ -1,6 +1,7 @@
 import express from "express";
 import Timesheet from "../models/Timesheet.js";
 import User from "../models/User.js";
+import Leave from "../models/Leave.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -47,7 +48,7 @@ router.get("/user/:userId", protect, async (req, res) => {
     })
       .populate(
         "entries.task",
-        "title description clientName clientGroup workType billed"
+        "title description clientName clientGroup workType billed",
       )
       .sort({ date: 1 });
 
@@ -91,7 +92,6 @@ router.get("/user/:userId", protect, async (req, res) => {
         leastProductiveDay: null,
       },
     };
-    console.log(analytics);
 
     // Process each timesheet
     timesheets.forEach((timesheet) => {
@@ -224,10 +224,10 @@ router.get("/user/:userId", protect, async (req, res) => {
       const weekKey = `${date.getFullYear()}-W${Math.ceil(
         (date.getDate() +
           new Date(date.getFullYear(), date.getMonth(), 1).getDay()) /
-          7
+          7,
       )}`;
       const monthKey = `${date.getFullYear()}-${String(
-        date.getMonth() + 1
+        date.getMonth() + 1,
       ).padStart(2, "0")}`;
 
       if (!weeklyData[weekKey])
@@ -252,7 +252,7 @@ router.get("/user/:userId", protect, async (req, res) => {
         month,
         totalHours: data.totalHours,
         averageDaily: data.totalHours / data.days,
-      })
+      }),
     );
 
     // Calculate productivity metrics
@@ -268,11 +268,11 @@ router.get("/user/:userId", protect, async (req, res) => {
     }
 
     const workingDays = analytics.dailyBreakdown.filter(
-      (day) => day.workingHours > 0
+      (day) => day.workingHours > 0,
     );
     if (workingDays.length > 0) {
       const sortedDays = workingDays.sort(
-        (a, b) => b.workingHours - a.workingHours
+        (a, b) => b.workingHours - a.workingHours,
       );
       analytics.productivity.mostProductiveDay = sortedDays[0];
       analytics.productivity.leastProductiveDay =
@@ -281,7 +281,7 @@ router.get("/user/:userId", protect, async (req, res) => {
 
     // Convert task breakdown to array and add tasks where user was verifier or guide
     const taskBreakdownArray = Object.values(analytics.taskBreakdown).sort(
-      (a, b) => b.totalMinutes - a.totalMinutes
+      (a, b) => b.totalMinutes - a.totalMinutes,
     );
 
     // Find additional tasks where user was verifier or guide within the date range
@@ -316,6 +316,54 @@ router.get("/user/:userId", protect, async (req, res) => {
     });
 
     analytics.taskBreakdown = taskBreakdownArray;
+
+    // Fetch leave statistics for the user within the date range
+    const leaves = await Leave.find({
+      userId: userId,
+      $or: [
+        { startDate: { $gte: start, $lte: end } },
+        { endDate: { $gte: start, $lte: end } },
+        {
+          $and: [{ startDate: { $lte: end } }, { endDate: { $gte: start } }],
+        },
+      ],
+    });
+
+    // Calculate leave days for each status
+    const leaveDays = {
+      total: 0,
+      approved: 0,
+      pending: 0,
+      rejected: 0,
+      byType: {},
+    };
+
+    leaves.forEach((leave) => {
+      const days = leave.numberOfDays || 0;
+      leaveDays.total += days;
+
+      if (leave.status === "Approved") {
+        leaveDays.approved += days;
+      } else if (leave.status === "Pending") {
+        leaveDays.pending += days;
+      } else if (leave.status === "Rejected") {
+        leaveDays.rejected += days;
+      }
+
+      // Group by leave type
+      if (!leaveDays.byType[leave.leaveType]) {
+        leaveDays.byType[leave.leaveType] = {
+          total: 0,
+          approved: 0,
+          pending: 0,
+          rejected: 0,
+        };
+      }
+      leaveDays.byType[leave.leaveType].total += days;
+      leaveDays.byType[leave.leaveType][leave.status.toLowerCase()] += days;
+    });
+
+    analytics.leaveDays = leaveDays;
 
     res.json(analytics);
   } catch (error) {

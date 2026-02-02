@@ -204,20 +204,23 @@ const LeaveManagement = () => {
         leaves = leaves.filter((l) => usersOfRole.includes(l.userId?._id));
       }
 
-      const totalLeaves = leaves.length;
-      const pendingLeaves = leaves.filter((l) => l.status === "Pending").length;
-      const approvedLeaves = leaves.filter(
-        (l) => l.status === "Approved",
-      ).length;
-      const rejectedLeaves = leaves.filter(
-        (l) => l.status === "Rejected",
-      ).length;
-
-      const totalDays = leaves
+      // Calculate days instead of leave count
+      const totalDays = leaves.reduce(
+        (sum, l) => sum + (l.numberOfDays || 0),
+        0,
+      );
+      const pendingDays = leaves
+        .filter((l) => l.status === "Pending")
+        .reduce((sum, l) => sum + (l.numberOfDays || 0), 0);
+      const approvedDays = leaves
         .filter((l) => l.status === "Approved")
-        .reduce((sum, l) => sum + l.numberOfDays, 0);
+        .reduce((sum, l) => sum + (l.numberOfDays || 0), 0);
+      const rejectedDays = leaves
+        .filter((l) => l.status === "Rejected")
+        .reduce((sum, l) => sum + (l.numberOfDays || 0), 0);
 
       const leavesByType = leaves.reduce((acc, leave) => {
+        const days = leave.numberOfDays || 0;
         if (!acc[leave.leaveType]) {
           acc[leave.leaveType] = {
             total: 0,
@@ -226,19 +229,18 @@ const LeaveManagement = () => {
             rejected: 0,
           };
         }
-        acc[leave.leaveType].total += 1;
-        if (leave.status === "Approved") acc[leave.leaveType].approved += 1;
-        if (leave.status === "Pending") acc[leave.leaveType].pending += 1;
-        if (leave.status === "Rejected") acc[leave.leaveType].rejected += 1;
+        acc[leave.leaveType].total += days;
+        if (leave.status === "Approved") acc[leave.leaveType].approved += days;
+        if (leave.status === "Pending") acc[leave.leaveType].pending += days;
+        if (leave.status === "Rejected") acc[leave.leaveType].rejected += days;
         return acc;
       }, {});
 
       setUserStats({
-        totalLeaves,
-        pendingLeaves,
-        approvedLeaves,
-        rejectedLeaves,
         totalDays,
+        pendingDays,
+        approvedDays,
+        rejectedDays,
         leavesByType,
       });
 
@@ -712,8 +714,11 @@ const LeaveManagement = () => {
             <div className="leave-detail rejection-info">
               <strong>Rejected By:</strong> {leave.approverName}
               <br />
+              <strong>Rejected On:</strong>{" "}
+              {new Date(leave.approvedAt).toLocaleString()}
               {leave.rejectionReason && (
                 <>
+                  <br />
                   <strong>Reason:</strong> {leave.rejectionReason}
                 </>
               )}
@@ -1146,34 +1151,29 @@ const LeaveManagement = () => {
               <>
                 <div className="stats-display">
                   <div className="stat-card stat-total">
-                    <h3>Total Leaves</h3>
-                    <div className="stat-value">{userStats.totalLeaves}</div>
+                    <h3>Total Days</h3>
+                    <div className="stat-value">{userStats.totalDays}</div>
                   </div>
 
                   <div className="stat-card stat-pending">
-                    <h3>Pending</h3>
-                    <div className="stat-value">{userStats.pendingLeaves}</div>
+                    <h3>Pending Days</h3>
+                    <div className="stat-value">{userStats.pendingDays}</div>
                   </div>
 
                   <div className="stat-card stat-approved-card">
-                    <h3>Approved</h3>
-                    <div className="stat-value">{userStats.approvedLeaves}</div>
+                    <h3>Approved Days</h3>
+                    <div className="stat-value">{userStats.approvedDays}</div>
                   </div>
 
                   <div className="stat-card stat-rejected-card">
-                    <h3>Rejected</h3>
-                    <div className="stat-value">{userStats.rejectedLeaves}</div>
-                  </div>
-
-                  <div className="stat-card stat-days">
-                    <h3>Total Approved Days</h3>
-                    <div className="stat-value">{userStats.totalDays}</div>
+                    <h3>Rejected Days</h3>
+                    <div className="stat-value">{userStats.rejectedDays}</div>
                   </div>
                 </div>
 
                 {Object.keys(userStats.leavesByType).length > 0 && (
                   <div className="leave-type-stats-section">
-                    <h3>Leaves by Type</h3>
+                    <h3>Days by Leave Type</h3>
                     <div className="leave-type-stats-grid">
                       {Object.entries(userStats.leavesByType).map(
                         ([type, data]) => (
@@ -1181,16 +1181,16 @@ const LeaveManagement = () => {
                             <h4>{type}</h4>
                             <div className="leave-type-stat-details">
                               <span className="stat-item total">
-                                Total: {data.total}
+                                Total: {data.total} days
                               </span>
                               <span className="stat-item pending">
-                                Pending: {data.pending}
+                                Pending: {data.pending} days
                               </span>
                               <span className="stat-item approved">
-                                Approved: {data.approved}
+                                Approved: {data.approved} days
                               </span>
                               <span className="stat-item rejected">
-                                Rejected: {data.rejected}
+                                Rejected: {data.rejected} days
                               </span>
                             </div>
                           </div>
