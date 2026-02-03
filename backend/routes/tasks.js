@@ -432,8 +432,8 @@ router.get("/all", protect, async (req, res) => {
 // Get team-wise tasks (for Team Dashboard - filtered by team)
 router.get("/team-tasks", protect, async (req, res) => {
   try {
-    // Only Team Heads and Admins can access this route
-    if (!["Admin", "Team Head"].includes(req.user.role)) {
+    // Only Team Heads, Admins, and Seniors can access this route
+    if (!["Admin", "Team Head", "Senior"].includes(req.user.role)) {
       return res
         .status(403)
         .json({ message: "You are not authorized to access team tasks" });
