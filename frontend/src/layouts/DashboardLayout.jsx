@@ -118,8 +118,14 @@ const DashboardLayout = ({ children }) => {
       case "Admin":
         menuItems.push(
           {
-            id: "dashboard",
+            id: "fulldashboard",
             label: "Dashboard",
+            icon: ChartBarIcon,
+            path: "/dashboard/fulldashboard",
+          },
+          {
+            id: "dashboard",
+            label: "Team Dashboard",
             icon: ChartBarIcon,
             path: "/dashboard",
           },
@@ -250,7 +256,7 @@ const DashboardLayout = ({ children }) => {
         menuItems.push(
           {
             id: "dashboard",
-            label: "Dashboard",
+            label: "Team Dashboard",
             icon: ChartBarIcon,
             path: "/dashboard",
           },
@@ -320,8 +326,14 @@ const DashboardLayout = ({ children }) => {
       case "Team Head":
         menuItems.push(
           {
-            id: "dashboard",
+            id: "fulldashboard",
             label: "Dashboard",
+            icon: ChartBarIcon,
+            path: "/dashboard/fulldashboard",
+          },
+          {
+            id: "dashboard",
+            label: "Team Dashboard",
             icon: ChartBarIcon,
             path: "/dashboard",
           },

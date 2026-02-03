@@ -19,6 +19,7 @@ function validateTabKey(tabKey) {
   // List of valid tabKeys (add all real page keys here)
   const validTabKeys = [
     "adminDashboard",
+    "fullDashboard",
     "receivedTasks",
     "assignedTasks",
     "billedTasks",
@@ -111,11 +112,9 @@ router.put("/profile", protect, uploadMiddleware, async (req, res) => {
             await unlinkAsync(req.file.path);
           } catch (e) {}
         }
-        return res
-          .status(500)
-          .json({
-            message: error.message || "Error uploading image to pCloud",
-          });
+        return res.status(500).json({
+          message: error.message || "Error uploading image to pCloud",
+        });
       }
     }
 
@@ -130,7 +129,7 @@ router.put("/profile", protect, uploadMiddleware, async (req, res) => {
     const token = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET || "default_jwt_secret",
-      { expiresIn: "30d" }
+      { expiresIn: "30d" },
     );
 
     res.json({
@@ -283,7 +282,7 @@ router.put("/:userId/approval", protect, async (req, res) => {
           userEmail: user.email,
           assignedRole: role,
           assignedTeam: team,
-        }
+        },
       );
     } else if (status === "rejected") {
       await ActivityLogger.logUserActivity(
@@ -296,7 +295,7 @@ router.put("/:userId/approval", protect, async (req, res) => {
         req,
         {
           userEmail: user.email,
-        }
+        },
       );
     }
 
@@ -381,7 +380,7 @@ router.delete("/:userId", protect, async (req, res) => {
       { status: user.status },
       { status: "deleted" },
       req,
-      { userEmail: user.email }
+      { userEmail: user.email },
     );
 
     res.json({ message: "User deleted successfully" });
@@ -442,7 +441,7 @@ router.patch("/:userId/update-fields", protect, async (req, res) => {
     const updatedUser = await User.findByIdAndUpdate(
       req.params.userId,
       { $set: updatedFields },
-      { new: true }
+      { new: true },
     ).select("-password");
 
     if (!updatedUser) {
@@ -464,7 +463,7 @@ router.get("/hourly-rates", protect, async (req, res) => {
     }
     // Exclude blocked, pending, and deleted users (only approved users)
     const users = await User.find({ status: "approved" }).select(
-      "firstName lastName email role hourlyRate status"
+      "firstName lastName email role hourlyRate status",
     );
     res.json(users);
   } catch (error) {
@@ -572,7 +571,7 @@ router.post("/user-tab-state/:tabKey", protect, async (req, res) => {
     const updated = await UserTabState.findOneAndUpdate(
       { user: req.user._id, tabKey },
       { state },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, new: true, setDefaultsOnInsert: true },
     );
     res.json(updated.state);
   } catch (error) {
@@ -593,11 +592,9 @@ router.patch("/tabstate/taskOrder", protect, async (req, res) => {
     const userId = req.user.id;
     let userTabState = await UserTabState.findOne({ user: userId, tabKey });
     if (!userTabState) {
-      return res
-        .status(400)
-        .json({
-          message: "Tab state must be initialized before updating taskOrder.",
-        });
+      return res.status(400).json({
+        message: "Tab state must be initialized before updating taskOrder.",
+      });
     }
     if (!userTabState.state) userTabState.state = {};
 
@@ -775,11 +772,9 @@ router.patch("/tabstate/groupOrder", protect, async (req, res) => {
     const userId = req.user.id;
     let userTabState = await UserTabState.findOne({ user: userId, tabKey });
     if (!userTabState) {
-      return res
-        .status(400)
-        .json({
-          message: "Tab state must be initialized before updating groupOrder.",
-        });
+      return res.status(400).json({
+        message: "Tab state must be initialized before updating groupOrder.",
+      });
     }
     if (!userTabState.state) userTabState.state = {};
 

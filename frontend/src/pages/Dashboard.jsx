@@ -9,6 +9,7 @@ import UserApprovals from "../components/UserApprovals";
 import BlockedUsers from "../components/BlockedUsers";
 import AddUsers from "./dashboard/AddUsers";
 import AdminDashboard from "../components/AdminDashboard";
+import FullDashboard from "../components/FullDashboard";
 import Announcements from "./Announcements";
 import Clients from "./dashboard/Clients";
 import { useAuth } from "../context/AuthContext";
@@ -33,6 +34,7 @@ const Dashboard = () => {
       <DashboardLayout>
         <Routes>
           <Route path="/" element={<AdminDashboard />} />
+          <Route path="fulldashboard" element={<FullDashboard />} />
           <Route path="received-tasks" element={<ReceivedTasks />} />
           <Route path="assigned-tasks" element={<AssignedTasks />} />
           <Route path="task-verification" element={<TaskVerification />} />
@@ -69,6 +71,7 @@ const Dashboard = () => {
       <DashboardLayout>
         <Routes>
           <Route path="/" element={<AdminDashboard />} />
+          <Route path="fulldashboard" element={<FullDashboard />} />
           <Route path="received-tasks" element={<ReceivedTasks />} />
           <Route path="assigned-tasks" element={<AssignedTasks />} />
           <Route

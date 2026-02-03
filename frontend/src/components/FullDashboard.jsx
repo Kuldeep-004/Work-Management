@@ -115,7 +115,7 @@ const DEFAULT_TAB = (customColumns = []) => {
   };
 };
 
-const AdminDashboard = () => {
+const FullDashboard = () => {
   const { user } = useAuth();
   // Helper to get saved columns for the user
   // 2. Remove getSavedVisibleColumns and all per-user localStorage for columns/widths
@@ -335,16 +335,22 @@ const AdminDashboard = () => {
 
     // Sync with backend
     try {
-      await fetch(`${API_BASE_URL}/api/users/user-tab-state/adminDashboard`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${user.token}`,
+      const response = await fetch(
+        `${API_BASE_URL}/api/users/user-tab-state/fullDashboard`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.token}`,
+          },
+          body: JSON.stringify({
+            state: { tabs: newTabs, activeTabId: newId },
+          }),
         },
-        body: JSON.stringify({ state: { tabs: newTabs, activeTabId: newId } }),
-      });
+      );
+      const data = await response.json();
     } catch (err) {
-      // Optionally handle error
+      console.error("🔴 [FullDashboard] Error saving tab:", err);
     }
   };
   const closeTab = (id) => {
@@ -372,7 +378,7 @@ const AdminDashboard = () => {
     let isMounted = true;
     (async () => {
       try {
-        const tabStates = await fetchTabState("adminDashboard", user.token);
+        const tabStates = await fetchTabState("fullDashboard", user.token);
         if (
           isMounted &&
           tabStates &&
@@ -386,7 +392,8 @@ const AdminDashboard = () => {
           setTabs([def]);
           setActiveTabId(def.id);
         }
-      } catch {
+      } catch (error) {
+        console.error("🔴 [FullDashboard] Error fetching tab state:", error);
         if (isMounted) {
           const def = { ...DEFAULT_TAB(customColumns) };
           setTabs([def]);
@@ -434,9 +441,7 @@ const AdminDashboard = () => {
     // Debounce the save operation to allow order updates to complete
     // The backend will merge this state with existing taskOrder/groupOrder
     const timeoutId = setTimeout(() => {
-      saveTabState("adminDashboard", { tabs, activeTabId }, user.token).catch(
-        () => {},
-      );
+      saveTabState("fullDashboard", { tabs, activeTabId }, user.token)
     }, 1000); // 1 second delay to ensure order saves complete first
 
     return () => clearTimeout(timeoutId);
@@ -544,12 +549,12 @@ const AdminDashboard = () => {
       setLoading(true);
       setError(null);
       let endpoint = "";
-      // Team Dashboard shows only team-specific tasks for Team Heads
-      if (user.role === "Team Head") {
-        endpoint = "tasks/team-tasks";
-      } else if (user.role === "Admin" || user.role === "Senior") {
-        // Admins and Seniors see team tasks by default on Team Dashboard
-        endpoint = "tasks/team-tasks";
+      if (
+        user.role === "Admin" ||
+        user.role === "Senior" ||
+        user.role === "Team Head"
+      ) {
+        endpoint = "tasks/all";
       } else {
         endpoint = "tasks";
       }
@@ -1020,11 +1025,6 @@ const AdminDashboard = () => {
       ).length,
     };
   }, [tasks]);
-
-  const handleStatusClick = (taskId, status) => {
-    // Implement the logic to handle status click
-    console.log(`Status clicked for task ${taskId}, new status: ${status}`);
-  };
 
   const handleEditTask = useCallback((task) => {
     setEditTask(task);
@@ -2422,7 +2422,7 @@ const AdminDashboard = () => {
   // 4. Pass columnOrder/setColumnOrder to AdvancedTaskTable
   useEffect(() => {
     const userId = user?._id || "guest";
-    const key = `admindashboard_column_widths_${userId}`;
+    const key = `fulldashboard_column_widths_${userId}`;
     const saved = localStorage.getItem(key);
     if (saved) {
       try {
@@ -3867,7 +3867,7 @@ const AdminDashboard = () => {
           shouldDisableActions={() => false}
           shouldDisableFileActions={() => true}
           taskHours={taskHours}
-          storageKeyPrefix="admindashboard"
+          storageKeyPrefix="fulldashboard"
           visibleColumns={activeTabObj.visibleColumns}
           setVisibleColumns={(cols) =>
             updateActiveTab({ visibleColumns: cols })
@@ -3886,7 +3886,7 @@ const AdminDashboard = () => {
           taskSort={activeTabObj.taskSort}
           taskSortOrder={activeTabObj.taskSortOrder}
           filters={isFilterPopupOpen ? filterDraft : activeTabObj.filters}
-          tabKey="adminDashboard"
+          tabKey="fullDashboard"
           tabId={activeTabObj.id}
           allColumns={extendedColumns}
           // Bulk selection props
@@ -4405,4 +4405,4 @@ const AdminDashboard = () => {
   );
 };
 
-export default AdminDashboard;
+export default FullDashboard;
