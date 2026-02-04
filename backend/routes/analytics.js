@@ -374,9 +374,15 @@ router.get("/user/:userId", protect, async (req, res) => {
   }
 });
 
-// Get list of all users for analytics dropdown (exclude deleted users)
+// Get list of all users for analytics dropdown (Admin only)
 router.get("/users", protect, async (req, res) => {
   try {
+    // Check if user is Admin
+    const adminUser = await User.findById(req.user.id);
+    if (adminUser.role !== "Admin") {
+      return res.status(403).json({ message: "Not authorized as Admin" });
+    }
+
     const users = await User.find({ status: { $nin: ["rejected", "deleted"] } })
       .select("firstName lastName email role team photo")
       .sort({ firstName: 1 });

@@ -559,7 +559,7 @@ const FullDashboard = () => {
     };
 
     if (user && user.token) {
-      fetchData("users", setUsers);
+      fetchData("users/for-task-assignment", setUsers);
       fetchData("tasks/unique/client-names", setClientNames);
       fetchData("tasks/unique/client-groups", setClientGroups);
       fetchData("tasks/unique/work-types", setWorkTypes);

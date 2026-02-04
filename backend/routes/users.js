@@ -39,6 +39,12 @@ function validateTabKey(tabKey) {
 // Get all users
 router.get("/", protect, async (req, res) => {
   try {
+    // Check if user is Admin
+    const adminUser = await User.findById(req.user.id);
+    if (adminUser.role !== "Admin") {
+      return res.status(403).json({ message: "Not authorized as Admin" });
+    }
+
     const { status, includeRejected } = req.query;
     let query = {};
 
@@ -437,6 +443,13 @@ router.patch("/:userId/update-fields", protect, async (req, res) => {
       }
     }
 
+    // Handle userAccessLevel update
+    if (req.body.userAccessLevel !== undefined) {
+      if (["Team Only", "All Users"].includes(req.body.userAccessLevel)) {
+        updatedFields.userAccessLevel = req.body.userAccessLevel;
+      }
+    }
+
     // Update user with new fields
     const updatedUser = await User.findByIdAndUpdate(
       req.params.userId,
@@ -509,6 +522,40 @@ router.get("/except-me", protect, async (req, res) => {
     }).select("-password");
     res.json(users);
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get users for task assignment based on userAccessLevel (team-filtered)
+router.get("/for-task-assignment", protect, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user._id);
+
+    if (!currentUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Default to "Team Only" if userAccessLevel is not set (for existing users)
+    const accessLevel = currentUser.userAccessLevel || "Team Only";
+
+    let query = {
+      _id: { $ne: req.user._id },
+      isEmailVerified: true,
+      status: "approved",
+    };
+
+    if (accessLevel === "Team Only") {
+      if (currentUser.team) {
+        query.team = currentUser.team;
+      } else {
+        query._id = null;
+      }
+    }
+
+    const users = await User.find(query).select("-password");
+    res.json(users);
+  } catch (error) {
+    console.error("Error in for-task-assignment:", error);
     res.status(500).json({ message: error.message });
   }
 });

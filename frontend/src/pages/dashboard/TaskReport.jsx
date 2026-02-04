@@ -92,11 +92,14 @@ const Cost = () => {
     const fetchAllUsers = async () => {
       if (!user?.token) return;
       try {
-        const res = await fetch(`${API_BASE_URL}/api/users/except-me`, {
-          headers: {
-            Authorization: `Bearer ${user.token}`,
+        const res = await fetch(
+          `${API_BASE_URL}/api/users/for-task-assignment`,
+          {
+            headers: {
+              Authorization: `Bearer ${user.token}`,
+            },
           },
-        });
+        );
 
         if (!res.ok) {
           throw new Error("Failed to fetch users");
@@ -149,13 +152,13 @@ const Cost = () => {
           ) {
             console.log(
               "Setting billed columns from saved state:",
-              billedTabState.visibleColumns
+              billedTabState.visibleColumns,
             );
             setBilledVisibleColumns(billedTabState.visibleColumns);
           } else {
             console.log(
               "Using default visible columns for billed:",
-              DEFAULT_VISIBLE_COLUMNS
+              DEFAULT_VISIBLE_COLUMNS,
             );
             setBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
@@ -172,13 +175,13 @@ const Cost = () => {
           ) {
             console.log(
               "Setting unbilled columns from saved state:",
-              unbilledTabState.visibleColumns
+              unbilledTabState.visibleColumns,
             );
             setUnbilledVisibleColumns(unbilledTabState.visibleColumns);
           } else {
             console.log(
               "Using default visible columns for unbilled:",
-              DEFAULT_VISIBLE_COLUMNS
+              DEFAULT_VISIBLE_COLUMNS,
             );
             setUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
@@ -198,15 +201,15 @@ const Cost = () => {
           ) {
             console.log(
               "Setting completed billed columns from saved state:",
-              completedBilledTabState.visibleColumns
+              completedBilledTabState.visibleColumns,
             );
             setCompletedBilledVisibleColumns(
-              completedBilledTabState.visibleColumns
+              completedBilledTabState.visibleColumns,
             );
           } else {
             console.log(
               "Using default visible columns for completed billed:",
-              DEFAULT_VISIBLE_COLUMNS
+              DEFAULT_VISIBLE_COLUMNS,
             );
             setCompletedBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
@@ -215,7 +218,7 @@ const Cost = () => {
             completedBilledTabState.selectedUserId !== undefined
           ) {
             setCompletedBilledSelectedUserId(
-              completedBilledTabState.selectedUserId
+              completedBilledTabState.selectedUserId,
             );
           }
 
@@ -228,15 +231,15 @@ const Cost = () => {
           ) {
             console.log(
               "Setting completed unbilled columns from saved state:",
-              completedUnbilledTabState.visibleColumns
+              completedUnbilledTabState.visibleColumns,
             );
             setCompletedUnbilledVisibleColumns(
-              completedUnbilledTabState.visibleColumns
+              completedUnbilledTabState.visibleColumns,
             );
           } else {
             console.log(
               "Using default visible columns for completed unbilled:",
-              DEFAULT_VISIBLE_COLUMNS
+              DEFAULT_VISIBLE_COLUMNS,
             );
             setCompletedUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           }
@@ -245,7 +248,7 @@ const Cost = () => {
             completedUnbilledTabState.selectedUserId !== undefined
           ) {
             setCompletedUnbilledSelectedUserId(
-              completedUnbilledTabState.selectedUserId
+              completedUnbilledTabState.selectedUserId,
             );
           }
         }
@@ -276,7 +279,7 @@ const Cost = () => {
       return;
     console.log(
       "Saving billed visible columns to backend:",
-      billedVisibleColumns
+      billedVisibleColumns,
     );
     saveTabState(
       "costManagementBilled",
@@ -284,7 +287,7 @@ const Cost = () => {
         visibleColumns: billedVisibleColumns,
         selectedUserId: billedSelectedUserId,
       },
-      user.token
+      user.token,
     )
       .then(() => {
         console.log("Successfully saved billed tab state");
@@ -299,7 +302,7 @@ const Cost = () => {
       return;
     console.log(
       "Saving unbilled visible columns to backend:",
-      unbilledVisibleColumns
+      unbilledVisibleColumns,
     );
     saveTabState(
       "costManagementUnbilled",
@@ -307,7 +310,7 @@ const Cost = () => {
         visibleColumns: unbilledVisibleColumns,
         selectedUserId: unbilledSelectedUserId,
       },
-      user.token
+      user.token,
     )
       .then(() => {
         console.log("Successfully saved unbilled tab state");
@@ -326,7 +329,7 @@ const Cost = () => {
       return;
     console.log(
       "Saving completed billed visible columns to backend:",
-      completedBilledVisibleColumns
+      completedBilledVisibleColumns,
     );
     saveTabState(
       "costManagementCompletedBilled",
@@ -334,7 +337,7 @@ const Cost = () => {
         visibleColumns: completedBilledVisibleColumns,
         selectedUserId: completedBilledSelectedUserId,
       },
-      user.token
+      user.token,
     )
       .then(() => {
         console.log("Successfully saved completed billed tab state");
@@ -358,7 +361,7 @@ const Cost = () => {
       return;
     console.log(
       "Saving completed unbilled visible columns to backend:",
-      completedUnbilledVisibleColumns
+      completedUnbilledVisibleColumns,
     );
     saveTabState(
       "costManagementCompletedUnbilled",
@@ -366,7 +369,7 @@ const Cost = () => {
         visibleColumns: completedUnbilledVisibleColumns,
         selectedUserId: completedUnbilledSelectedUserId,
       },
-      user.token
+      user.token,
     )
       .then(() => {
         console.log("Successfully saved completed unbilled tab state");
@@ -570,7 +573,7 @@ const Cost = () => {
       unbilledSelectedUserId,
       completedBilledSelectedUserId,
       completedUnbilledSelectedUserId,
-    ]
+    ],
   );
 
   // Load more tasks function
@@ -608,7 +611,7 @@ const Cost = () => {
         root: null,
         rootMargin: "200px", // Load more when 200px from bottom
         threshold: 0.01,
-      }
+      },
     );
 
     observer.observe(triggerElement);
@@ -635,7 +638,7 @@ const Cost = () => {
         `${API_BASE_URL}/api/timesheets/task/${taskId}/timeslots`,
         {
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
       );
       const timeslots = await timeslotsRes.json();
       setTaskTimeslots(timeslots);
@@ -663,7 +666,7 @@ const Cost = () => {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ hourlyRate: Number(hourlyRateInput) }),
-        }
+        },
       );
       if (!res.ok) throw new Error("Failed to update");
       toast.success("Hourly rate updated");
@@ -832,7 +835,7 @@ const Cost = () => {
     (u) =>
       u.firstName.toLowerCase().includes(userSearch.toLowerCase()) ||
       u.lastName.toLowerCase().includes(userSearch.toLowerCase()) ||
-      u.email.toLowerCase().includes(userSearch.toLowerCase())
+      u.email.toLowerCase().includes(userSearch.toLowerCase()),
   );
 
   const formatTime = (minutes) => {
@@ -895,7 +898,7 @@ const Cost = () => {
       doc.setFont(undefined, "normal");
       const descLines = doc.splitTextToSize(
         taskDetails.description,
-        pageWidth - 40
+        pageWidth - 40,
       );
       doc.text(descLines, 20, yPosition);
       yPosition += descLines.length * 6 + 8;
@@ -1396,7 +1399,7 @@ const Cost = () => {
                     {getCurrentSelectedUserId()
                       ? (() => {
                           const selectedUser = allUsers.find(
-                            (u) => u._id === getCurrentSelectedUserId()
+                            (u) => u._id === getCurrentSelectedUserId(),
                           );
                           return selectedUser
                             ? `${selectedUser.firstName} ${selectedUser.lastName}`
@@ -1501,7 +1504,7 @@ const Cost = () => {
                         <input
                           type="checkbox"
                           checked={getCurrentVisibleColumns().includes(
-                            column.id
+                            column.id,
                           )}
                           onChange={() => toggleColumn(column.id)}
                           className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -1529,7 +1532,7 @@ const Cost = () => {
                 <thead>
                   <tr>
                     {ALL_COLUMNS.filter((col) =>
-                      getCurrentVisibleColumns().includes(col.id)
+                      getCurrentVisibleColumns().includes(col.id),
                     ).map((column) => (
                       <th
                         key={column.id}
@@ -1567,7 +1570,7 @@ const Cost = () => {
                       {costs.map((task) => (
                         <tr key={task.taskId} className="hover:bg-gray-50">
                           {ALL_COLUMNS.filter((col) =>
-                            getCurrentVisibleColumns().includes(col.id)
+                            getCurrentVisibleColumns().includes(col.id),
                           ).map((column) => (
                             <td
                               key={column.id}
@@ -1655,7 +1658,7 @@ const Cost = () => {
                     {getCurrentSelectedUserId()
                       ? (() => {
                           const selectedUser = allUsers.find(
-                            (u) => u._id === getCurrentSelectedUserId()
+                            (u) => u._id === getCurrentSelectedUserId(),
                           );
                           return selectedUser
                             ? `${selectedUser.firstName} ${selectedUser.lastName}`
@@ -1760,7 +1763,7 @@ const Cost = () => {
                         <input
                           type="checkbox"
                           checked={getCurrentVisibleColumns().includes(
-                            column.id
+                            column.id,
                           )}
                           onChange={() => toggleColumn(column.id)}
                           className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -1788,7 +1791,7 @@ const Cost = () => {
                 <thead>
                   <tr>
                     {ALL_COLUMNS.filter((col) =>
-                      getCurrentVisibleColumns().includes(col.id)
+                      getCurrentVisibleColumns().includes(col.id),
                     ).map((column) => (
                       <th
                         key={column.id}
@@ -1826,7 +1829,7 @@ const Cost = () => {
                       {costs.map((task) => (
                         <tr key={task.taskId} className="hover:bg-gray-50">
                           {ALL_COLUMNS.filter((col) =>
-                            getCurrentVisibleColumns().includes(col.id)
+                            getCurrentVisibleColumns().includes(col.id),
                           ).map((column) => (
                             <td
                               key={column.id}
@@ -1914,7 +1917,7 @@ const Cost = () => {
                     {getCurrentSelectedUserId()
                       ? (() => {
                           const selectedUser = allUsers.find(
-                            (u) => u._id === getCurrentSelectedUserId()
+                            (u) => u._id === getCurrentSelectedUserId(),
                           );
                           return selectedUser
                             ? `${selectedUser.firstName} ${selectedUser.lastName}`
@@ -2019,7 +2022,7 @@ const Cost = () => {
                         <input
                           type="checkbox"
                           checked={getCurrentVisibleColumns().includes(
-                            column.id
+                            column.id,
                           )}
                           onChange={() => toggleColumn(column.id)}
                           className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -2047,7 +2050,7 @@ const Cost = () => {
                 <thead>
                   <tr>
                     {ALL_COLUMNS.filter((col) =>
-                      getCurrentVisibleColumns().includes(col.id)
+                      getCurrentVisibleColumns().includes(col.id),
                     ).map((column) => (
                       <th
                         key={column.id}
@@ -2085,7 +2088,7 @@ const Cost = () => {
                       {costs.map((task) => (
                         <tr key={task.taskId} className="hover:bg-gray-50">
                           {ALL_COLUMNS.filter((col) =>
-                            getCurrentVisibleColumns().includes(col.id)
+                            getCurrentVisibleColumns().includes(col.id),
                           ).map((column) => (
                             <td
                               key={column.id}
@@ -2173,7 +2176,7 @@ const Cost = () => {
                     {getCurrentSelectedUserId()
                       ? (() => {
                           const selectedUser = allUsers.find(
-                            (u) => u._id === getCurrentSelectedUserId()
+                            (u) => u._id === getCurrentSelectedUserId(),
                           );
                           return selectedUser
                             ? `${selectedUser.firstName} ${selectedUser.lastName}`
@@ -2278,7 +2281,7 @@ const Cost = () => {
                         <input
                           type="checkbox"
                           checked={getCurrentVisibleColumns().includes(
-                            column.id
+                            column.id,
                           )}
                           onChange={() => toggleColumn(column.id)}
                           className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -2306,7 +2309,7 @@ const Cost = () => {
                 <thead>
                   <tr>
                     {ALL_COLUMNS.filter((col) =>
-                      getCurrentVisibleColumns().includes(col.id)
+                      getCurrentVisibleColumns().includes(col.id),
                     ).map((column) => (
                       <th
                         key={column.id}
@@ -2344,7 +2347,7 @@ const Cost = () => {
                       {costs.map((task) => (
                         <tr key={task.taskId} className="hover:bg-gray-50">
                           {ALL_COLUMNS.filter((col) =>
-                            getCurrentVisibleColumns().includes(col.id)
+                            getCurrentVisibleColumns().includes(col.id),
                           ).map((column) => (
                             <td
                               key={column.id}

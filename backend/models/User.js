@@ -25,7 +25,7 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: function () {
-        return this.isEmailVerified; // Only required after email verification
+        return this.isEmailVerified;
       },
     },
     photo: {
@@ -54,6 +54,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["default", "team"],
       default: "default",
+    },
+    userAccessLevel: {
+      type: String,
+      enum: ["Team Only", "All Users"],
+      default: "Team Only",
     },
     status: {
       type: String,
@@ -96,7 +101,7 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 userSchema.pre("save", async function (next) {
