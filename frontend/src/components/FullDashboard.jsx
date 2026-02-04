@@ -353,13 +353,36 @@ const FullDashboard = () => {
       console.error("🔴 [FullDashboard] Error saving tab:", err);
     }
   };
-  const closeTab = (id) => {
+  const closeTab = async (id) => {
     let idx = tabs.findIndex((tab) => tab.id === id);
     if (tabs.length === 1) return; // Don't close last tab
     const newTabs = tabs.filter((tab) => tab.id !== id);
+    const newActiveTabId =
+      activeTabId === id ? newTabs[Math.max(0, idx - 1)].id : activeTabId;
     setTabs(newTabs);
     if (activeTabId === id) {
-      setActiveTabId(newTabs[Math.max(0, idx - 1)].id);
+      setActiveTabId(newActiveTabId);
+    }
+
+    // Immediately save to backend to ensure tab deletion is persisted
+    try {
+      await saveTabState(
+        "fullDashboard",
+        { tabs: newTabs, activeTabId: newActiveTabId },
+        user.token,
+      );
+
+      // Also delete the tab-specific data from backend (taskOrder, groupOrder, etc.)
+      await fetch(`${API_BASE_URL}/api/users/tabstate/deleteTab`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ tabKey: "fullDashboard", tabId: id }),
+      });
+    } catch (err) {
+      console.error("Error saving tab state after closing tab:", err);
     }
   };
   const renameTab = (id, newTitle) => {
@@ -441,8 +464,8 @@ const FullDashboard = () => {
     // Debounce the save operation to allow order updates to complete
     // The backend will merge this state with existing taskOrder/groupOrder
     const timeoutId = setTimeout(() => {
-      saveTabState("fullDashboard", { tabs, activeTabId }, user.token)
-    }, 1000); // 1 second delay to ensure order saves complete first
+      saveTabState("fullDashboard", { tabs, activeTabId }, user.token);
+    }, 600); // 300ms delay - fast enough for user changes but prevents excessive saves
 
     return () => clearTimeout(timeoutId);
   }, [tabs, activeTabId, user, tabsLoaded]);

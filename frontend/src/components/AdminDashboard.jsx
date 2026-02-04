@@ -347,13 +347,36 @@ const AdminDashboard = () => {
       // Optionally handle error
     }
   };
-  const closeTab = (id) => {
+  const closeTab = async (id) => {
     let idx = tabs.findIndex((tab) => tab.id === id);
     if (tabs.length === 1) return; // Don't close last tab
     const newTabs = tabs.filter((tab) => tab.id !== id);
+    const newActiveTabId =
+      activeTabId === id ? newTabs[Math.max(0, idx - 1)].id : activeTabId;
     setTabs(newTabs);
     if (activeTabId === id) {
-      setActiveTabId(newTabs[Math.max(0, idx - 1)].id);
+      setActiveTabId(newActiveTabId);
+    }
+
+    // Immediately save to backend to ensure tab deletion is persisted
+    try {
+      await saveTabState(
+        "adminDashboard",
+        { tabs: newTabs, activeTabId: newActiveTabId },
+        user.token,
+      );
+
+      // Also delete the tab-specific data from backend (taskOrder, groupOrder, etc.)
+      await fetch(`${API_BASE_URL}/api/users/tabstate/deleteTab`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ tabKey: "adminDashboard", tabId: id }),
+      });
+    } catch (err) {
+      console.error("Error saving tab state after closing tab:", err);
     }
   };
   const renameTab = (id, newTitle) => {
@@ -437,7 +460,7 @@ const AdminDashboard = () => {
       saveTabState("adminDashboard", { tabs, activeTabId }, user.token).catch(
         () => {},
       );
-    }, 1000); // 1 second delay to ensure order saves complete first
+    }, 600); // 300ms delay - fast enough for user changes but prevents excessive saves
 
     return () => clearTimeout(timeoutId);
   }, [tabs, activeTabId, user, tabsLoaded]);

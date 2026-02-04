@@ -849,4 +849,39 @@ router.get("/tabstate/groupOrder", protect, async (req, res) => {
   }
 });
 
+// DELETE: Remove a specific tab's data from the tabs array
+router.delete("/tabstate/deleteTab", protect, async (req, res) => {
+  try {
+    const { tabKey, tabId } = req.body;
+    if (!tabKey || !tabId) {
+      return res.status(400).json({ message: "tabKey and tabId are required" });
+    }
+    validateTabKey(tabKey);
+    const userId = req.user.id;
+    const userTabState = await UserTabState.findOne({ user: userId, tabKey });
+
+    if (!userTabState) {
+      return res.status(404).json({ message: "Tab state not found" });
+    }
+
+    if (!userTabState.state) userTabState.state = {};
+
+    // Remove the tab from the tabs array if it exists
+    if (Array.isArray(userTabState.state.tabs)) {
+      userTabState.state.tabs = userTabState.state.tabs.filter(
+        (tab) => tab.id !== tabId,
+      );
+      userTabState.markModified("state.tabs");
+      await userTabState.save();
+    }
+
+    res.json({ success: true, message: "Tab data deleted successfully" });
+  } catch (err) {
+    console.error("Error deleting tab:", err);
+    res
+      .status(500)
+      .json({ message: err.message || "Failed to delete tab data" });
+  }
+});
+
 export default router;
