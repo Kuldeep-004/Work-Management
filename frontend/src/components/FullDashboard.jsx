@@ -559,7 +559,7 @@ const FullDashboard = () => {
     };
 
     if (user && user.token) {
-      fetchData("users/for-task-assignment", setUsers);
+      fetchData("users/except-me", setUsers);
       fetchData("tasks/unique/client-names", setClientNames);
       fetchData("tasks/unique/client-groups", setClientGroups);
       fetchData("tasks/unique/work-types", setWorkTypes);
@@ -585,8 +585,9 @@ const FullDashboard = () => {
       // Add query parameters based on completed tasks mode
       const url = new URL(`${API_BASE_URL}/api/${endpoint}`);
       if (showCompletedTasks) {
-        // When showing completed tasks, only fetch completed tasks
+        // When showing completed tasks, fetch all completed tasks (not team-specific)
         url.searchParams.append("onlyCompleted", "true");
+        url.searchParams.append("allCompleted", "true");
       }
       // Default behavior: backend excludes completed tasks automatically
 
