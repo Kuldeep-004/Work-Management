@@ -144,7 +144,7 @@ const CreateTask = ({
             headers: {
               Authorization: `Bearer ${loggedInUser.token}`,
             },
-          }
+          },
         );
         const groupsData = await groupsResponse.json();
         setClientGroups(groupsData);
@@ -156,7 +156,7 @@ const CreateTask = ({
             headers: {
               Authorization: `Bearer ${loggedInUser.token}`,
             },
-          }
+          },
         );
         const workTypesData = await workTypesResponse.json();
         setWorkTypes(workTypesData);
@@ -169,7 +169,7 @@ const CreateTask = ({
               headers: {
                 Authorization: `Bearer ${loggedInUser.token}`,
               },
-            }
+            },
           );
           const prioritiesData = await prioritiesResponse.json();
           setPriorities(prioritiesData);
@@ -197,7 +197,7 @@ const CreateTask = ({
         (client.group &&
           client.group.name
             .toLowerCase()
-            .includes(clientSearchTerm.toLowerCase()))
+            .includes(clientSearchTerm.toLowerCase())),
     );
   }, [clients, clientSearchTerm]);
 
@@ -231,7 +231,7 @@ const CreateTask = ({
     // Check total number of files
     if (selectedFiles.length + newFiles.length > MAX_FILES) {
       errors.push(
-        `Maximum ${MAX_FILES} files allowed. You are trying to add ${newFiles.length} file(s) but already have ${selectedFiles.length}.`
+        `Maximum ${MAX_FILES} files allowed. You are trying to add ${newFiles.length} file(s) but already have ${selectedFiles.length}.`,
       );
     }
 
@@ -241,8 +241,8 @@ const CreateTask = ({
       if (file.size > MAX_FILE_SIZE) {
         errors.push(
           `${file.name} is ${(file.size / 1024 / 1024).toFixed(
-            2
-          )}MB and exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`
+            2,
+          )}MB and exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`,
         );
       }
       totalSize += file.size;
@@ -252,7 +252,7 @@ const CreateTask = ({
       errors.push(
         `Total size ${(totalSize / 1024 / 1024).toFixed(2)}MB exceeds ${
           MAX_TOTAL_SIZE / 1024 / 1024
-        }MB limit`
+        }MB limit`,
       );
     }
 
@@ -335,15 +335,15 @@ const CreateTask = ({
           : [],
         assignedTo: Array.isArray(initialData.assignedTo)
           ? initialData.assignedTo.map((u) =>
-              typeof u === "string" ? u : u._id
+              typeof u === "string" ? u : u._id,
             )
           : initialData.assignedTo
-          ? [
-              typeof initialData.assignedTo === "string"
-                ? initialData.assignedTo
-                : initialData.assignedTo._id,
-            ]
-          : [],
+            ? [
+                typeof initialData.assignedTo === "string"
+                  ? initialData.assignedTo
+                  : initialData.assignedTo._id,
+              ]
+            : [],
         guides: Array.isArray(initialData.guides)
           ? initialData.guides.map((g) => (typeof g === "string" ? g : g._id))
           : [],
@@ -364,16 +364,16 @@ const CreateTask = ({
       const assignedToRaw = Array.isArray(initialData.assignedTo)
         ? initialData.assignedTo
         : initialData.assignedTo
-        ? [initialData.assignedTo]
-        : [];
+          ? [initialData.assignedTo]
+          : [];
       const assignedUserIds = assignedToRaw.map((u) =>
-        typeof u === "string" ? u : u._id
+        typeof u === "string" ? u : u._id,
       );
       console.log("[EditModal-FIX] assignedToRaw:", assignedToRaw);
       console.log("[EditModal-FIX] users:", users);
       console.log("[EditModal-FIX] assignedUserIds:", assignedUserIds);
       const selected = usersWithCurrent.filter((u) =>
-        assignedUserIds.includes(u._id)
+        assignedUserIds.includes(u._id),
       );
       console.log("[EditModal-FIX] selectedUsers to set:", selected);
       setSelectedUsers(selected);
@@ -383,10 +383,10 @@ const CreateTask = ({
         ? initialData.guides
         : [];
       const guideIds = guidesRaw.map((g) =>
-        typeof g === "string" ? g : g._id
+        typeof g === "string" ? g : g._id,
       );
       const selectedGuidesData = usersWithCurrent.filter((u) =>
-        guideIds.includes(u._id)
+        guideIds.includes(u._id),
       );
       setSelectedGuides(selectedGuidesData);
 
@@ -399,7 +399,12 @@ const CreateTask = ({
         if (prev.title || prev.status !== "yet_to_start") {
           return prev; // Keep existing data
         }
-        // Initialize form for first time
+        // Initialize form for first time with current date/time as default
+        const now = new Date();
+        const currentDate = now.toISOString().split("T")[0];
+        const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+        const converted12Hour = convertTo12Hour(currentTime);
+
         return {
           title: "",
           description: "",
@@ -409,8 +414,8 @@ const CreateTask = ({
           assignedTo: [],
           guides: [],
           priority: "Today",
-          inwardEntryDate: "",
-          inwardEntryTime: "",
+          inwardEntryDate: currentDate,
+          inwardEntryTime: converted12Hour,
           dueDate: "",
           targetDate: "",
           billed: false,
@@ -437,26 +442,26 @@ const CreateTask = ({
       const assignedToRaw = Array.isArray(initialData.assignedTo)
         ? initialData.assignedTo
         : initialData.assignedTo
-        ? [initialData.assignedTo]
-        : [];
+          ? [initialData.assignedTo]
+          : [];
       const assignedUserIds = assignedToRaw.map((u) =>
-        typeof u === "string" ? u : u._id
+        typeof u === "string" ? u : u._id,
       );
       console.log(
         "[EditModal-FIX][users effect] assignedToRaw:",
-        assignedToRaw
+        assignedToRaw,
       );
       console.log("[EditModal-FIX][users effect] users:", users);
       console.log(
         "[EditModal-FIX][users effect] assignedUserIds:",
-        assignedUserIds
+        assignedUserIds,
       );
       const selected = usersWithCurrent.filter((u) =>
-        assignedUserIds.includes(u._id)
+        assignedUserIds.includes(u._id),
       );
       console.log(
         "[EditModal-FIX][users effect] selectedUsers to set:",
-        selected
+        selected,
       );
       setSelectedUsers(selected);
 
@@ -467,10 +472,10 @@ const CreateTask = ({
         selectedGuides.length === 0
       ) {
         const guideIds = initialData.guides.map((g) =>
-          typeof g === "string" ? g : g._id
+          typeof g === "string" ? g : g._id,
         );
         const selectedGuidesData = usersWithCurrent.filter((u) =>
-          guideIds.includes(u._id)
+          guideIds.includes(u._id),
         );
         setSelectedGuides(selectedGuidesData);
       }
@@ -501,7 +506,8 @@ const CreateTask = ({
     // Validate that clientName matches a real client
     const clientExists = clients.some(
       (c) =>
-        c.name.trim().toLowerCase() === formData.clientName.trim().toLowerCase()
+        c.name.trim().toLowerCase() ===
+        formData.clientName.trim().toLowerCase(),
     );
     if (!clientExists) {
       toast.error("Please select a valid client from the list.");
@@ -561,7 +567,7 @@ const CreateTask = ({
       } else if (formData.inwardEntryDate || formData.inwardEntryTime) {
         // If only one is provided, show error
         toast.error(
-          "Please provide both Inward Entry Date and Time, or leave both empty."
+          "Please provide both Inward Entry Date and Time, or leave both empty.",
         );
         setUploading(false);
         return;
@@ -570,7 +576,7 @@ const CreateTask = ({
       // Log for debugging
       console.log(
         "Submitting task with inwardEntryDate:",
-        combinedInwardEntryDate
+        combinedInwardEntryDate,
       );
 
       // Handle assignedTo differently for create vs edit mode
@@ -638,23 +644,23 @@ const CreateTask = ({
                   Authorization: `Bearer ${loggedInUser.token}`,
                 },
                 body: JSON.stringify(additionalTaskData),
-              }
+              },
             );
 
             if (additionalResponse.ok) {
               const additionalTasks = await additionalResponse.json();
               toast.success(
-                `Task updated and ${additionalTasks.length} additional task(s) created for other users`
+                `Task updated and ${additionalTasks.length} additional task(s) created for other users`,
               );
             } else {
               toast.warning(
-                "Task updated but failed to create additional tasks for other users"
+                "Task updated but failed to create additional tasks for other users",
               );
             }
           } catch (additionalError) {
             console.error("Error creating additional tasks:", additionalError);
             toast.warning(
-              "Task updated but failed to create additional tasks for other users"
+              "Task updated but failed to create additional tasks for other users",
             );
           }
         } else {
@@ -698,14 +704,14 @@ const CreateTask = ({
                 } catch (uploadError) {
                   console.error("File upload error:", uploadError); // Debug log
                   toast.error(
-                    `Task created but file upload failed for ${task.title}: ${uploadError.message}`
+                    `Task created but file upload failed for ${task.title}: ${uploadError.message}`,
                   );
                 }
               }
             } else {
               console.error("Invalid task ID received for one of the tasks");
               toast.error(
-                "An error occurred while processing one of the created tasks."
+                "An error occurred while processing one of the created tasks.",
               );
             }
           }
@@ -716,7 +722,7 @@ const CreateTask = ({
         } else {
           console.error("Invalid task ID received:", createdTasks);
           toast.error(
-            "An error occurred while creating the task. Invalid ID received."
+            "An error occurred while creating the task. Invalid ID received.",
           );
         }
       }
@@ -812,7 +818,7 @@ const CreateTask = ({
             Authorization: `Bearer ${loggedInUser.token}`,
           },
           body: JSON.stringify(taskData),
-        }
+        },
       );
 
       if (!updateResponse.ok) {
@@ -846,7 +852,7 @@ const CreateTask = ({
           if (additionalResponse.ok) {
             const additionalTasks = await additionalResponse.json();
             console.log(
-              `Created ${additionalTasks.length} additional task(s) for other users`
+              `Created ${additionalTasks.length} additional task(s) for other users`,
             );
           } else {
             console.warn("Failed to create additional tasks for other users");
@@ -866,7 +872,7 @@ const CreateTask = ({
             Authorization: `Bearer ${loggedInUser.token}`,
           },
           body: JSON.stringify({ action: "approve" }),
-        }
+        },
       );
 
       if (!approveResponse.ok) {
@@ -940,7 +946,7 @@ const CreateTask = ({
             },
             body: formData,
             signal: controller.signal,
-          }
+          },
         );
 
         clearTimeout(timeoutId);
@@ -983,13 +989,13 @@ const CreateTask = ({
           toast.error(
             `Upload timeout for ${batch
               .map((f) => f.name)
-              .join(", ")}. Files may be too large or connection is slow.`
+              .join(", ")}. Files may be too large or connection is slow.`,
           );
         } else {
           toast.error(
             `Failed to upload ${batch.map((f) => f.name).join(", ")}: ${
               error.message
-            }`
+            }`,
           );
         }
 
@@ -1026,7 +1032,7 @@ const CreateTask = ({
         ? prev.assignedTo.filter((id) => id !== userId)
         : [...prev.assignedTo, userId];
       setSelectedUsers(
-        usersWithCurrent.filter((u) => newAssignedTo.includes(u._id))
+        usersWithCurrent.filter((u) => newAssignedTo.includes(u._id)),
       );
       setIsDropdownOpen(false); // Close dropdown after each selection
       return { ...prev, assignedTo: newAssignedTo };
@@ -1042,7 +1048,7 @@ const CreateTask = ({
         ? prev.guides.filter((id) => id !== userId)
         : [...prev.guides, userId];
       setSelectedGuides(
-        usersWithCurrent.filter((u) => newGuides.includes(u._id))
+        usersWithCurrent.filter((u) => newGuides.includes(u._id)),
       );
       return { ...prev, guides: newGuides };
     });
@@ -1188,7 +1194,7 @@ const CreateTask = ({
   const filteredWorkTypes = useMemo(() => {
     if (!workTypeSearchTerm) return workTypes;
     return workTypes.filter((type) =>
-      type.name.toLowerCase().includes(workTypeSearchTerm.toLowerCase())
+      type.name.toLowerCase().includes(workTypeSearchTerm.toLowerCase()),
     );
   }, [workTypes, workTypeSearchTerm]);
 
@@ -1374,7 +1380,7 @@ const CreateTask = ({
                         onChange={(e) => {
                           const timeParts = formData.inwardEntryTime.split(" ");
                           let [hour, minutes] = (timeParts[0] || "00:00").split(
-                            ":"
+                            ":",
                           );
                           const ampm = timeParts[1] || "AM";
                           const newHour = e.target.value.padStart(2, "0");
@@ -1390,7 +1396,7 @@ const CreateTask = ({
                       >
                         <option value="00">00</option>
                         {Array.from({ length: 12 }, (_, i) =>
-                          (i + 1).toString().padStart(2, "0")
+                          (i + 1).toString().padStart(2, "0"),
                         ).map((hour) => (
                           <option key={hour} value={hour}>
                             {hour}
@@ -1408,13 +1414,13 @@ const CreateTask = ({
                         onChange={(e) => {
                           const timeParts = formData.inwardEntryTime.split(" ");
                           let [hours, minute] = (timeParts[0] || "00:00").split(
-                            ":"
+                            ":",
                           );
                           const ampm = timeParts[1] || "AM";
                           const newMinute = e.target.value.padStart(2, "0");
                           const newTime = `${(hours || "00").padStart(
                             2,
-                            "0"
+                            "0",
                           )}:${newMinute} ${ampm}`;
                           setFormData({
                             ...formData,
@@ -1424,7 +1430,7 @@ const CreateTask = ({
                         className="w-1/3 border rounded-md px-2 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
                         {Array.from({ length: 60 }, (_, i) =>
-                          i.toString().padStart(2, "0")
+                          i.toString().padStart(2, "0"),
                         ).map((minute) => (
                           <option key={minute} value={minute}>
                             {minute}
@@ -1488,8 +1494,8 @@ const CreateTask = ({
                       formData.billed === true
                         ? "yes"
                         : formData.billed === false
-                        ? "no"
-                        : ""
+                          ? "no"
+                          : ""
                     }
                     onChange={(e) =>
                       setFormData({
@@ -1498,8 +1504,8 @@ const CreateTask = ({
                           e.target.value === "yes"
                             ? true
                             : e.target.value === "no"
-                            ? false
-                            : "",
+                              ? false
+                              : "",
                       })
                     }
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1626,8 +1632,8 @@ const CreateTask = ({
                               }));
                               setSelectedUsers(
                                 usersWithCurrent.filter(
-                                  (u) => u._id === formData.assignedTo[0]
-                                )
+                                  (u) => u._id === formData.assignedTo[0],
+                                ),
                               );
                             }
                             return next;
@@ -1667,11 +1673,11 @@ const CreateTask = ({
                                   setFormData((prev) => ({
                                     ...prev,
                                     assignedTo: prev.assignedTo.filter(
-                                      (id) => id !== user._id
+                                      (id) => id !== user._id,
                                     ),
                                   }));
                                   setSelectedUsers((prev) =>
-                                    prev.filter((u) => u._id !== user._id)
+                                    prev.filter((u) => u._id !== user._id),
                                   );
                                 } else {
                                   setFormData((prev) => ({
@@ -1857,11 +1863,11 @@ const CreateTask = ({
                                 setFormData((prev) => ({
                                   ...prev,
                                   guides: prev.guides.filter(
-                                    (id) => id !== guide._id
+                                    (id) => id !== guide._id,
                                   ),
                                 }));
                                 setSelectedGuides((prev) =>
-                                  prev.filter((g) => g._id !== guide._id)
+                                  prev.filter((g) => g._id !== guide._id),
                                 );
                               }}
                               className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-green-200"
@@ -2127,16 +2133,16 @@ const CreateTask = ({
                                   {file.type.startsWith("image/")
                                     ? "🖼️"
                                     : file.type.includes("pdf")
-                                    ? "📄"
-                                    : file.type.includes("word")
-                                    ? "📝"
-                                    : file.type.includes("excel") ||
-                                      file.type.includes("spreadsheet")
-                                    ? "📊"
-                                    : file.type.includes("powerpoint") ||
-                                      file.type.includes("presentation")
-                                    ? "📑"
-                                    : "📎"}
+                                      ? "📄"
+                                      : file.type.includes("word")
+                                        ? "📝"
+                                        : file.type.includes("excel") ||
+                                            file.type.includes("spreadsheet")
+                                          ? "📊"
+                                          : file.type.includes("powerpoint") ||
+                                              file.type.includes("presentation")
+                                            ? "📑"
+                                            : "📎"}
                                 </span>
                                 <div>
                                   <p className="text-sm font-medium text-gray-700">
@@ -2178,20 +2184,20 @@ const CreateTask = ({
                                     uploadProgress[index] === "completed"
                                       ? "bg-green-500"
                                       : uploadProgress[index] === "failed"
-                                      ? "bg-red-500"
-                                      : uploadProgress[index] === "uploading"
-                                      ? "bg-blue-500 animate-pulse"
-                                      : "bg-gray-300"
+                                        ? "bg-red-500"
+                                        : uploadProgress[index] === "uploading"
+                                          ? "bg-blue-500 animate-pulse"
+                                          : "bg-gray-300"
                                   }`}
                                   style={{
                                     width:
                                       uploadProgress[index] === "completed"
                                         ? "100%"
                                         : uploadProgress[index] === "uploading"
-                                        ? "50%"
-                                        : uploadProgress[index] === "failed"
-                                        ? "100%"
-                                        : "0%",
+                                          ? "50%"
+                                          : uploadProgress[index] === "failed"
+                                            ? "100%"
+                                            : "0%",
                                   }}
                                 />
                               </div>
@@ -2199,10 +2205,10 @@ const CreateTask = ({
                                 {uploadProgress[index] === "completed"
                                   ? "✓ Done"
                                   : uploadProgress[index] === "failed"
-                                  ? "✗ Failed"
-                                  : uploadProgress[index] === "uploading"
-                                  ? "Uploading..."
-                                  : "Waiting..."}
+                                    ? "✗ Failed"
+                                    : uploadProgress[index] === "uploading"
+                                      ? "Uploading..."
+                                      : "Waiting..."}
                               </span>
                             </div>
                           ))}
@@ -2258,7 +2264,7 @@ const CreateTask = ({
                                   hour: "2-digit",
                                   minute: "2-digit",
                                   hour12: true,
-                                }
+                                },
                               )
                             : "N/A"
                         }
@@ -2366,8 +2372,8 @@ const CreateTask = ({
                       ? "Updating..."
                       : "Creating Task..."
                     : mode === "edit"
-                    ? "Update Task"
-                    : "Create Task"}
+                      ? "Update Task"
+                      : "Create Task"}
                 </button>
               </div>
             </form>
@@ -2381,7 +2387,7 @@ const CreateTask = ({
                     files={taskFiles}
                     onFileDeleted={(fileId) => {
                       setTaskFiles((prev) =>
-                        prev.filter((f) => f._id !== fileId)
+                        prev.filter((f) => f._id !== fileId),
                       );
                     }}
                   />

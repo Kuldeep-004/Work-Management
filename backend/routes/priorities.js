@@ -1,17 +1,19 @@
-import express from 'express';
-import Priority from '../models/Priority.js';
-import Task from '../models/Task.js';
-import { protect } from '../middleware/authMiddleware.js';
-import admin from '../middleware/admin.js';
-import ActivityLogger from '../utils/activityLogger.js';
+import express from "express";
+import Priority from "../models/Priority.js";
+import Task from "../models/Task.js";
+import { protect } from "../middleware/authMiddleware.js";
+import admin from "../middleware/admin.js";
+import ActivityLogger from "../utils/activityLogger.js";
 
 const router = express.Router();
 
 // Get all priorities (public for all authenticated users)
-router.get('/', protect, async (req, res) => {
+router.get("/", protect, async (req, res) => {
   try {
     // Get all priorities from database sorted by order
-    const priorities = await Priority.find({}).sort({ order: 1 }).populate('createdBy', 'firstName lastName');
+    const priorities = await Priority.find({})
+      .sort({ order: 1 })
+      .populate("createdBy", "firstName lastName");
     res.json(priorities);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -19,19 +21,23 @@ router.get('/', protect, async (req, res) => {
 });
 
 // Create new priority (Admin and Team Head only)
-router.post('/', protect, async (req, res) => {
+router.post("/", protect, async (req, res) => {
   try {
     const { name, color, order } = req.body;
 
     // Check if user is Admin or Team Head
-    if (req.user.role !== 'Admin' && req.user.role !== 'Team Head') {
-      return res.status(403).json({ message: 'Access denied. Admin or Team Head role required.' });
+    if (req.user.role !== "Admin" && req.user.role !== "Team Head") {
+      return res
+        .status(403)
+        .json({ message: "Access denied. Admin or Team Head role required." });
     }
 
     // Check if priority name already exists
     const existingPriority = await Priority.findOne({ name: name.trim() });
     if (existingPriority) {
-      return res.status(400).json({ message: 'Priority with this name already exists' });
+      return res
+        .status(400)
+        .json({ message: "Priority with this name already exists" });
     }
 
     // If no order provided, set it to be the last
@@ -43,25 +49,29 @@ router.post('/', protect, async (req, res) => {
 
     const priority = new Priority({
       name: name.trim(),
-      color: color || 'bg-gray-100 text-gray-800 border border-gray-200',
+      color: color || "bg-gray-100 text-gray-800 border border-gray-200",
       order: finalOrder,
-      createdBy: req.user._id
+      createdBy: req.user._id,
     });
 
     const savedPriority = await priority.save();
-    await savedPriority.populate('createdBy', 'firstName lastName');
-    
+    await savedPriority.populate("createdBy", "firstName lastName");
+
     // Log priority creation
     await ActivityLogger.logSystemActivity(
       req.user._id,
-      'priority_created',
+      "priority_created",
       savedPriority._id,
       `Created priority "${name.trim()}"`,
       null,
-      { name: name.trim(), color: color || 'bg-gray-100 text-gray-800 border border-gray-200', order: finalOrder },
-      req
+      {
+        name: name.trim(),
+        color: color || "bg-gray-100 text-gray-800 border border-gray-200",
+        order: finalOrder,
+      },
+      req,
     );
-    
+
     res.status(201).json(savedPriority);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -69,17 +79,19 @@ router.post('/', protect, async (req, res) => {
 });
 
 // Bulk update priority orders (Admin and Team Head only)
-router.put('/bulk-update-order', protect, async (req, res) => {
+router.put("/bulk-update-order", protect, async (req, res) => {
   try {
     const { priorities } = req.body;
 
     // Check if user is Admin or Team Head
-    if (req.user.role !== 'Admin' && req.user.role !== 'Team Head') {
-      return res.status(403).json({ message: 'Access denied. Admin or Team Head role required.' });
+    if (req.user.role !== "Admin" && req.user.role !== "Team Head") {
+      return res
+        .status(403)
+        .json({ message: "Access denied. Admin or Team Head role required." });
     }
 
     if (!Array.isArray(priorities) || priorities.length === 0) {
-      return res.status(400).json({ message: 'Invalid priorities data' });
+      return res.status(400).json({ message: "Invalid priorities data" });
     }
 
     // Update each priority's order
@@ -87,7 +99,7 @@ router.put('/bulk-update-order', protect, async (req, res) => {
       return Priority.findByIdAndUpdate(
         priority._id,
         { order: index + 1 },
-        { new: true }
+        { new: true },
       );
     });
 
@@ -96,43 +108,82 @@ router.put('/bulk-update-order', protect, async (req, res) => {
     // Log bulk priority order update
     await ActivityLogger.logSystemActivity(
       req.user._id,
-      'priorities_order_updated',
+      "priorities_order_updated",
       null,
       `Updated priority order for ${priorities.length} priorities`,
       null,
       { count: priorities.length },
-      req
+      req,
     );
 
-    res.json({ message: 'Priority orders updated successfully' });
+    res.json({ message: "Priority orders updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Check priority usage (Admin and Team Head only)
+router.get("/check-usage/:id", protect, async (req, res) => {
+  try {
+    // Check if user is Admin or Team Head
+    if (req.user.role !== "Admin" && req.user.role !== "Team Head") {
+      return res
+        .status(403)
+        .json({ message: "Access denied. Admin or Team Head role required." });
+    }
+
+    const priority = await Priority.findById(req.params.id);
+    if (!priority) {
+      return res.status(404).json({ message: "Priority not found" });
+    }
+
+    // Check if priority is being used in any tasks
+    const tasksWithPriority = await Task.countDocuments({
+      priority: priority.name,
+    });
+
+    // Check if priority is being used in any automation task templates
+    const Automation = (await import("../models/Automation.js")).default;
+    const automationsWithPriority = await Automation.countDocuments({
+      "taskTemplate.priority": priority.name,
+    });
+
+    res.json({
+      tasksCount: tasksWithPriority,
+      automationsCount: automationsWithPriority,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
 // Update priority (Admin and Team Head only)
-router.put('/:id', protect, async (req, res) => {
+router.put("/:id", protect, async (req, res) => {
   try {
     const { name, color, order } = req.body;
 
     // Check if user is Admin or Team Head
-    if (req.user.role !== 'Admin' && req.user.role !== 'Team Head') {
-      return res.status(403).json({ message: 'Access denied. Admin or Team Head role required.' });
+    if (req.user.role !== "Admin" && req.user.role !== "Team Head") {
+      return res
+        .status(403)
+        .json({ message: "Access denied. Admin or Team Head role required." });
     }
 
     const priority = await Priority.findById(req.params.id);
     if (!priority) {
-      return res.status(404).json({ message: 'Priority not found' });
+      return res.status(404).json({ message: "Priority not found" });
     }
 
     // Check if new name already exists (excluding current priority)
     if (name && name.trim() !== priority.name) {
-      const existingPriority = await Priority.findOne({ 
+      const existingPriority = await Priority.findOne({
         name: name.trim(),
-        _id: { $ne: req.params.id }
+        _id: { $ne: req.params.id },
       });
       if (existingPriority) {
-        return res.status(400).json({ message: 'Priority with this name already exists' });
+        return res
+          .status(400)
+          .json({ message: "Priority with this name already exists" });
       }
     }
 
@@ -140,7 +191,7 @@ router.put('/:id', protect, async (req, res) => {
     const oldValues = {
       name: priority.name,
       color: priority.color,
-      order: priority.order
+      order: priority.order,
     };
 
     if (name) priority.name = name.trim();
@@ -148,19 +199,19 @@ router.put('/:id', protect, async (req, res) => {
     if (order !== undefined) priority.order = order;
 
     const updatedPriority = await priority.save();
-    await updatedPriority.populate('createdBy', 'firstName lastName');
-    
+    await updatedPriority.populate("createdBy", "firstName lastName");
+
     // Log priority update
     await ActivityLogger.logSystemActivity(
       req.user._id,
-      'priority_updated',
+      "priority_updated",
       updatedPriority._id,
       `Updated priority "${priority.name}"`,
       oldValues,
       { name: name?.trim(), color, order },
-      req
+      req,
     );
-    
+
     res.json(updatedPriority);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -168,40 +219,56 @@ router.put('/:id', protect, async (req, res) => {
 });
 
 // Delete priority (Admin and Team Head only)
-router.delete('/:id', protect, async (req, res) => {
+router.delete("/:id", protect, async (req, res) => {
   try {
     // Check if user is Admin or Team Head
-    if (req.user.role !== 'Admin' && req.user.role !== 'Team Head') {
-      return res.status(403).json({ message: 'Access denied. Admin or Team Head role required.' });
+    if (req.user.role !== "Admin" && req.user.role !== "Team Head") {
+      return res
+        .status(403)
+        .json({ message: "Access denied. Admin or Team Head role required." });
     }
 
     const priority = await Priority.findById(req.params.id);
     if (!priority) {
-      return res.status(404).json({ message: 'Priority not found' });
+      return res.status(404).json({ message: "Priority not found" });
     }
 
     // Check if priority is being used in any tasks
-    const tasksWithPriority = await Task.countDocuments({ priority: priority.name });
+    const tasksWithPriority = await Task.countDocuments({
+      priority: priority.name,
+    });
     if (tasksWithPriority > 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: `Cannot delete priority. It is currently used in ${tasksWithPriority} task(s).`,
-        tasksCount: tasksWithPriority
+        tasksCount: tasksWithPriority,
+      });
+    }
+
+    // Check if priority is being used in any automation task templates
+    const Automation = (await import("../models/Automation.js")).default;
+    const automationsWithPriority = await Automation.countDocuments({
+      "taskTemplate.priority": priority.name,
+    });
+    if (automationsWithPriority > 0) {
+      return res.status(400).json({
+        message: `Cannot delete priority. It is currently used in ${automationsWithPriority} automation(s).`,
+        automationsCount: automationsWithPriority,
       });
     }
 
     // Log priority deletion before deleting
     await ActivityLogger.logSystemActivity(
       req.user._id,
-      'priority_deleted',
+      "priority_deleted",
       priority._id,
       `Deleted priority "${priority.name}"`,
       { name: priority.name, color: priority.color, order: priority.order },
       null,
-      req
+      req,
     );
 
     await Priority.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Priority deleted successfully' });
+    res.json({ message: "Priority deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

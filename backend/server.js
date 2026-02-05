@@ -41,6 +41,7 @@ import bulkUpdateRoutes from "./routes/bulkStatusUpdate.js";
 import analyticsRoutes from "./routes/analytics.js";
 import tutorialRoutes from "./routes/tutorials.js";
 import leaveRoutes from "./routes/leaves.js";
+import cleanupRoutes from "./routes/cleanup.js";
 import { activityLoggerMiddleware } from "./middleware/activityLoggerMiddleware.js";
 import Team from "./models/Team.js";
 import User from "./models/User.js";
@@ -139,6 +140,7 @@ app.use("/api/bulk-update", bulkUpdateRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/tutorials", tutorialRoutes);
 app.use("/api/leaves", leaveRoutes);
+app.use("/api/cleanup", cleanupRoutes);
 
 // Socket.IO for real-time chat - WhatsApp level optimization
 const connectedUsers = new Map(); // userId -> { socketId, lastSeen, isInChat }
