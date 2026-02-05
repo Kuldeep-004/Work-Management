@@ -25,33 +25,39 @@ router.get("/invalid-priorities", protect, admin, async (req, res) => {
       .populate("assignedTo assignedBy", "firstName lastName")
       .sort({ createdAt: -1 });
 
-    // Find automations with invalid priorities in task templates
-    const automationsWithInvalidPriorities = await Automation.find({
-      "taskTemplate.priority": {
-        $exists: true,
-        $nin: validPriorityNames,
-        $ne: null,
-        $ne: "",
-      },
+    // Find ALL automations with task templates
+    const allAutomations = await Automation.find({
+      taskTemplate: { $exists: true, $ne: [] },
     })
       .select("_id name taskTemplate createdBy")
       .populate("createdBy", "firstName lastName");
 
-    // Extract templates with invalid priorities
-    const invalidAutomationTemplates = automationsWithInvalidPriorities.flatMap(
+    // Filter to find automations with invalid priorities
+    const automationsWithInvalidPriorities = allAutomations.filter(
       (automation) =>
-        automation.taskTemplate
-          .filter(
-            (template) =>
-              template.priority &&
-              !validPriorityNames.includes(template.priority),
-          )
-          .map((template) => ({
-            automationId: automation._id,
-            automationName: automation.name,
-            templateTitle: template.title,
-            priority: template.priority,
-          })),
+        automation.taskTemplate.some(
+          (template) =>
+            template.priority &&
+            template.priority !== "" &&
+            !validPriorityNames.includes(template.priority),
+        ),
+    );
+
+    // Extract templates with invalid priorities
+    const invalidAutomationTemplates = allAutomations.flatMap((automation) =>
+      automation.taskTemplate
+        .filter(
+          (template) =>
+            template.priority &&
+            template.priority !== "" &&
+            !validPriorityNames.includes(template.priority),
+        )
+        .map((template) => ({
+          automationId: automation._id,
+          automationName: automation.name,
+          templateTitle: template.title,
+          priority: template.priority,
+        })),
     );
 
     res.json({
@@ -102,26 +108,28 @@ router.post("/fix-invalid-priorities", protect, admin, async (req, res) => {
       },
     );
 
-    // Update automations with invalid priorities
-    const automations = await Automation.find({
-      "taskTemplate.priority": {
-        $exists: true,
-        $nin: validPriorityNames,
-        $ne: null,
-        $ne: "",
-      },
+    // Update automations with invalid priorities - fetch ALL automations and filter in code
+    const allAutomations = await Automation.find({
+      taskTemplate: { $exists: true, $ne: [] },
     });
 
     let automationUpdateCount = 0;
-    for (const automation of automations) {
+    let templateUpdateCount = 0;
+
+    for (const automation of allAutomations) {
       let updated = false;
       automation.taskTemplate = automation.taskTemplate.map((template) => {
         if (
           template.priority &&
+          template.priority !== "" &&
           !validPriorityNames.includes(template.priority)
         ) {
+          console.log(
+            `Updating automation "${automation.name}" template "${template.title}" priority from "${template.priority}" to "${defaultPriority}"`,
+          );
           template.priority = defaultPriority;
           updated = true;
+          templateUpdateCount++;
         }
         return template;
       });
@@ -137,11 +145,12 @@ router.post("/fix-invalid-priorities", protect, admin, async (req, res) => {
       req.user._id,
       "priorities_cleanup",
       null,
-      `Cleaned up invalid priorities: ${taskUpdateResult.modifiedCount} tasks and ${automationUpdateCount} automations updated to "${defaultPriority}"`,
+      `Cleaned up invalid priorities: ${taskUpdateResult.modifiedCount} tasks and ${automationUpdateCount} automations (${templateUpdateCount} templates) updated to "${defaultPriority}"`,
       null,
       {
         tasksUpdated: taskUpdateResult.modifiedCount,
         automationsUpdated: automationUpdateCount,
+        templatesUpdated: templateUpdateCount,
         defaultPriority,
       },
       req,
@@ -151,6 +160,7 @@ router.post("/fix-invalid-priorities", protect, admin, async (req, res) => {
       message: "Invalid priorities fixed successfully",
       tasksUpdated: taskUpdateResult.modifiedCount,
       automationsUpdated: automationUpdateCount,
+      templatesUpdated: templateUpdateCount,
     });
   } catch (error) {
     console.error("Error fixing invalid priorities:", error);

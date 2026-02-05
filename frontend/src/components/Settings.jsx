@@ -649,7 +649,7 @@ const Settings = () => {
 
       const result = await response.json();
       toast.success(
-        `Successfully updated ${result.tasksUpdated} tasks and ${result.automationsUpdated} automations`,
+        `Successfully updated ${result.tasksUpdated} tasks, ${result.automationsUpdated} automations (${result.templatesUpdated} templates)`,
       );
       setInvalidPrioritiesData(null);
       setSelectedDefaultPriority("");
@@ -2241,7 +2241,13 @@ const Settings = () => {
                             Automations with invalid priorities:{" "}
                             <span className="font-bold text-red-600">
                               {invalidPrioritiesData.automations.length}
-                            </span>
+                            </span>{" "}
+                            (
+                            {
+                              invalidPrioritiesData.invalidAutomationTemplates
+                                .length
+                            }
+                            )
                           </li>
                         </ul>
                       </div>
