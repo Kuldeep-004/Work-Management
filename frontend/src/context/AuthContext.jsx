@@ -1,7 +1,7 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import toast from 'react-hot-toast';
-import { API_BASE_URL } from '../apiConfig';
-import pushNotificationManager from '../utils/pushNotificationManager';
+import { createContext, useContext, useState, useEffect } from "react";
+import toast from "react-hot-toast";
+import { API_BASE_URL } from "../apiConfig";
+import pushNotificationManager from "../utils/pushNotificationManager";
 
 const AuthContext = createContext();
 
@@ -11,21 +11,49 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Function to fetch fresh user data from backend
+  const refreshUserData = async (token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/users/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch user data");
+      }
+
+      const userData = await response.json();
+
+      // Preserve the token from current user
+      const updatedUser = { ...userData, token };
+      setUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+
+      return updatedUser;
+    } catch (error) {
+      console.error("Error refreshing user data:", error);
+      return null;
+    }
+  };
+
   useEffect(() => {
-    const loadUser = () => {
+    const loadUser = async () => {
       try {
-        const storedUser = localStorage.getItem('user');
+        const storedUser = localStorage.getItem("user");
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
           // Verify token exists
           if (!parsedUser.token) {
-            throw new Error('Invalid user data');
+            throw new Error("Invalid user data");
           }
           setUser(parsedUser);
+          await refreshUserData(parsedUser.token);
         }
       } catch (error) {
-        console.error('Error loading user:', error);
-        localStorage.removeItem('user');
+        console.error("Error loading user:", error);
+        localStorage.removeItem("user");
         setUser(null);
       } finally {
         setLoading(false);
@@ -35,16 +63,30 @@ export const AuthProvider = ({ children }) => {
     loadUser();
   }, []);
 
+  // Set up periodic refresh of user data every 5 minutes
+  useEffect(() => {
+    if (!user?.token) return;
+
+    const refreshInterval = setInterval(
+      () => {
+        refreshUserData(user.token);
+      },
+      20 * 60 * 1000,
+    ); // 20 minutes
+
+    return () => clearInterval(refreshInterval);
+  }, [user?.token]);
+
   const login = async (email, password) => {
     try {
       if (!email || !password) {
-        throw new Error('Please enter both email and password');
+        throw new Error("Please enter both email and password");
       }
 
       const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ email, password }),
       });
@@ -52,24 +94,24 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Login failed. Please try again.');
+        throw new Error(data.message || "Login failed. Please try again.");
       }
 
       if (!data.token) {
-        throw new Error('Invalid response from server');
+        throw new Error("Invalid response from server");
       }
 
       setUser(data);
-      localStorage.setItem('user', JSON.stringify(data));
-      
+      localStorage.setItem("user", JSON.stringify(data));
+
       // Initialize push notifications after successful login
       await initializePushNotifications(data.token);
-      
-      toast.success('Login successful!');
+
+      toast.success("Login successful!");
       return data;
     } catch (error) {
-      console.error('Login error:', error);
-      toast.error(error.message || 'An error occurred during login');
+      console.error("Login error:", error);
+      toast.error(error.message || "An error occurred during login");
       throw error;
     }
   };
@@ -78,26 +120,29 @@ export const AuthProvider = ({ children }) => {
     try {
       const initialized = await pushNotificationManager.initialize();
       if (!initialized) {
-        console.log('Push notifications not supported or failed to initialize');
+        console.log("Push notifications not supported or failed to initialize");
         return;
       }
 
       const permission = await pushNotificationManager.requestPermission();
-      
-      if (permission === 'granted') {
+
+      if (permission === "granted") {
         await pushNotificationManager.subscribe(token);
-        toast.success('You will receive timesheet reminders!');
-      } else if (permission === 'denied') {
-        await pushNotificationManager.updatePermissionStatus('denied', token);
-        toast('Push notifications are disabled. You can enable them in your browser settings.', {
-          icon: '🔔',
-          duration: 5000
-        });
+        toast.success("You will receive timesheet reminders!");
+      } else if (permission === "denied") {
+        await pushNotificationManager.updatePermissionStatus("denied", token);
+        toast(
+          "Push notifications are disabled. You can enable them in your browser settings.",
+          {
+            icon: "🔔",
+            duration: 5000,
+          },
+        );
       }
-      
+
       await pushNotificationManager.updatePermissionStatus(permission, token);
     } catch (error) {
-      console.error('Error setting up push notifications:', error);
+      console.error("Error setting up push notifications:", error);
       // Don't show error to user as it's not critical to login
     }
   };
@@ -105,9 +150,9 @@ export const AuthProvider = ({ children }) => {
   const requestOTP = async (email) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/auth/request-otp`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ email }),
       });
@@ -122,8 +167,7 @@ export const AuthProvider = ({ children }) => {
         throw new Error(data.message);
       }
 
-      
-      toast.success('OTP sent to your email!');
+      toast.success("OTP sent to your email!");
       return data;
     } catch (error) {
       toast.error(error.message);
@@ -131,12 +175,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const verifyOTPAndRegister = async (email, otp, firstName, lastName, password, group) => {
+  const verifyOTPAndRegister = async (
+    email,
+    otp,
+    firstName,
+    lastName,
+    password,
+    group,
+  ) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           email,
@@ -155,7 +206,9 @@ export const AuthProvider = ({ children }) => {
       }
 
       // Don't set user or store in localStorage since we're redirecting to login
-      toast.success(data.message || 'Registration successful! Please login to continue.');
+      toast.success(
+        data.message || "Registration successful! Please login to continue.",
+      );
       return data;
     } catch (error) {
       toast.error(error.message);
@@ -170,12 +223,12 @@ export const AuthProvider = ({ children }) => {
         await pushNotificationManager.unsubscribe(user.token);
       }
     } catch (error) {
-      console.error('Error unsubscribing from push notifications:', error);
+      console.error("Error unsubscribing from push notifications:", error);
     }
-    
+
     setUser(null);
-    localStorage.removeItem('user');
-    toast.success('Logged out successfully!');
+    localStorage.removeItem("user");
+    toast.success("Logged out successfully!");
   };
 
   // Add a function to check if token is valid
@@ -187,27 +240,30 @@ export const AuthProvider = ({ children }) => {
   const updateUser = (newUserData) => {
     const updatedUser = { ...user, ...newUserData };
     setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
+    localStorage.setItem("user", JSON.stringify(updatedUser));
   };
 
   const resetPassword = {
     requestOTP: async (email, newPassword) => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/request-reset-otp`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        const response = await fetch(
+          `${API_BASE_URL}/api/auth/request-reset-otp`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email, newPassword }),
           },
-          body: JSON.stringify({ email, newPassword }),
-        });
+        );
 
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.message || 'Failed to request OTP');
+          throw new Error(data.message || "Failed to request OTP");
         }
 
-        toast.success('OTP sent to your email!');
+        toast.success("OTP sent to your email!");
         return data;
       } catch (error) {
         toast.error(error.message);
@@ -217,31 +273,34 @@ export const AuthProvider = ({ children }) => {
 
     verifyOTP: async (email, newPassword, otp) => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/verify-reset-otp`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        const response = await fetch(
+          `${API_BASE_URL}/api/auth/verify-reset-otp`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email,
+              newPassword,
+              otp,
+            }),
           },
-          body: JSON.stringify({ 
-            email, 
-            newPassword,
-            otp 
-          }),
-        });
+        );
 
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.message || 'Failed to verify OTP');
+          throw new Error(data.message || "Failed to verify OTP");
         }
 
-        toast.success('Password reset successful!');
+        toast.success("Password reset successful!");
         return data;
       } catch (error) {
         toast.error(error.message);
         throw error;
       }
-    }
+    },
   };
 
   return (
@@ -256,10 +315,11 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated,
         resetPassword,
         token: user?.token,
-        updateUser
+        updateUser,
+        refreshUserData: () => user?.token && refreshUserData(user.token),
       }}
     >
       {children}
     </AuthContext.Provider>
   );
-}; 
+};

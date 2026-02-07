@@ -16,8 +16,8 @@ const CreateTask = ({
   isOpen = false,
   onClose = () => {},
   onSubmit = null,
-  showAcceptButton = false, // New prop to show Accept button for TaskVerification page
-  hideFileSection = false, // Only set to true from AdminDashboard edit
+  showAcceptButton = false,
+  hideFileSection = false, 
 }) => {
   const { user: loggedInUser, isAuthenticated } = useAuth();
   const [isWorkTypeModalOpen, setIsWorkTypeModalOpen] = useState(false);

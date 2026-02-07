@@ -11,7 +11,7 @@ const role2List = ["None", "TimeSheet Verifier", "Task Verifier"];
 const timesheetViewList = ["default", "team"];
 
 const AllUsers = () => {
-  const { user } = useAuth();
+  const { user, refreshUserData } = useAuth();
   const [users, setUsers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -141,6 +141,12 @@ const AllUsers = () => {
             : u,
         ),
       );
+
+      // If the updated user is the current logged-in user, refresh their data
+      if (userId === user._id) {
+        await refreshUserData();
+      }
+
       toast.success("User role updated successfully");
     } catch (err) {
       console.error("Error updating user role:", err);
@@ -182,6 +188,12 @@ const AllUsers = () => {
 
       const updatedUser = await res.json();
       setUsers((prev) => prev.map((u) => (u._id === userId ? updatedUser : u)));
+
+      // If the updated user is the current logged-in user, refresh their data
+      if (userId === user._id) {
+        await refreshUserData();
+      }
+
       toast.success("User team updated successfully");
     } catch (err) {
       console.error("Error updating user team:", err);
@@ -211,6 +223,12 @@ const AllUsers = () => {
       setUsers((prev) =>
         prev.map((u) => (u._id === userId ? { ...u, role2: newRole2 } : u)),
       );
+
+      // If the updated user is the current logged-in user, refresh their data
+      if (userId === user._id) {
+        await refreshUserData();
+      }
+
       toast.success("User role2 updated successfully");
     } catch (err) {
       console.error("Error updating user role2:", err);
@@ -244,6 +262,12 @@ const AllUsers = () => {
           u._id === userId ? { ...u, timesheetView: newTimesheetView } : u,
         ),
       );
+
+      // If the updated user is the current logged-in user, refresh their data
+      if (userId === user._id) {
+        await refreshUserData();
+      }
+
       toast.success("Timesheet view updated successfully");
     } catch (err) {
       console.error("Error updating user timesheet view:", err);
@@ -277,6 +301,12 @@ const AllUsers = () => {
           u._id === userId ? { ...u, userAccessLevel: newUserAccessLevel } : u,
         ),
       );
+
+      // If the updated user is the current logged-in user, refresh their data
+      if (userId === user._id) {
+        await refreshUserData();
+      }
+
       toast.success("User access level updated successfully");
     } catch (err) {
       console.error("Error updating user access level:", err);
