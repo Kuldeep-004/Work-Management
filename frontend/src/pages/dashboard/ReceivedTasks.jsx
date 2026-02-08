@@ -18,6 +18,10 @@ import {
   AdjustmentsHorizontalIcon,
 } from "@heroicons/react/24/outline";
 import { API_BASE_URL, fetchTabState, saveTabState } from "../../apiConfig";
+import EnhancedPDFColumnSelector from "../../components/EnhancedPDFColumnSelector";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 
 // All columns including verification - this will be used for dropdown and column management
 const ALL_COLUMNS = [
@@ -137,6 +141,9 @@ const ReceivedTasks = () => {
   // Custom columns state
   const [customColumns, setCustomColumns] = useState([]);
   const [customColumnsLoaded, setCustomColumnsLoaded] = useState(false);
+
+  // PDF download state
+  const [showPDFColumnSelector, setShowPDFColumnSelector] = useState(false);
 
   // Get active tab object (defensive) - use empty array for customColumns as fallback
   const activeTabObj =
@@ -1083,6 +1090,334 @@ const ReceivedTasks = () => {
     }
   };
 
+  // Helper function to format date
+  const formatDate = (date) => {
+    if (!date) return "NA";
+    const d = new Date(date);
+    return isNaN(d) ? "NA" : d.toLocaleDateString();
+  };
+
+  const formatDateTime = (date) => {
+    if (!date) return "NA";
+    const d = new Date(date);
+    return isNaN(d) ? "NA" : d.toLocaleString();
+  };
+
+  // PDF Download Handler
+  const handleDownloadPDF = (
+    selectedColumns,
+    format,
+    fontSize = 12,
+    fontFamily = "helvetica",
+  ) => {
+    try {
+      const filteredTasks = getFilteredAndSortedTasks(tasks);
+
+      const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "pt",
+        format: "a4",
+      });
+
+      try {
+        doc.setFont(fontFamily);
+      } catch (e) {
+        doc.setFont("helvetica");
+      }
+
+      const columnsToShow = selectedColumns
+        .map((colId) => {
+          const col = extendedColumns.find((c) => c.id === colId);
+          if (!col) return null;
+          return { dataKey: colId, header: col.label };
+        })
+        .filter(Boolean);
+
+      const rows = filteredTasks.map((task, index) => {
+        const row = { no: index + 1 };
+        selectedColumns.forEach((colId) => {
+          let value = "";
+
+          switch (colId) {
+            case "title":
+              value = task.title || "";
+              break;
+            case "description":
+              value = task.description || "";
+              break;
+            case "clientName":
+              value = task.clientName || "";
+              break;
+            case "clientGroup":
+              value = task.clientGroup || "";
+              break;
+            case "workType":
+              value = task.workType ? task.workType.join(", ") : "";
+              break;
+            case "billed":
+              value = task.billed ? "Yes" : "No";
+              break;
+            case "status":
+              value = task.status || "";
+              break;
+            case "priority":
+              value = task.priority?.name || "";
+              break;
+            case "inwardEntryDate":
+              value = formatDateTime(task.inwardEntryDate);
+              break;
+            case "dueDate":
+              value = formatDate(task.dueDate);
+              break;
+            case "targetDate":
+              value = formatDate(task.targetDate);
+              break;
+            case "assignedBy":
+              value = task.assignedBy
+                ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}`
+                : "";
+              break;
+            case "assignedTo":
+              value = task.assignedTo
+                ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}`
+                : "";
+              break;
+            case "verificationAssignedTo":
+              value = task.verificationAssignedTo
+                ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`
+                : "";
+              break;
+            case "secondVerificationAssignedTo":
+              value = task.secondVerificationAssignedTo
+                ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`
+                : "";
+              break;
+            case "thirdVerificationAssignedTo":
+              value = task.thirdVerificationAssignedTo
+                ? `${task.thirdVerificationAssignedTo.firstName} ${task.thirdVerificationAssignedTo.lastName}`
+                : "";
+              break;
+            case "fourthVerificationAssignedTo":
+              value = task.fourthVerificationAssignedTo
+                ? `${task.fourthVerificationAssignedTo.firstName} ${task.fourthVerificationAssignedTo.lastName}`
+                : "";
+              break;
+            case "fifthVerificationAssignedTo":
+              value = task.fifthVerificationAssignedTo
+                ? `${task.fifthVerificationAssignedTo.firstName} ${task.fifthVerificationAssignedTo.lastName}`
+                : "";
+              break;
+            case "files":
+              value = task.files ? task.files.length.toString() : "0";
+              break;
+            case "comments":
+              value = task.comments ? task.comments.length.toString() : "0";
+              break;
+            case "verification":
+              value = task.verification || "";
+              break;
+            case "selfVerification":
+              value = task.selfVerification || "";
+              break;
+            case "guides":
+              value =
+                task.guides && task.guides.length > 0
+                  ? task.guides
+                      .map((g) => g.name || g.firstName + " " + g.lastName)
+                      .join(", ")
+                  : "";
+              break;
+            default:
+              // Handle custom columns
+              if (colId.startsWith("custom_")) {
+                const customColName = colId.replace("custom_", "");
+                const customCol = customColumns.find(
+                  (col) => col.name === customColName,
+                );
+                if (customCol && task.customFields) {
+                  const customField = task.customFields[customCol.name];
+                  if (customField !== undefined && customField !== null) {
+                    value = String(customField);
+                  }
+                }
+              }
+          }
+          row[colId] = value;
+        });
+        return row;
+      });
+
+      // Add "No" column at the start
+      const headers = [{ dataKey: "no", header: "No" }, ...columnsToShow];
+
+      doc.setFontSize(16);
+      doc.text("Tasks Report", 40, 40);
+
+      autoTable(doc, {
+        columns: headers,
+        body: rows,
+        startY: 70,
+        styles: {
+          fontSize: fontSize,
+          cellPadding: 3,
+          valign: "middle",
+          halign: "left",
+          font: fontFamily,
+        },
+        headStyles: {
+          fillColor: [66, 139, 202],
+          textColor: [255, 255, 255],
+          fontSize: fontSize,
+          fontStyle: "bold",
+          font: fontFamily,
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
+        margin: { top: 60, left: 40, right: 40, bottom: 60 },
+        tableWidth: "auto",
+        columnStyles: {
+          0: { cellWidth: 30 }, // No column
+        },
+      });
+
+      doc.save("tasks_report.pdf");
+      toast.success("PDF downloaded successfully!");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast.error("Failed to generate PDF");
+    }
+  };
+
+  // Excel Download Handler
+  const handleDownloadExcel = (
+    selectedColumns,
+    fontSize = 12,
+    fontFamily = "helvetica",
+  ) => {
+    try {
+      const filteredTasks = getFilteredAndSortedTasks(tasks);
+
+      // Prepare Excel data with selected columns
+      const excelData = filteredTasks.map((task, index) => {
+        const row = { "S. No": index + 1 };
+
+        selectedColumns.forEach((column) => {
+          if (column.isCustom) {
+            const customValue =
+              task.customFields && task.customFields[column.customColumn.name];
+            row[column.label] = customValue !== undefined ? customValue : "";
+          } else {
+            switch (column.id) {
+              case "title":
+                row[column.label] = task.title || "";
+                break;
+              case "description":
+                row[column.label] = task.description || "";
+                break;
+              case "clientName":
+                row[column.label] = task.clientName || "";
+                break;
+              case "clientGroup":
+                row[column.label] = task.clientGroup || "";
+                break;
+              case "workType":
+                row[column.label] = Array.isArray(task.workType)
+                  ? task.workType.join(", ")
+                  : task.workType || "";
+                break;
+              case "billed":
+                row[column.label] = task.billed ? "Yes" : "No";
+                break;
+              case "status":
+                row[column.label] = task.status || "";
+                break;
+              case "priority":
+                row[column.label] = task.priority?.name || "";
+                break;
+              case "verification":
+                row[column.label] = task.verification || "";
+                break;
+              case "selfVerification":
+                row[column.label] = task.selfVerification || "";
+                break;
+              case "inwardEntryDate":
+                row[column.label] = formatDateTime(task.inwardEntryDate);
+                break;
+              case "dueDate":
+                row[column.label] = formatDate(task.dueDate);
+                break;
+              case "targetDate":
+                row[column.label] = formatDate(task.targetDate);
+                break;
+              case "assignedBy":
+                row[column.label] = task.assignedBy
+                  ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}`
+                  : "";
+                break;
+              case "assignedTo":
+                row[column.label] = task.assignedTo
+                  ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}`
+                  : "";
+                break;
+              case "verificationAssignedTo":
+                row[column.label] = task.verificationAssignedTo
+                  ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`
+                  : "";
+                break;
+              case "secondVerificationAssignedTo":
+                row[column.label] = task.secondVerificationAssignedTo
+                  ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`
+                  : "";
+                break;
+              case "thirdVerificationAssignedTo":
+                row[column.label] = task.thirdVerificationAssignedTo
+                  ? `${task.thirdVerificationAssignedTo.firstName} ${task.thirdVerificationAssignedTo.lastName}`
+                  : "";
+                break;
+              case "fourthVerificationAssignedTo":
+                row[column.label] = task.fourthVerificationAssignedTo
+                  ? `${task.fourthVerificationAssignedTo.firstName} ${task.fourthVerificationAssignedTo.lastName}`
+                  : "";
+                break;
+              case "fifthVerificationAssignedTo":
+                row[column.label] = task.fifthVerificationAssignedTo
+                  ? `${task.fifthVerificationAssignedTo.firstName} ${task.fifthVerificationAssignedTo.lastName}`
+                  : "";
+                break;
+              case "files":
+                row[column.label] = task.files ? task.files.length : 0;
+                break;
+              case "comments":
+                row[column.label] = task.comments ? task.comments.length : 0;
+                break;
+              case "guides":
+                row[column.label] =
+                  task.guides && task.guides.length > 0
+                    ? task.guides
+                        .map((g) => g.name || g.firstName + " " + g.lastName)
+                        .join(", ")
+                    : "";
+                break;
+              default:
+                row[column.label] = "";
+            }
+          }
+        });
+        return row;
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Tasks");
+      XLSX.writeFile(workbook, "tasks_report.xlsx");
+      toast.success("Excel file downloaded successfully!");
+    } catch (error) {
+      console.error("Error generating Excel file:", error);
+      toast.error("Failed to generate Excel file");
+    }
+  };
+
   useEffect(() => {
     if (!showColumnDropdown) return;
     function handleClickOutside(event) {
@@ -1785,8 +2120,17 @@ const ReceivedTasks = () => {
           )}
 
           <button
+            onClick={() => setShowPDFColumnSelector(true)}
+            className="ml-0 flex items-center justify-center px-3 py-2 h-8 rounded-lg bg-green-600 hover:bg-green-700 text-white focus:outline-none focus:ring-2 focus:ring-green-500 shadow-sm text-sm font-medium"
+            title="Download"
+            type="button"
+          >
+            Download
+          </button>
+
+          <button
             onClick={() => setShowCreateTaskModal(true)}
-            className="ml-0 flex items-center justify-center w-7 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+            className="ml-2 flex items-center justify-center w-7 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
             title="Create Task"
             type="button"
           >
@@ -1900,6 +2244,15 @@ const ReceivedTasks = () => {
             await fetchTasksAndTabState();
           }
         }}
+      />
+
+      {/* PDF Column Selector Modal */}
+      <EnhancedPDFColumnSelector
+        isOpen={showPDFColumnSelector}
+        onClose={() => setShowPDFColumnSelector(false)}
+        onDownload={handleDownloadPDF}
+        onDownloadExcel={handleDownloadExcel}
+        availableColumns={extendedColumns}
       />
     </div>
   );

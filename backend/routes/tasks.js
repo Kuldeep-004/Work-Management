@@ -936,7 +936,7 @@ router.post("/", protect, canAssignTask, async (req, res) => {
 
     // Fetch assigner details for notification message
     const assigner = await User.findById(req.user._id).select(
-      "firstName lastName",
+      "firstName lastName requiresTaskApproval",
     );
 
     // Combine date and time for inwardEntryDate
@@ -980,8 +980,12 @@ router.post("/", protect, canAssignTask, async (req, res) => {
     }
 
     for (const userId of assignedTo) {
-      // Always set verification status to 'pending' to ensure all tasks go through approval
-      const verificationStatus = "pending";
+      // Check if the task creator (assignedBy) requires approval
+      // If requiresTaskApproval is false, set verificationStatus to 'completed'
+      // Otherwise, set it to 'pending' for approval
+      const verificationStatus =
+        assigner.requiresTaskApproval === false ? "completed" : "pending";
+
       const task = new Task({
         title,
         description,
@@ -1002,6 +1006,13 @@ router.post("/", protect, canAssignTask, async (req, res) => {
         customFields: processedCustomFields, // Add custom fields
         guides: guides || [], // Add guides
       });
+
+      // If no approval needed, automatically set approvedBy to the task creator
+      if (verificationStatus === "completed") {
+        task.approvedBy = req.user._id;
+        task.approvedAt = new Date();
+      }
+
       const savedTask = await task.save();
       createdTasks.push(savedTask);
 
@@ -2016,7 +2027,7 @@ router.post("/:taskId/comments", protect, async (req, res) => {
       return res.status(404).json({ message: "Task not found" });
     }
 
-    const { content } = req.body;
+    const { content, mentions } = req.body;
     if (!content) {
       return res.status(400).json({ message: "Comment content is required" });
     }
@@ -2025,11 +2036,12 @@ router.post("/:taskId/comments", protect, async (req, res) => {
       type: "text",
       content,
       createdBy: req.user._id,
+      mentions: mentions || [],
     });
 
     await task.save();
 
-    // Create notifications for assignedTo and assignedBy
+    // Create notifications for assignedTo, assignedBy, and mentioned users
     const commenterId = req.user._id.toString();
     const assignedToId = task.assignedTo.toString();
     const assignedById = task.assignedBy.toString();
@@ -2039,25 +2051,49 @@ router.post("/:taskId/comments", protect, async (req, res) => {
       "firstName lastName",
     );
     const truncatedTaskName = truncateTaskName(task.title);
-    const message = `${commenter.firstName} ${commenter.lastName} has commented on "${truncatedTaskName}" of ${task.clientName} as ${content}`;
-    const recipients = new Set();
+
+    const notificationPromises = [];
+
+    // Create notifications for assignedTo and assignedBy
+    const commentMessage = `${commenter.firstName} ${commenter.lastName} has commented on "${truncatedTaskName}" of ${task.clientName} as ${content}`;
 
     if (assignedToId !== commenterId) {
-      recipients.add(assignedToId);
-    }
-    if (assignedById !== commenterId) {
-      recipients.add(assignedById);
-    }
-
-    if (recipients.size > 0) {
-      const notificationPromises = Array.from(recipients).map((recipientId) => {
-        return Notification.create({
-          recipient: recipientId,
+      notificationPromises.push(
+        Notification.create({
+          recipient: assignedToId,
           task: task._id,
           assigner: req.user._id,
-          message: message,
-        });
+          message: commentMessage,
+        }),
+      );
+    }
+    if (assignedById !== commenterId) {
+      notificationPromises.push(
+        Notification.create({
+          recipient: assignedById,
+          task: task._id,
+          assigner: req.user._id,
+          message: commentMessage,
+        }),
+      );
+    }
+
+    // Create notifications for mentioned users with different message
+    if (mentions && Array.isArray(mentions)) {
+      const mentionMessage = `${commenter.firstName} ${commenter.lastName} has mentioned you in task "${truncatedTaskName}"`;
+      mentions.forEach((mentionedUserId) => {
+        notificationPromises.push(
+          Notification.create({
+            recipient: mentionedUserId,
+            task: task._id,
+            assigner: req.user._id,
+            message: mentionMessage,
+          }),
+        );
       });
+    }
+
+    if (notificationPromises.length > 0) {
       await Promise.all(notificationPromises);
     }
 
@@ -2304,6 +2340,17 @@ router.post(
         commentData.files = uploadedFiles;
       }
 
+      // Parse mentions from request body
+      let mentions = [];
+      if (req.body.mentions) {
+        try {
+          mentions = JSON.parse(req.body.mentions);
+          commentData.mentions = mentions;
+        } catch (e) {
+          console.error("Error parsing mentions:", e);
+        }
+      }
+
       task.comments.push(commentData);
       await task.save();
 
@@ -2318,31 +2365,53 @@ router.post(
       const truncatedTaskName = truncateTaskName(task.title);
       const fileInfo =
         uploadedFiles.length > 0 ? ` with ${uploadedFiles.length} file(s)` : "";
-      const message = `${commenter.firstName} ${
+
+      const notificationPromises = [];
+
+      // Create notifications for assignedTo and assignedBy
+      const commentMessage = `${commenter.firstName} ${
         commenter.lastName
       } has commented on "${truncatedTaskName}" of ${
         task.clientName
       }${fileInfo}: ${content || "File attachment"}`;
-      const recipients = new Set();
 
       if (assignedToId !== commenterId) {
-        recipients.add(assignedToId);
+        notificationPromises.push(
+          Notification.create({
+            recipient: assignedToId,
+            task: task._id,
+            assigner: req.user._id,
+            message: commentMessage,
+          }),
+        );
       }
       if (assignedById !== commenterId) {
-        recipients.add(assignedById);
+        notificationPromises.push(
+          Notification.create({
+            recipient: assignedById,
+            task: task._id,
+            assigner: req.user._id,
+            message: commentMessage,
+          }),
+        );
       }
 
-      if (recipients.size > 0) {
-        const notificationPromises = Array.from(recipients).map(
-          (recipientId) => {
-            return Notification.create({
-              recipient: recipientId,
+      // Create notifications for mentioned users with different message
+      if (mentions && Array.isArray(mentions)) {
+        const mentionMessage = `${commenter.firstName} ${commenter.lastName} has mentioned you in task "${truncatedTaskName}"`;
+        mentions.forEach((mentionedUserId) => {
+          notificationPromises.push(
+            Notification.create({
+              recipient: mentionedUserId,
               task: task._id,
               assigner: req.user._id,
-              message: message,
-            });
-          },
-        );
+              message: mentionMessage,
+            }),
+          );
+        });
+      }
+
+      if (notificationPromises.length > 0) {
         await Promise.all(notificationPromises);
       }
 

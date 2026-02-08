@@ -3557,7 +3557,7 @@ const AdvancedTaskTable = React.memo(
                           <div className="flex items-center justify-end gap-1">
                             {task.comments && task.comments.length > 0 && (
                               <span
-                                className="w-2 h-2 bg-red-500 rounded-full"
+                                className="w-1 h-1 bg-red-500 rounded-full"
                                 title={`${task.comments.length} comment(s)`}
                               ></span>
                             )}

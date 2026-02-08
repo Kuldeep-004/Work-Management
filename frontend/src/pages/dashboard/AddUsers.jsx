@@ -314,6 +314,42 @@ const AllUsers = () => {
     }
   };
 
+  const handleTaskApprovalChange = async (userId, requiresApproval) => {
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/users/${userId}/update-fields`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.token}`,
+          },
+          body: JSON.stringify({ requiresTaskApproval: requiresApproval }),
+        },
+      );
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(
+          errorData.message || "Failed to update task approval setting",
+        );
+      }
+
+      setUsers((prev) =>
+        prev.map((u) =>
+          u._id === userId
+            ? { ...u, requiresTaskApproval: requiresApproval }
+            : u,
+        ),
+      );
+
+      toast.success("Task approval setting updated successfully");
+    } catch (err) {
+      console.error("Error updating task approval setting:", err);
+      toast.error(err.message);
+    }
+  };
+
   const handleDeleteUser = async (userId) => {
     if (!window.confirm("Are you sure you want to delete this user?")) {
       return;
@@ -376,32 +412,35 @@ const AllUsers = () => {
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold text-gray-800 mb-6">All Users</h2>
-      <div className="overflow-x-auto w-full">
-        <table className="min-w-full divide-y divide-gray-200">
+      <div className="overflow-x-auto w-full -mx-4 px-4 sm:mx-0 sm:px-0">
+        <table className="min-w-max w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[160px]">
                 Name
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
                 Email
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
                 Role1
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
                 Role2
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
                 Timesheets
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[140px]">
                 User Access Level
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[160px]">
+                Task Approval
+              </th>
+              <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[140px]">
                 Team
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
                 Actions
               </th>
             </tr>
@@ -409,7 +448,7 @@ const AllUsers = () => {
           <tbody className="bg-white divide-y divide-gray-100">
             {sortedUsers.map((u) => (
               <tr key={u._id} className="border-b">
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-4 py-3 whitespace-nowrap min-w-[160px]">
                   <div className="flex items-center">
                     <img
                       src={u.photo?.url || defaultProfile}
@@ -425,14 +464,14 @@ const AllUsers = () => {
                     </span>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[200px]">
                   {u.email}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[120px] min-w-[120px]">
                   <select
                     value={u.role || ""}
                     onChange={(e) => handleRoleChange(u._id, e.target.value)}
-                    className="px-2 py-1 border border-gray-300 rounded"
+                    className="w-full min-w-[110px] px-2 py-1 border border-gray-300 rounded text-sm"
                   >
                     <option value="">Select Role</option>
                     {rolesList.map((role) => (
@@ -442,7 +481,7 @@ const AllUsers = () => {
                     ))}
                   </select>
                 </td>
-                <td className="px-5 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[150px]">
                   {user.role === "Admin" ? (
                     <div className="relative inline-block w-full">
                       <button
@@ -536,35 +575,47 @@ const AllUsers = () => {
                     "None"
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[120px]">
                   <select
                     value={u.timesheetView || "default"}
                     onChange={(e) =>
                       handleTimesheetViewChange(u._id, e.target.value)
                     }
-                    className="px-2 py-1 border border-gray-300 rounded"
+                    className="w-full min-w-[110px] px-2 py-1 border border-gray-300 rounded text-sm"
                   >
                     <option value="default">Default</option>
                     <option value="team">Team</option>
                   </select>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[140px]">
                   <select
                     value={u.userAccessLevel || "Team Only"}
                     onChange={(e) =>
                       handleUserAccessLevelChange(u._id, e.target.value)
                     }
-                    className="px-2 py-1 border border-gray-300 rounded"
+                    className="w-full min-w-[130px] px-2 py-1 border border-gray-300 rounded text-sm"
                   >
                     <option value="Team Only">Team Only</option>
                     <option value="All Users">All Users</option>
                   </select>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[160px]">
+                  <select
+                    value={u.requiresTaskApproval === false ? "no" : "yes"}
+                    onChange={(e) =>
+                      handleTaskApprovalChange(u._id, e.target.value === "yes")
+                    }
+                    className="w-full min-w-[150px] px-2 py-1 border border-gray-300 rounded text-sm"
+                  >
+                    <option value="yes">Needs Approval</option>
+                    <option value="no">No Approval Needed</option>
+                  </select>
+                </td>
+                <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[140px]">
                   <select
                     value={u.team || ""}
                     onChange={(e) => handleTeamChange(u._id, e.target.value)}
-                    className="px-2 py-1 border border-gray-300 rounded"
+                    className="w-full min-w-[130px] px-2 py-1 border border-gray-300 rounded text-sm"
                     // Only disable for Senior if needed
                   >
                     <option value="">Select Team</option>
@@ -575,7 +626,7 @@ const AllUsers = () => {
                     ))}
                   </select>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[100px]">
                   <button
                     onClick={() => handleDeleteUser(u._id)}
                     className="text-red-600 hover:text-red-900"

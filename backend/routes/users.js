@@ -450,6 +450,13 @@ router.patch("/:userId/update-fields", protect, async (req, res) => {
       }
     }
 
+    // Handle requiresTaskApproval update
+    if (req.body.requiresTaskApproval !== undefined) {
+      updatedFields.requiresTaskApproval = Boolean(
+        req.body.requiresTaskApproval,
+      );
+    }
+
     // Update user with new fields
     const updatedUser = await User.findByIdAndUpdate(
       req.params.userId,
@@ -539,7 +546,6 @@ router.get("/for-task-assignment", protect, async (req, res) => {
     const accessLevel = currentUser.userAccessLevel || "Team Only";
 
     let query = {
-      _id: { $ne: req.user._id },
       isEmailVerified: true,
       status: "approved",
     };
@@ -548,7 +554,7 @@ router.get("/for-task-assignment", protect, async (req, res) => {
       if (currentUser.team) {
         query.team = currentUser.team;
       } else {
-        query._id = null;
+        query._id = req.user._id;
       }
     }
 

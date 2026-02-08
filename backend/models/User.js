@@ -46,7 +46,7 @@ const userSchema = new mongoose.Schema(
       default: "Fresher",
     },
     role2: {
-      type: [String],
+      type: [String], 
       enum: ["None", "TimeSheet Verifier", "Task Verifier"],
       default: ["None"],
     },
@@ -97,6 +97,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["default", "granted", "denied"],
       default: "default",
+    },
+    requiresTaskApproval: {
+      type: Boolean,
+      default: true,
     },
   },
   {
