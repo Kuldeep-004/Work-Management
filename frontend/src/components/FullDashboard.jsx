@@ -266,7 +266,6 @@ const FullDashboard = () => {
 
     return [...baseColumns, ...customCols];
   }, [customColumnsLoaded, customColumns]);
-
   // 6. Update updateActiveTab to allow patching visibleColumns and columnWidths
   const updateActiveTab = useCallback(
     (patch) => {
@@ -274,20 +273,19 @@ const FullDashboard = () => {
         tabs.map((tab) => {
           if (tab.id !== activeTabId) return tab;
           let newTab = { ...tab, ...patch };
-
           // Only reset groupOrder when FIRST enabling priority grouping (changing from non-priority to priority)
           // Don't reset if already grouped by priority or if user has custom group order
           if (patch.sortBy === "priority" && tab.sortBy !== "priority") {
-            // Only reset if there's no saved groupOrder for this tab
-            if (!tab.groupOrder || tab.groupOrder.length === 0) {
               // Build group order using database priorities
               let groupOrder = priorities
-                .sort((a, b) => (a.order || 0) - (b.order || 0))
+                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
                 .map((p) => p.name);
               newTab.groupOrder = groupOrder;
-            }
+              newTab.taskOrder=[];
+            } else if(patch.sortBy!=tab.sortBy){
+              newTab.groupOrder=[];
+              newTab.taskOrder=[];
           }
-
           if (patch.visibleColumns) {
             // Remove hidden columns from order, add new visible columns at the end
             const currentOrder =
