@@ -615,9 +615,13 @@ const AdvancedTaskTable = React.memo(
                             <React.Fragment key={group}>
                               <tr
                                 key={group + "-header"}
-                                className={`group-header ${dragOverGroup === group && draggedGroup ? "bg-blue-100" : ""} cursor-grab`}
-                                draggable={true} // Groups should always be draggable when grouping is enabled
+                                className={`group-header ${dragOverGroup === group && draggedGroup ? "bg-blue-100" : ""} ${groupField === "priority" ? "cursor-default" : "cursor-grab"}`}
+                                draggable={groupField !== "priority"} // Priority groups are not draggable - their order is strict
                                 onDragStart={(e) => {
+                                  if (groupField === "priority") {
+                                    e.preventDefault();
+                                    return;
+                                  }
                                   setDraggedGroup(group);
                                   e.dataTransfer.setData("text/plain", group);
                                   e.dataTransfer.effectAllowed = "move";

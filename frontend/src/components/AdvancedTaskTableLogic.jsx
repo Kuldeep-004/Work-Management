@@ -347,6 +347,11 @@ export const useAdvancedTaskTableLogic = (props) => {
     return dynamicPriorities.some((p) => p.name === priorityName);
   };
 
+  // Get ordered priority group keys for proper priority grouping order
+  const getPriorityGroupOrder = () => {
+    return getCurrentPriorityOptions().map((opt) => opt.value);
+  };
+
   // Drag and drop state
   const [draggedColumn, setDraggedColumn] = useState(null);
   const [dragOverColumn, setDragOverColumn] = useState(null);
@@ -2338,11 +2343,16 @@ export const useAdvancedTaskTableLogic = (props) => {
 
     // Only save if there are groups to save
     if (naturalGroupOrder.length > 0) {
-      // Set the group order state
-      setGroupOrder(naturalGroupOrder);
-
-      // Save to backend
-      saveGroupOrder(naturalGroupOrder);
+      // For priority grouping, don't save custom group order - priority order is strict
+      if (groupField === "priority") {
+        // Just set the group order state but don't save to backend
+        // Priority order should always be determined by priority settings
+        setGroupOrder(naturalGroupOrder);
+      } else {
+        // For non-priority grouping, save the group order
+        setGroupOrder(naturalGroupOrder);
+        saveGroupOrder(naturalGroupOrder);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -2558,8 +2568,14 @@ export const useAdvancedTaskTableLogic = (props) => {
   const handleGroupDrop = (fromGroup, toGroup) => {
     // Group reordering should always be allowed when groups exist
     // Only individual task dragging should be disabled when sorting is enabled
+    // BUT: Priority groups should never be reorderable - they follow strict priority order
 
     if (!shouldGroup || !fromGroup || !toGroup || fromGroup === toGroup) return;
+
+    // Prevent reordering when grouping by priority - priority order is strict
+    if (groupField === "priority") {
+      return;
+    }
 
     // First, collect all tasks by their group
     const tasksByGroup = {};
@@ -2670,8 +2686,29 @@ export const useAdvancedTaskTableLogic = (props) => {
       });
     }
 
-    // Apply custom group order if available
-    if (groupOrderLoaded && groupOrder.length > 0) {
+    // Apply custom group order if available, BUT enforce strict priority order for priority grouping
+    if (groupField === "priority") {
+      // For priority grouping, ALWAYS enforce priority order regardless of saved preferences
+      const orderedGroupedTasks = {};
+      const priorityGroupOrder = getPriorityGroupOrder();
+
+      // Sort groups by priority order from backend settings
+      priorityGroupOrder.forEach((groupKey) => {
+        if (renderGroupedTasks[groupKey]) {
+          orderedGroupedTasks[groupKey] = renderGroupedTasks[groupKey];
+        }
+      });
+
+      // Add any groups that aren't in priority options (edge case for deleted priorities)
+      Object.entries(renderGroupedTasks).forEach(([groupKey, tasks]) => {
+        if (!orderedGroupedTasks[groupKey]) {
+          orderedGroupedTasks[groupKey] = tasks;
+        }
+      });
+      renderGroupedTasks = orderedGroupedTasks;
+      console.log(renderGroupedTasks);
+    } else if (groupOrderLoaded && groupOrder.length > 0) {
+      // For non-priority grouping, apply custom group order if available
       const orderedGroupedTasks = {};
 
       // First, add groups in the saved order
@@ -2749,6 +2786,7 @@ export const useAdvancedTaskTableLogic = (props) => {
     // Helper Functions
     getExtendedColumns,
     getCurrentPriorityOptions,
+    getPriorityGroupOrder,
     getStatusColor,
     getStatusStyles,
     currentStatusOptions,
