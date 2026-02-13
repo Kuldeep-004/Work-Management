@@ -5,6 +5,7 @@ export async function fetchTabState(tabKey, token) {
   const res = await fetch(`${API_BASE_URL}/api/users/user-tab-state/${encodeURIComponent(tabKey)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+
   if (!res.ok) throw new Error('Failed to fetch tab state');
   const data = await res.json();
   if (!data || typeof data !== 'object') return null;

@@ -881,7 +881,6 @@ router.get("/:id", protect, async (req, res) => {
 // Create a new task
 router.post("/", protect, canAssignTask, async (req, res) => {
   // Log incoming request for debugging
-  console.log("Incoming task create request body:", req.body);
   try {
     const {
       title,
@@ -890,6 +889,7 @@ router.post("/", protect, canAssignTask, async (req, res) => {
       clientGroup,
       workType,
       assignedTo,
+      assignedBy, // Accept assignedBy from request body
       priority,
       inwardEntryDate,
       inwardEntryTime,
@@ -932,10 +932,41 @@ router.post("/", protect, canAssignTask, async (req, res) => {
       }
     }
 
+    // Determine assignedBy based on permissions
+    let finalAssignedBy = req.user._id; // Default to current user
+    
+    if (assignedBy && assignedBy !== req.user._id) {
+      // Check if requesting user has permission to set assignedBy to someone else
+      if (["Admin", "Team Head"].includes(req.user.role)) {
+        // Validate that assignedBy user exists
+        const assignedByUser = await User.findById(assignedBy);
+        if (assignedByUser) {
+          // Additional permission check for Team Head
+          if (req.user.role === "Team Head") {
+            // Team Head can only assign on behalf of users they have access to
+            if (req.user.userAccessLevel === "All Users") {
+              finalAssignedBy = assignedBy;
+            } else if (req.user.userAccessLevel === "Team Only") {
+              // Check if assignedBy user is in the same team
+              if (assignedByUser.team && req.user.team && 
+                  assignedByUser.team.toString() === req.user.team.toString()) {
+                finalAssignedBy = assignedBy;
+              }
+            }
+          } else if (req.user.role === "Admin") {
+            // Admin can assign on behalf of anyone
+            finalAssignedBy = assignedBy;
+          }
+        }
+      }
+      // If no permission or user not found, fall back to req.user._id (already set as default)
+    }
+
     const createdTasks = [];
 
     // Fetch assigner details for notification message
-    const assigner = await User.findById(req.user._id).select(
+    // Use finalAssignedBy to get the correct assigner details
+    const assigner = await User.findById(finalAssignedBy).select(
       "firstName lastName requiresTaskApproval",
     );
 
@@ -993,7 +1024,7 @@ router.post("/", protect, canAssignTask, async (req, res) => {
         clientGroup,
         workType,
         assignedTo: userId,
-        assignedBy: req.user._id,
+        assignedBy: finalAssignedBy,
         priority,
         status: status || "yet_to_start", // Use provided status or default
         inwardEntryDate: combinedInwardEntryDate,
@@ -1009,7 +1040,7 @@ router.post("/", protect, canAssignTask, async (req, res) => {
 
       // If no approval needed, automatically set approvedBy to the task creator
       if (verificationStatus === "completed") {
-        task.approvedBy = req.user._id;
+        task.approvedBy = finalAssignedBy;
         task.approvedAt = new Date();
       }
 
@@ -1022,14 +1053,14 @@ router.post("/", protect, canAssignTask, async (req, res) => {
       const notification = new Notification({
         recipient: userId,
         task: savedTask._id,
-        assigner: req.user._id,
+        assigner: finalAssignedBy,
         message: notificationMessage,
       });
       await notification.save();
 
       // Log task creation activity
       await ActivityLogger.logTaskActivity(
-        req.user._id,
+        finalAssignedBy, // Use finalAssignedBy for activity logging
         "task_created",
         savedTask._id,
         `Created task "${title}" for ${clientName} and assigned to ${

@@ -17,7 +17,8 @@ const CreateTask = ({
   onClose = () => {},
   onSubmit = null,
   showAcceptButton = false,
-  hideFileSection = false, 
+  hideFileSection = false,
+  selectedUserId = null, // Selected user from tasks page dropdown
 }) => {
   const { user: loggedInUser, isAuthenticated } = useAuth();
   const [isWorkTypeModalOpen, setIsWorkTypeModalOpen] = useState(false);
@@ -33,6 +34,7 @@ const CreateTask = ({
     clientGroup: "",
     workType: [],
     assignedTo: [],
+    assignedBy: "", // Add assignedBy field
     guides: [], // Add guides field
     priority: "",
     inwardEntryDate: "",
@@ -44,12 +46,17 @@ const CreateTask = ({
   });
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [selectedGuides, setSelectedGuides] = useState([]); // Add selected guides state
+  const [selectedAssignedBy, setSelectedAssignedBy] = useState(null); // Add selected assignedBy state
   const [searchTerm, setSearchTerm] = useState("");
   const [guideSearchTerm, setGuideSearchTerm] = useState(""); // Add guide search term
+  const [assignedBySearchTerm, setAssignedBySearchTerm] = useState(""); // Add assignedBy search term
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isGuideDropdownOpen, setIsGuideDropdownOpen] = useState(false); // Add guide dropdown state
+  const [isAssignedByDropdownOpen, setIsAssignedByDropdownOpen] =
+    useState(false); // Add assignedBy dropdown state
   const assignSearchInputRef = useRef(null);
   const guideSearchInputRef = useRef(null); // Add guide search ref
+  const assignedBySearchInputRef = useRef(null); // Add assignedBy search ref
   // Focus the Assign To search input when dropdown opens
   useEffect(() => {
     if (isDropdownOpen && assignSearchInputRef.current) {
@@ -62,6 +69,12 @@ const CreateTask = ({
       guideSearchInputRef.current.focus();
     }
   }, [isGuideDropdownOpen]);
+  // Focus the AssignedBy search input when dropdown opens
+  useEffect(() => {
+    if (isAssignedByDropdownOpen && assignedBySearchInputRef.current) {
+      assignedBySearchInputRef.current.focus();
+    }
+  }, [isAssignedByDropdownOpen]);
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
   const [clientSearchTerm, setClientSearchTerm] = useState("");
   const modalRef = useRef(null);
@@ -344,6 +357,11 @@ const CreateTask = ({
                   : initialData.assignedTo._id,
               ]
             : [],
+        assignedBy: initialData.assignedBy
+          ? typeof initialData.assignedBy === "string"
+            ? initialData.assignedBy
+            : initialData.assignedBy._id
+          : "", // Initialize assignedBy for edit mode
         guides: Array.isArray(initialData.guides)
           ? initialData.guides.map((g) => (typeof g === "string" ? g : g._id))
           : [],
@@ -390,6 +408,20 @@ const CreateTask = ({
       );
       setSelectedGuides(selectedGuidesData);
 
+      // Set assignedBy if available
+      if (initialData.assignedBy) {
+        const assignedById =
+          typeof initialData.assignedBy === "string"
+            ? initialData.assignedBy
+            : initialData.assignedBy._id;
+        const assignedByUser = usersWithCurrent.find(
+          (u) => u._id === assignedById,
+        );
+        if (assignedByUser) {
+          setSelectedAssignedBy(assignedByUser);
+        }
+      }
+
       // Set multi-user assignment toggle based on number of assigned users
       setIsMultiUserAssign(assignedUserIds.length > 1);
     } else if (mode === "create" && isOpen) {
@@ -412,6 +444,7 @@ const CreateTask = ({
           clientGroup: "",
           workType: [],
           assignedTo: [],
+          assignedBy: "", // Will be set by separate useEffect
           guides: [],
           priority: "Today",
           inwardEntryDate: currentDate,
@@ -428,6 +461,45 @@ const CreateTask = ({
       setIsMultiUserAssign(false); // Reset multi-user toggle for create mode
     }
   }, [mode, initialData, isOpen, users]);
+
+  // Set default assignedBy based on selectedUserId and user role
+  useEffect(() => {
+    if (mode === "create" && isOpen && loggedInUser) {
+      // Only set assignedBy for Admin and Team Head roles
+      if (["Admin", "Team Head"].includes(loggedInUser.role)) {
+        let defaultAssignedBy;
+
+        // If selectedUserId is provided, use that user as default assignedBy
+        if (selectedUserId) {
+          const selectedUser = users.find((u) => u._id === selectedUserId);
+          if (selectedUser) {
+            defaultAssignedBy = selectedUserId;
+            setSelectedAssignedBy(selectedUser);
+          } else {
+            // Fallback to current user if selected user not found
+            defaultAssignedBy = loggedInUser._id;
+            setSelectedAssignedBy(loggedInUser);
+          }
+        } else {
+          // No user selected, default to current user
+          defaultAssignedBy = loggedInUser._id;
+          setSelectedAssignedBy(loggedInUser);
+        }
+
+        setFormData((prev) => ({
+          ...prev,
+          assignedBy: defaultAssignedBy,
+        }));
+      } else {
+        // For non-admin/team-head roles, always use current user
+        setFormData((prev) => ({
+          ...prev,
+          assignedBy: loggedInUser._id,
+        }));
+        setSelectedAssignedBy(loggedInUser);
+      }
+    }
+  }, [mode, isOpen, selectedUserId, users, loggedInUser]);
 
   // Ensure selectedUsers is set for edit mode when users are loaded
   useEffect(() => {
@@ -605,6 +677,11 @@ const CreateTask = ({
         assignedTo: assignedToData,
         inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
         billed: formData.billed,
+        // Only include assignedBy if user has permission to set it
+        ...(["Admin", "Team Head"].includes(loggedInUser.role) &&
+        formData.assignedBy
+          ? { assignedBy: formData.assignedBy }
+          : {}),
       };
 
       let response, updatedTask;
@@ -1054,6 +1131,18 @@ const CreateTask = ({
     });
   };
 
+  const handleAssignedByChange = (userId) => {
+    const user = usersWithCurrent.find((u) => u._id === userId);
+    if (!user) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      assignedBy: userId,
+    }));
+    setSelectedAssignedBy(user);
+    setIsAssignedByDropdownOpen(false); // Close dropdown after selection
+  };
+
   const handleWorkTypeChange = (type) => {
     setFormData((prev) => {
       const newWorkType = prev.workType.includes(type)
@@ -1115,6 +1204,44 @@ const CreateTask = ({
       .includes(guideSearchTerm.toLowerCase());
     return matchesSearch;
   });
+
+  // Filter users for assignedBy dropdown based on role and search term
+  const getFilteredAssignedByUsers = () => {
+    // Only allow admin and team head to see/modify assignedBy dropdown
+    if (!["Admin", "Team Head"].includes(loggedInUser?.role)) {
+      return [];
+    }
+
+    // Filter based on user's access level
+    let allowedUsers = [];
+    if (loggedInUser.role === "Admin") {
+      // Admin can see all users
+      allowedUsers = usersWithCurrent;
+    } else if (loggedInUser.role === "Team Head") {
+      // Team Head can see users based on their userAccessLevel setting
+      if (loggedInUser.userAccessLevel === "All Users") {
+        allowedUsers = usersWithCurrent;
+      } else {
+        // Team Only - show users in the same team
+        allowedUsers = usersWithCurrent.filter(
+          (user) =>
+            user.team &&
+            loggedInUser.team &&
+            user.team.toString() === loggedInUser.team.toString(),
+        );
+      }
+    }
+
+    // Filter by search term
+    return allowedUsers.filter((user) => {
+      const matchesSearch = `${user.firstName} ${user.lastName}`
+        .toLowerCase()
+        .includes(assignedBySearchTerm.toLowerCase());
+      return matchesSearch;
+    });
+  };
+
+  const filteredAssignedByUsers = getFilteredAssignedByUsers();
 
   const handleWorkTypeSubmit = async (e) => {
     e.preventDefault();
@@ -1511,12 +1638,240 @@ const CreateTask = ({
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >
-                    <option value="" disabled>
-                      Select internal works status
-                    </option>
                     <option value="yes">Yes</option>
                     <option value="no">No</option>
                   </select>
+                </div>
+
+                {/* Only show AssignedBy and Guides row for Admin and Team Head */}
+                <div className="md:col-span-2 flex flex-row md:items-end gap-4">
+                  {/* Assigned By */}
+                  <div className="flex-1 relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Assigned By
+                    </label>
+                    <div className="relative w-full">
+                      {isAssignedByDropdownOpen && (
+                        <div className="absolute z-10 w-full bottom-full mb-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                          <div className="sticky top-0 bg-white p-2 border-b">
+                            <input
+                              type="text"
+                              placeholder="Search users..."
+                              value={assignedBySearchTerm}
+                              onChange={(e) =>
+                                setAssignedBySearchTerm(e.target.value)
+                              }
+                              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              onClick={(e) => e.stopPropagation()}
+                              ref={assignedBySearchInputRef}
+                            />
+                          </div>
+                          <div className="py-1">
+                            {filteredAssignedByUsers.length > 0 ? (
+                              filteredAssignedByUsers.map((user) => (
+                                <button
+                                  key={user._id}
+                                  type="button"
+                                  onClick={() =>
+                                    handleAssignedByChange(user._id)
+                                  }
+                                  className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${
+                                    formData.assignedBy === user._id
+                                      ? "bg-blue-50"
+                                      : ""
+                                  }`}
+                                >
+                                  <div className="flex items-center">
+                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium mr-3 overflow-hidden">
+                                      <img
+                                        src={user.photo?.url || defaultProfile}
+                                        alt={`${user.firstName} ${user.lastName}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                    <div>
+                                      <div className="font-medium text-gray-900">
+                                        {user.firstName} {user.lastName}
+                                      </div>
+                                      <div className="text-sm text-gray-500">
+                                        {user.group}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-4 py-2 text-gray-500 text-center">
+                                No users found
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        disabled={
+                          ["Admin", "Team Head"].includes(loggedInUser.role)
+                            ? false
+                            : true
+                        }
+                        onClick={() =>
+                          setIsAssignedByDropdownOpen(!isAssignedByDropdownOpen)
+                        }
+                        className="w-full flex items-center justify-between border rounded-md px-3 py-2 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <span className="text-gray-700">
+                          {selectedAssignedBy
+                            ? `${selectedAssignedBy.firstName} ${selectedAssignedBy.lastName}`
+                            : "Select user"}
+                        </span>
+                        {["Admin", "Team Head"].includes(loggedInUser.role) ? (
+                          <svg
+                            className={`w-5 h-5 text-gray-400 transition-transform ${
+                              isAssignedByDropdownOpen
+                                ? "transform rotate-180"
+                                : ""
+                            }`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M19 9l-7 7-7-7"
+                            />
+                          </svg>
+                        ) : null}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Guides */}
+                  <div className="flex-1 relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Guides
+                    </label>
+                    <div className="relative w-full">
+                      {isGuideDropdownOpen && (
+                        <div className="absolute z-10 w-full bottom-full mb-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                          <div className="sticky top-0 bg-white p-2 border-b">
+                            <input
+                              type="text"
+                              placeholder="Search guides..."
+                              value={guideSearchTerm}
+                              onChange={(e) =>
+                                setGuideSearchTerm(e.target.value)
+                              }
+                              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              onClick={(e) => e.stopPropagation()}
+                              ref={guideSearchInputRef}
+                            />
+                          </div>
+                          <div className="py-1">
+                            {filteredGuides.length > 0 ? (
+                              filteredGuides.map((user) => (
+                                <button
+                                  key={user._id}
+                                  type="button"
+                                  onClick={() => handleGuideChange(user._id)}
+                                  className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${
+                                    formData.guides.includes(user._id)
+                                      ? "bg-blue-50"
+                                      : ""
+                                  }`}
+                                >
+                                  <div className="flex items-center">
+                                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-medium mr-3 overflow-hidden">
+                                      <img
+                                        src={user.photo?.url || defaultProfile}
+                                        alt={`${user.firstName} ${user.lastName}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                    <div>
+                                      <div className="font-medium text-gray-900">
+                                        {user.firstName} {user.lastName}
+                                      </div>
+                                      <div className="text-sm text-gray-500">
+                                        {user.group}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-4 py-2 text-gray-500 text-center">
+                                No guides found
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setIsGuideDropdownOpen(!isGuideDropdownOpen)
+                        }
+                        className="w-full flex items-center justify-between border rounded-md px-3 py-2 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <span className="text-gray-700">
+                          {selectedGuides.length > 0
+                            ? `${selectedGuides.length} guide${selectedGuides.length > 1 ? "s" : ""} selected`
+                            : "Select guides"}
+                        </span>
+                        <svg
+                          className={`w-5 h-5 text-gray-400 transition-transform ${
+                            isGuideDropdownOpen ? "transform rotate-180" : ""
+                          }`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </button>
+
+                      {/* Selected guides chips */}
+                      {selectedGuides.length > 0 && (
+                        <div className="absolute left-0 w-full mt-2 flex flex-wrap gap-2 z-10">
+                          {selectedGuides.map((guide) => (
+                            <span
+                              key={guide._id}
+                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                            >
+                              {guide.firstName} {guide.lastName}
+                              <button
+                                type="button"
+                                onClick={() => handleGuideChange(guide._id)}
+                                className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-green-200"
+                              >
+                                <svg
+                                  className="w-3 h-3"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M6 18L18 6M6 6l12 12"
+                                  />
+                                </svg>
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Assign To and Team Head in a single row, chips absolutely positioned below Assign To */}
@@ -1742,154 +2097,6 @@ const CreateTask = ({
                       readOnly
                       placeholder="Team Head will appear here"
                     />
-                  </div>
-                </div>
-
-                {/* Guides Selection */}
-                <div className="md:col-span-2 mt-2 w-[410px]">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Guides
-                  </label>
-                  <div className="relative">
-                    {isGuideDropdownOpen && (
-                      <div className="absolute z-10 w-full bottom-full mb-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
-                        <div className="sticky top-0 bg-white p-2 border-b">
-                          <input
-                            type="text"
-                            placeholder="Search guides..."
-                            value={guideSearchTerm}
-                            onChange={(e) => setGuideSearchTerm(e.target.value)}
-                            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            onClick={(e) => e.stopPropagation()}
-                            ref={guideSearchInputRef}
-                          />
-                        </div>
-                        <div className="py-1">
-                          {filteredGuides.length > 0 ? (
-                            filteredGuides.map((user) => (
-                              <button
-                                key={user._id}
-                                type="button"
-                                onClick={() => handleGuideChange(user._id)}
-                                className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${
-                                  formData.guides.includes(user._id)
-                                    ? "bg-blue-50"
-                                    : ""
-                                }`}
-                              >
-                                <div className="flex items-center">
-                                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium mr-3 overflow-hidden">
-                                    <img
-                                      src={user.photo?.url || defaultProfile}
-                                      alt={`${user.firstName} ${user.lastName}`}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  </div>
-                                  <div>
-                                    <div className="font-medium text-gray-900">
-                                      {user.firstName} {user.lastName}
-                                    </div>
-                                    <div className="text-sm text-gray-500">
-                                      {user.group}
-                                    </div>
-                                  </div>
-                                  {formData.guides.includes(user._id) && (
-                                    <svg
-                                      className="ml-auto w-5 h-5 text-blue-600"
-                                      fill="currentColor"
-                                      viewBox="0 0 20 20"
-                                    >
-                                      <path
-                                        fillRule="evenodd"
-                                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                        clipRule="evenodd"
-                                      />
-                                    </svg>
-                                  )}
-                                </div>
-                              </button>
-                            ))
-                          ) : (
-                            <div className="px-4 py-2 text-gray-500 text-center">
-                              No users found
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setIsGuideDropdownOpen(!isGuideDropdownOpen)
-                      }
-                      className="w-full flex items-center justify-between border rounded-md px-3 py-2 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <span className="text-gray-700">
-                        {selectedGuides.length > 0
-                          ? `${selectedGuides.length} guide${
-                              selectedGuides.length > 1 ? "s" : ""
-                            } selected`
-                          : "Select guides"}
-                      </span>
-                      <svg
-                        className={`w-5 h-5 text-gray-400 transition-transform ${
-                          isGuideDropdownOpen ? "transform rotate-180" : ""
-                        }`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
-                    </button>
-
-                    {/* Selected guides chips */}
-                    {selectedGuides.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {selectedGuides.map((guide) => (
-                          <span
-                            key={guide._id}
-                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
-                          >
-                            {guide.firstName} {guide.lastName}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  guides: prev.guides.filter(
-                                    (id) => id !== guide._id,
-                                  ),
-                                }));
-                                setSelectedGuides((prev) =>
-                                  prev.filter((g) => g._id !== guide._id),
-                                );
-                              }}
-                              className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-green-200"
-                            >
-                              <svg
-                                className="w-3 h-3"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                  d="M6 18L18 6M6 6l12 12"
-                                />
-                              </svg>
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
 

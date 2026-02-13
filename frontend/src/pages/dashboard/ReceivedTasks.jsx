@@ -2232,6 +2232,7 @@ const ReceivedTasks = () => {
         isOpen={showCreateTaskModal}
         onClose={() => setShowCreateTaskModal(false)}
         users={users}
+        selectedUserId={activeTabObj.selectedUserId} // Pass selected user ID
         onSubmit={async (createdTasks) => {
           // Handle successful task creation
           if (
