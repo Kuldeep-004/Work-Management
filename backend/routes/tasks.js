@@ -934,7 +934,7 @@ router.post("/", protect, canAssignTask, async (req, res) => {
 
     // Determine assignedBy based on permissions
     let finalAssignedBy = req.user._id; // Default to current user
-    
+
     if (assignedBy && assignedBy !== req.user._id) {
       // Check if requesting user has permission to set assignedBy to someone else
       if (["Admin", "Team Head"].includes(req.user.role)) {
@@ -948,8 +948,11 @@ router.post("/", protect, canAssignTask, async (req, res) => {
               finalAssignedBy = assignedBy;
             } else if (req.user.userAccessLevel === "Team Only") {
               // Check if assignedBy user is in the same team
-              if (assignedByUser.team && req.user.team && 
-                  assignedByUser.team.toString() === req.user.team.toString()) {
+              if (
+                assignedByUser.team &&
+                req.user.team &&
+                assignedByUser.team.toString() === req.user.team.toString()
+              ) {
                 finalAssignedBy = assignedBy;
               }
             }
@@ -2531,6 +2534,57 @@ router.delete("/:taskId/comments/:commentId", protect, async (req, res) => {
     res.json({ message: "Comment deleted successfully" });
   } catch (error) {
     console.error("Error deleting comment:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Edit a comment
+router.put("/:taskId/comments/:commentId", protect, async (req, res) => {
+  try {
+    const { content, mentions } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: "Comment content is required" });
+    }
+
+    const task = await Task.findById(req.params.taskId);
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    const comment = task.comments.id(req.params.commentId);
+    if (!comment) {
+      return res.status(404).json({ message: "Comment not found" });
+    }
+
+    // Check if user owns the comment
+    if (comment.createdBy.toString() !== req.user._id.toString()) {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to edit this comment" });
+    }
+
+    // Only allow editing text comments
+    if (comment.type !== "text") {
+      return res
+        .status(400)
+        .json({ message: "Only text comments can be edited" });
+    }
+
+    // Update the comment
+    comment.content = content.trim();
+    comment.isEdited = true;
+    comment.editedAt = new Date();
+    comment.mentions = mentions || [];
+
+    await task.save();
+
+    // Populate the comment data for response
+    await task.populate("comments.createdBy", "firstName lastName photo");
+
+    res.json(task.comments);
+  } catch (error) {
+    console.error("Error editing comment:", error);
     res.status(500).json({ message: error.message });
   }
 });

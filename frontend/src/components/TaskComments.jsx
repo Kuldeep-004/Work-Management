@@ -7,6 +7,8 @@ import {
   PaperClipIcon,
   XMarkIcon,
   DocumentIcon,
+  PencilIcon,
+  CheckIcon,
 } from "@heroicons/react/24/outline";
 
 const TaskComments = ({ taskId }) => {
@@ -23,6 +25,11 @@ const TaskComments = ({ taskId }) => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
+
+  // Edit comment functionality
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editCommentText, setEditCommentText] = useState("");
+  const [editCommentSaving, setEditCommentSaving] = useState(false);
 
   // Mention functionality
   const [users, setUsers] = useState([]);
@@ -44,11 +51,14 @@ const TaskComments = ({ taskId }) => {
   // Fetch users for mentions
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/users/for-task-assignment`, {
-        headers: {
-          Authorization: `Bearer ${user.token}`,
+      const response = await fetch(
+        `${API_BASE_URL}/api/users/for-task-assignment`,
+        {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+          },
         },
-      });
+      );
       if (response.ok) {
         const data = await response.json();
         setUsers(data);
@@ -649,6 +659,75 @@ const TaskComments = ({ taskId }) => {
     }
   };
 
+  const handleEditComment = (comment) => {
+    if (comment.type !== "text") {
+      toast.error("Only text comments can be edited");
+      return;
+    }
+    setEditingCommentId(comment._id);
+    setEditCommentText(comment.content);
+  };
+
+  const handleSaveEditComment = async (commentId) => {
+    if (!token) {
+      toast.error("Please log in to edit comments");
+      return;
+    }
+
+    if (!editCommentText.trim()) {
+      toast.error("Comment cannot be empty");
+      return;
+    }
+
+    setEditCommentSaving(true);
+
+    try {
+      // Extract mentions from edited comment
+      const mentions = extractMentions(editCommentText);
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/tasks/${taskId}/comments/${commentId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            content: editCommentText,
+            mentions: mentions,
+          }),
+        },
+      );
+
+      if (response.status === 401) {
+        toast.error("Your session has expired. Please log in again.");
+        return;
+      }
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to edit comment");
+      }
+
+      const updatedComments = await response.json();
+      setComments(updatedComments);
+      setEditingCommentId(null);
+      setEditCommentText("");
+      toast.success("Comment updated successfully");
+    } catch (error) {
+      console.error("Error editing comment:", error);
+      toast.error(error.message || "Failed to edit comment");
+    } finally {
+      setEditCommentSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCommentId(null);
+    setEditCommentText("");
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const day = String(date.getDate()).padStart(2, "0");
@@ -884,40 +963,99 @@ const TaskComments = ({ taskId }) => {
                 <div className="flex items-center justify-between">
                   <p className="font-medium">
                     {comment.createdBy.firstName} {comment.createdBy.lastName}
+                    {comment.isEdited && (
+                      <span className="text-xs text-gray-500 ml-1">
+                        (edited)
+                      </span>
+                    )}
                   </p>
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-gray-500">
                       {formatDate(comment.createdAt)}
+                      {comment.isEdited && comment.editedAt && (
+                        <span className="block text-xs text-gray-400">
+                          Last edited: {formatDate(comment.editedAt)}
+                        </span>
+                      )}
                     </span>
                     {user && user._id === comment.createdBy._id && (
-                      <button
-                        onClick={() => handleDeleteComment(comment._id)}
-                        className="text-red-500 hover:text-red-700 text-xs"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex items-center space-x-1">
+                        {comment.type === "text" &&
+                          editingCommentId !== comment._id && (
+                            <button
+                              onClick={() => handleEditComment(comment)}
+                              className="text-blue-500 hover:text-blue-700 text-xs flex items-center"
+                              title="Edit comment"
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                        <button
+                          onClick={() => handleDeleteComment(comment._id)}
+                          className="text-red-500 hover:text-red-700 text-xs"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
                 {comment.type === "text" ? (
-                  <div className="mt-1 text-gray-700">
-                    {parseCommentWithMentions(comment.content).map(
-                      (part, idx) => {
-                        if (part.type === "mention") {
-                          return (
-                            <span
-                              key={idx}
-                              className="bg-blue-100 text-blue-700 px-1 py-0.5 rounded font-medium"
-                              title={`User ID: ${part.userId}`}
-                            >
-                              @{part.name}
-                            </span>
-                          );
-                        }
-                        return <span key={idx}>{part.content}</span>;
-                      },
-                    )}
-                  </div>
+                  editingCommentId === comment._id ? (
+                    <div className="mt-2">
+                      <textarea
+                        value={editCommentText}
+                        onChange={(e) => setEditCommentText(e.target.value)}
+                        className="w-full p-2 border rounded resize-none"
+                        rows="3"
+                        placeholder="Edit your comment..."
+                      />
+                      <div className="flex items-center justify-end space-x-2 mt-2">
+                        <button
+                          onClick={handleCancelEdit}
+                          disabled={editCommentSaving}
+                          className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleSaveEditComment(comment._id)}
+                          disabled={
+                            editCommentSaving || !editCommentText.trim()
+                          }
+                          className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 flex items-center"
+                        >
+                          {editCommentSaving ? (
+                            "Saving..."
+                          ) : (
+                            <>
+                              <CheckIcon className="w-3 h-3 mr-1" />
+                              Save
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-1 text-gray-700">
+                      {parseCommentWithMentions(comment.content).map(
+                        (part, idx) => {
+                          if (part.type === "mention") {
+                            return (
+                              <span
+                                key={idx}
+                                className="bg-blue-100 text-blue-700 px-1 py-0.5 rounded font-medium"
+                                title={`User ID: ${part.userId}`}
+                              >
+                                @{part.name}
+                              </span>
+                            );
+                          }
+                          return <span key={idx}>{part.content}</span>;
+                        },
+                      )}
+                    </div>
+                  )
                 ) : comment.type === "audio" ? (
                   <audio controls className="mt-2 w-full" preload="metadata">
                     {audioSrcs[comment._id] && (

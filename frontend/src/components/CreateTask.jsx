@@ -467,37 +467,37 @@ const CreateTask = ({
     if (mode === "create" && isOpen && loggedInUser) {
       // Only set assignedBy for Admin and Team Head roles
       if (["Admin", "Team Head"].includes(loggedInUser.role)) {
-        let defaultAssignedBy;
+        let defaultAssignedTo;
 
         // If selectedUserId is provided, use that user as default assignedBy
         if (selectedUserId) {
           const selectedUser = users.find((u) => u._id === selectedUserId);
           if (selectedUser) {
-            defaultAssignedBy = selectedUserId;
-            setSelectedAssignedBy(selectedUser);
+            defaultAssignedTo = selectedUserId;
+            setSelectedUsers([selectedUser]);
           } else {
             // Fallback to current user if selected user not found
-            defaultAssignedBy = loggedInUser._id;
-            setSelectedAssignedBy(loggedInUser);
+            defaultAssignedTo = loggedInUser._id;
+            setSelectedUsers([loggedInUser]);
           }
         } else {
           // No user selected, default to current user
-          defaultAssignedBy = loggedInUser._id;
-          setSelectedAssignedBy(loggedInUser);
+          defaultAssignedTo = loggedInUser._id;
+          setSelectedUsers([loggedInUser]);
         }
 
         setFormData((prev) => ({
           ...prev,
-          assignedBy: defaultAssignedBy,
+          assignedTo: defaultAssignedTo,
         }));
-      } else {
+      }
         // For non-admin/team-head roles, always use current user
         setFormData((prev) => ({
           ...prev,
           assignedBy: loggedInUser._id,
         }));
         setSelectedAssignedBy(loggedInUser);
-      }
+      
     }
   }, [mode, isOpen, selectedUserId, users, loggedInUser]);
 
@@ -1711,7 +1711,7 @@ const CreateTask = ({
                       <button
                         type="button"
                         disabled={
-                          ["Admin", "Team Head"].includes(loggedInUser.role)
+                          ["Admin"].includes(loggedInUser.role)
                             ? false
                             : true
                         }
@@ -1725,7 +1725,7 @@ const CreateTask = ({
                             ? `${selectedAssignedBy.firstName} ${selectedAssignedBy.lastName}`
                             : "Select user"}
                         </span>
-                        {["Admin", "Team Head"].includes(loggedInUser.role) ? (
+                        {["Admin"].includes(loggedInUser.role) ? (
                           <svg
                             className={`w-5 h-5 text-gray-400 transition-transform ${
                               isAssignedByDropdownOpen
