@@ -418,7 +418,7 @@ router.post("/test-pcloud", protect, admin, async (req, res) => {
 });
 
 // Test route for daily backup and timesheet email (Admin only)
-router.post("/test-daily-email", async (req, res) => {
+router.post("/test-daily-email", protect, admin, async (req, res) => {
   let backupFilePath = null;
   let timesheetFilePath = null;
 
