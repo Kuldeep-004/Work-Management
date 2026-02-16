@@ -1,12 +1,24 @@
-import cron from 'node-cron';
-import Automation from './models/Automation.js';
-import Task from './models/Task.js';
-import { sendTimesheetReminder } from './utils/pushNotificationService.js';
-import { createAndUploadBackup, logBackupActivity } from './utils/backupUtils.js';
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
+import cron from "node-cron";
+import Automation from "./models/Automation.js";
+import Task from "./models/Task.js";
+import User from "./models/User.js";
+import { sendTimesheetReminder } from "./utils/pushNotificationService.js";
+import {
+  createAndUploadBackup,
+  logBackupActivity,
+  createLocalBackup,
+} from "./utils/backupUtils.js";
+import {
+  generateTimesheetPDF,
+  getPreviousWorkingDay,
+  cleanupOldReports,
+} from "./utils/timesheetReportUtils.js";
+import { sendDailyBackupEmail } from "./utils/emailUtils.js";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import fs from "fs";
 dotenv.config();
-import { DateTime } from 'luxon';
+import { DateTime } from "luxon";
 
 // Connect to MongoDB if not already connected
 if (mongoose.connection.readyState === 0) {
@@ -17,161 +29,334 @@ if (mongoose.connection.readyState === 0) {
 }
 
 // Run every 5 minutes
-cron.schedule('*/5 * * * *', async () => {
+cron.schedule("*/5 * * * *", async () => {
   await runAutomationCheck(false);
 });
 
 // Run timesheet reminders every hour between 10 AM to 7 PM (Monday to Friday)
-cron.schedule('0 10-19 * * 1-5', async () => {
+cron.schedule("0 10-19 * * 1-5", async () => {
   try {
     const result = await sendTimesheetReminder();
   } catch (error) {
-    console.error('[TimesheetScheduler] Error sending timesheet reminders:', error);
+    console.error(
+      "[TimesheetScheduler] Error sending timesheet reminders:",
+      error,
+    );
   }
 });
 
 // Run database backup daily at 9:00 AM IST
-cron.schedule('0 9 * * *', async () => {
+cron.schedule(
+  "0 9 * * *",
+  async () => {
+    try {
+      const result = await createAndUploadBackup();
+      await logBackupActivity(result, null, "system");
+    } catch (error) {
+      await logBackupActivity(null, error, "system");
+      console.error("[BackupScheduler] Daily backup failed:", error.message);
+    }
+  },
+  {
+    timezone: "Asia/Kolkata",
+  },
+);
+
+// Run daily backup and timesheet email at 11:00 AM IST (Monday to Saturday - skip Sunday)
+cron.schedule(
+  "0 11 * * 1-6",
+  async () => {
+    await sendDailyBackupAndTimesheetsEmail();
+  },
+  {
+    timezone: "Asia/Kolkata",
+  },
+);
+
+/**
+ * Send daily backup and timesheets email to all admin users
+ */
+const sendDailyBackupAndTimesheetsEmail = async () => {
+  console.log(
+    "[DailyEmailScheduler] Starting daily backup and timesheets email process...",
+  );
+
+  let backupFilePath = null;
+  let timesheetFilePath = null;
+
   try {
-    const result = await createAndUploadBackup();
-    await logBackupActivity(result, null, 'system');
+    // 1. Get all admin users
+    const adminUsers = await User.find({
+      role: "Admin",
+      status: "approved",
+      isEmailVerified: true,
+    }).select("email firstName lastName");
+
+    if (adminUsers.length === 0) {
+      console.log(
+        "[DailyEmailScheduler] No admin users found. Skipping email.",
+      );
+      return;
+    }
+
+    const adminEmails = adminUsers.map((user) => user.email);
+    console.log(`[DailyEmailScheduler] Found ${adminUsers.length} admin users`);
+
+    // 2. Create local backup for email attachment
+    console.log("[DailyEmailScheduler] Creating local backup...");
+    try {
+      backupFilePath = await createLocalBackup();
+    } catch (backupError) {
+      console.error(
+        "[DailyEmailScheduler] Failed to create backup:",
+        backupError.message,
+      );
+      // Continue anyway to send timesheets if backup fails
+    }
+
+    // 3. Generate timesheets report for previous working day
+    console.log("[DailyEmailScheduler] Generating timesheets report...");
+    const previousWorkingDay = getPreviousWorkingDay();
+    console.log(
+      `[DailyEmailScheduler] Generating report for: ${previousWorkingDay.toISOString().split("T")[0]}`,
+    );
+
+    try {
+      timesheetFilePath = await generateTimesheetPDF(previousWorkingDay);
+      if (!timesheetFilePath) {
+        console.log(
+          "[DailyEmailScheduler] No timesheets found for the previous working day",
+        );
+      }
+    } catch (timesheetError) {
+      console.error(
+        "[DailyEmailScheduler] Failed to generate timesheet report:",
+        timesheetError.message,
+      );
+      // Continue anyway to send backup if timesheets fail
+    }
+
+    // 4. Send email only if we have at least one attachment
+    if (backupFilePath || timesheetFilePath) {
+      console.log("[DailyEmailScheduler] Sending email to admins...");
+      await sendDailyBackupEmail(
+        adminEmails,
+        backupFilePath,
+        timesheetFilePath,
+        new Date(),
+        previousWorkingDay,
+      );
+      console.log("[DailyEmailScheduler] Email sent successfully!");
+    } else {
+      console.log("[DailyEmailScheduler] No files to send. Skipping email.");
+    }
+
+    // 5. Clean up temporary files
+    console.log("[DailyEmailScheduler] Cleaning up temporary files...");
+    if (backupFilePath && fs.existsSync(backupFilePath)) {
+      try {
+        fs.unlinkSync(backupFilePath);
+        console.log("[DailyEmailScheduler] Backup file cleaned up");
+      } catch (cleanupError) {
+        console.warn(
+          "[DailyEmailScheduler] Warning: Could not clean up backup file:",
+          cleanupError.message,
+        );
+      }
+    }
+
+    if (timesheetFilePath && fs.existsSync(timesheetFilePath)) {
+      try {
+        fs.unlinkSync(timesheetFilePath);
+        console.log("[DailyEmailScheduler] Timesheet file cleaned up");
+      } catch (cleanupError) {
+        console.warn(
+          "[DailyEmailScheduler] Warning: Could not clean up timesheet file:",
+          cleanupError.message,
+        );
+      }
+    }
+
+    // 6. Clean up old report files
+    cleanupOldReports();
+
+    console.log(
+      "[DailyEmailScheduler] Daily backup and timesheets email process completed successfully!",
+    );
   } catch (error) {
-    await logBackupActivity(null, error, 'system');
-    console.error('[BackupScheduler] Daily backup failed:', error.message);
+    console.error(
+      "[DailyEmailScheduler] Fatal error in daily email process:",
+      error.message,
+    );
+    console.error("[DailyEmailScheduler] Stack trace:", error.stack);
+
+    // Ensure cleanup of temporary files even on error
+    try {
+      if (backupFilePath && fs.existsSync(backupFilePath)) {
+        fs.unlinkSync(backupFilePath);
+      }
+      if (timesheetFilePath && fs.existsSync(timesheetFilePath)) {
+        fs.unlinkSync(timesheetFilePath);
+      }
+    } catch (cleanupError) {
+      console.warn(
+        "[DailyEmailScheduler] Warning: Error during cleanup:",
+        cleanupError.message,
+      );
+    }
   }
-}, {
-  timezone: 'Asia/Kolkata'
-});
+};
+
+// Export for manual testing if needed
+export const sendDailyEmailManually = sendDailyBackupAndTimesheetsEmail;
 
 // Function to check and process automations
 export const runAutomationCheck = async (isManual = true) => {
   // Use IST timezone for all date/time operations
-  const now = DateTime.now().setZone('Asia/Kolkata');
+  const now = DateTime.now().setZone("Asia/Kolkata");
   const dayOfMonth = now.day;
   const currentHour = now.hour;
   const currentMinute = now.minute;
-  const currentTimeString = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+  const currentTimeString = `${currentHour.toString().padStart(2, "0")}:${currentMinute.toString().padStart(2, "0")}`;
 
   if (isManual) {
   }
-  
+
   try {
     // Get automations that trigger on day of month and haven't run this month
-  const currentMonth = now.month - 1; // JS Date months are 0-indexed, luxon months are 1-indexed
-  const currentYear = now.year;
-    
+    const currentMonth = now.month - 1; // JS Date months are 0-indexed, luxon months are 1-indexed
+    const currentYear = now.year;
+
     // NEW APPROACH: Get all automations for the trigger types and check templates individually
-    const monthlyAutomations = await Automation.find({ 
-      triggerType: 'dayOfMonth',
+    const monthlyAutomations = await Automation.find({
+      triggerType: "dayOfMonth",
       dayOfMonth: dayOfMonth,
-      'taskTemplate.verificationStatus': 'completed' // Only get automations with approved templates
+      "taskTemplate.verificationStatus": "completed", // Only get automations with approved templates
     });
-    
+
     // Get quarterly automations for the current day and month (if applicable)
     const quarterlyAutomations = await Automation.find({
-      triggerType: 'quarterly',
+      triggerType: "quarterly",
       dayOfMonth: dayOfMonth,
       quarterlyMonths: currentMonth + 1, // Convert to 1-indexed for comparison
-      'taskTemplate.verificationStatus': 'completed'
+      "taskTemplate.verificationStatus": "completed",
     });
-    
+
     // Get half-yearly automations for the current day and month (if applicable)
     const halfYearlyAutomations = await Automation.find({
-      triggerType: 'halfYearly',
+      triggerType: "halfYearly",
       dayOfMonth: dayOfMonth,
       halfYearlyMonths: currentMonth + 1, // Convert to 1-indexed for comparison
-      'taskTemplate.verificationStatus': 'completed'
+      "taskTemplate.verificationStatus": "completed",
     });
-    
+
     // Get yearly automations for the current day and month (if applicable)
     const yearlyAutomations = await Automation.find({
-      triggerType: 'yearly',
+      triggerType: "yearly",
       dayOfMonth: dayOfMonth,
       monthOfYear: currentMonth + 1, // Convert to 1-indexed for storage
-      'taskTemplate.verificationStatus': 'completed'
+      "taskTemplate.verificationStatus": "completed",
     });
-    
+
     // Get automations that trigger on specific date and time
-  const todayStart = now.startOf('day').toJSDate();
-  const todayEnd = now.endOf('day').toJSDate();
-    
+    const todayStart = now.startOf("day").toJSDate();
+    const todayEnd = now.endOf("day").toJSDate();
+
     // Find dateTime automations that should run now
     const dateTimeAutomations = await Automation.find({
-      triggerType: 'dateAndTime',
+      triggerType: "dateAndTime",
       specificDate: {
         $gte: todayStart,
-        $lte: todayEnd
+        $lte: todayEnd,
       },
       specificTime: {
-        $lte: currentTimeString
-      }
+        $lte: currentTimeString,
+      },
     });
-    
+
     // Also find any past date automations that may have been missed
     const missedAutomations = await Automation.find({
-      triggerType: 'dateAndTime',
+      triggerType: "dateAndTime",
       specificDate: {
-        $lt: todayStart
-      }
+        $lt: todayStart,
+      },
     });
-    
+
     const automations = [
-      ...monthlyAutomations, 
+      ...monthlyAutomations,
       ...quarterlyAutomations,
       ...halfYearlyAutomations,
       ...yearlyAutomations,
       ...dateTimeAutomations,
-      ...missedAutomations
+      ...missedAutomations,
     ];
-    
+
     // Check if there are any monthly automations that we're skipping because they already ran this month
     const allMonthlyAutomationsToday = await Automation.find({
-      triggerType: 'dayOfMonth',
-      dayOfMonth: dayOfMonth
+      triggerType: "dayOfMonth",
+      dayOfMonth: dayOfMonth,
     });
-    
-    const skippedAutomationsCount = allMonthlyAutomationsToday.length - monthlyAutomations.length;
-    
+
+    const skippedAutomationsCount =
+      allMonthlyAutomationsToday.length - monthlyAutomations.length;
+
     if (!isManual) {
     } else {
     }
-    
+
     let processedCount = 0;
-    
+
     for (const automation of automations) {
       // Skip if no task templates are defined
-      if (!automation.taskTemplate || !Array.isArray(automation.taskTemplate) || automation.taskTemplate.length === 0) {
-        console.warn(`[AutomationScheduler] Skipping automation ${automation._id}: no task templates defined.`);
+      if (
+        !automation.taskTemplate ||
+        !Array.isArray(automation.taskTemplate) ||
+        automation.taskTemplate.length === 0
+      ) {
+        console.warn(
+          `[AutomationScheduler] Skipping automation ${automation._id}: no task templates defined.`,
+        );
         continue;
       }
-      
+
       let totalTasksCreated = 0;
-      
+
       // Process each task template individually - check each template's execution status
       for (const template of automation.taskTemplate) {
         // Skip templates that haven't been approved yet
-        if (!template.verificationStatus || template.verificationStatus !== 'completed') {
-          console.warn(`[AutomationScheduler] Skipping template "${template.title}" in automation ${automation._id}: template not approved yet (status: ${template.verificationStatus || 'undefined'}).`);
+        if (
+          !template.verificationStatus ||
+          template.verificationStatus !== "completed"
+        ) {
+          console.warn(
+            `[AutomationScheduler] Skipping template "${template.title}" in automation ${automation._id}: template not approved yet (status: ${template.verificationStatus || "undefined"}).`,
+          );
           continue;
         }
-        
+
         // NEW: Check if this specific template has already been processed this period
         const shouldSkipTemplate = (() => {
-          if (['dayOfMonth', 'quarterly', 'halfYearly'].includes(automation.triggerType)) {
+          if (
+            ["dayOfMonth", "quarterly", "halfYearly"].includes(
+              automation.triggerType,
+            )
+          ) {
             // For monthly/quarterly/half-yearly: check if processed this month
-            return template.lastProcessedMonth === currentMonth && template.lastProcessedYear === currentYear;
-          } else if (automation.triggerType === 'yearly') {
+            return (
+              template.lastProcessedMonth === currentMonth &&
+              template.lastProcessedYear === currentYear
+            );
+          } else if (automation.triggerType === "yearly") {
             // For yearly: check if processed this year
             return template.lastProcessedYear === currentYear;
           }
           return false; // For dateAndTime, always process
         })();
-        
+
         if (shouldSkipTemplate) {
           continue;
         }
-        
-        
+
         const {
           title,
           description,
@@ -186,11 +371,21 @@ export const runAutomationCheck = async (isManual = true) => {
           inwardEntryTime,
           dueDate,
           targetDate,
-          billed
+          billed,
         } = template || {};
-        
-        if (!title || !clientName || !clientGroup || !workType || !assignedTo || !priority || !inwardEntryDate) {
-          console.warn(`[AutomationScheduler] Skipping template in automation ${automation._id}: missing required fields.`);
+
+        if (
+          !title ||
+          !clientName ||
+          !clientGroup ||
+          !workType ||
+          !assignedTo ||
+          !priority ||
+          !inwardEntryDate
+        ) {
+          console.warn(
+            `[AutomationScheduler] Skipping template in automation ${automation._id}: missing required fields.`,
+          );
           continue;
         }
 
@@ -199,62 +394,75 @@ export const runAutomationCheck = async (isManual = true) => {
           // Always parse as IST
           combinedInwardEntryDate = DateTime.fromFormat(
             `${inwardEntryDate} ${inwardEntryTime}`,
-            'yyyy-MM-dd HH:mm',
-            { zone: 'Asia/Kolkata' }
+            "yyyy-MM-dd HH:mm",
+            { zone: "Asia/Kolkata" },
           ).toJSDate();
         } else if (inwardEntryDate) {
           combinedInwardEntryDate = DateTime.fromFormat(
             inwardEntryDate,
-            'yyyy-MM-dd',
-            { zone: 'Asia/Kolkata' }
+            "yyyy-MM-dd",
+            { zone: "Asia/Kolkata" },
           ).toJSDate();
         }
-        
+
         // Ensure assignedTo is always an array
-        let assignedToArray = Array.isArray(assignedTo) ? assignedTo : [assignedTo];
-        
+        let assignedToArray = Array.isArray(assignedTo)
+          ? assignedTo
+          : [assignedTo];
+
         // Filter out null, undefined or empty strings
-        assignedToArray = assignedToArray.filter(id => id && String(id).trim() !== '');
-        
+        assignedToArray = assignedToArray.filter(
+          (id) => id && String(id).trim() !== "",
+        );
+
         // Log all assignedTo IDs for debugging
-        
+
         // FIXED: Correctly check for valid MongoDB ObjectIds
         const validIds = [];
         const invalidIds = [];
-        
+
         for (const id of assignedToArray) {
           // The correct way to check for valid ObjectIds
           if (mongoose.Types.ObjectId.isValid(id)) {
             validIds.push(id);
           } else {
             invalidIds.push(id);
-            console.error(`[AutomationScheduler] Invalid assignedTo ID format: ${id}`);
+            console.error(
+              `[AutomationScheduler] Invalid assignedTo ID format: ${id}`,
+            );
           }
         }
-        
+
         // Replace the array with only valid IDs
         assignedToArray = validIds;
-        
+
         if (invalidIds.length > 0) {
-          console.error(`[AutomationScheduler] ${invalidIds.length} invalid assignedTo IDs in automation ${automation._id}, template "${title}"`);
+          console.error(
+            `[AutomationScheduler] ${invalidIds.length} invalid assignedTo IDs in automation ${automation._id}, template "${title}"`,
+          );
         }
-        
+
         if (assignedToArray.length === 0) {
-          console.error(`[AutomationScheduler] No valid assignedTo IDs for template "${title}" in automation ${automation._id} - SKIPPING TASK CREATION`);
+          console.error(
+            `[AutomationScheduler] No valid assignedTo IDs for template "${title}" in automation ${automation._id} - SKIPPING TASK CREATION`,
+          );
           continue;
         } else {
         }
-        
+
         let templateCreatedCount = 0;
         for (let userId of assignedToArray) {
           try {
             const objectId = new mongoose.Types.ObjectId(userId);
             userId = objectId;
           } catch (err) {
-            console.error(`[AutomationScheduler] Failed to convert assignedTo ID to ObjectId: ${userId}`, err);
+            console.error(
+              `[AutomationScheduler] Failed to convert assignedTo ID to ObjectId: ${userId}`,
+              err,
+            );
             continue;
           }
-          
+
           // Use template's assignedBy if available, otherwise fall back to automation.createdBy
           let assignedById = assignedBy || automation.createdBy;
           if (assignedById) {
@@ -262,15 +470,20 @@ export const runAutomationCheck = async (isManual = true) => {
               if (mongoose.Types.ObjectId.isValid(assignedById)) {
                 assignedById = new mongoose.Types.ObjectId(assignedById);
               } else {
-                console.warn(`[AutomationScheduler] Invalid assignedBy ID: ${assignedById}`);
+                console.warn(
+                  `[AutomationScheduler] Invalid assignedBy ID: ${assignedById}`,
+                );
                 assignedById = undefined;
               }
             } catch (err) {
-              console.warn(`[AutomationScheduler] Invalid assignedBy ID: ${assignedById}`, err);
+              console.warn(
+                `[AutomationScheduler] Invalid assignedBy ID: ${assignedById}`,
+                err,
+              );
               assignedById = undefined;
             }
           }
-          
+
           const task = new Task({
             title,
             description,
@@ -280,20 +493,32 @@ export const runAutomationCheck = async (isManual = true) => {
             assignedTo: userId,
             assignedBy: assignedById,
             priority,
-            status: status || 'yet_to_start', // Use template status or default
+            status: status || "yet_to_start", // Use template status or default
             inwardEntryDate: combinedInwardEntryDate || now.toJSDate(),
             // Only include dueDate and targetDate if they were specified in the template
-            ...(dueDate ? { dueDate: DateTime.fromFormat(dueDate, 'yyyy-MM-dd', { zone: 'Asia/Kolkata' }).toJSDate() } : {}),
-            ...(targetDate ? { targetDate: DateTime.fromFormat(targetDate, 'yyyy-MM-dd', { zone: 'Asia/Kolkata' }).toJSDate() } : {}),
+            ...(dueDate
+              ? {
+                  dueDate: DateTime.fromFormat(dueDate, "yyyy-MM-dd", {
+                    zone: "Asia/Kolkata",
+                  }).toJSDate(),
+                }
+              : {}),
+            ...(targetDate
+              ? {
+                  targetDate: DateTime.fromFormat(targetDate, "yyyy-MM-dd", {
+                    zone: "Asia/Kolkata",
+                  }).toJSDate(),
+                }
+              : {}),
             billed: billed !== undefined ? billed : true,
             selfVerification: false,
-            verificationStatus: 'completed'
+            verificationStatus: "completed",
             // Deliberately excluding verification fields:
             // - verificationAssignedTo, secondVerificationAssignedTo, etc.
             // - comments, files arrays (automation creates fresh tasks)
             // - guides and other verification-related fields
           });
-          
+
           try {
             const savedTask = await task.save();
             if (savedTask) {
@@ -301,57 +526,72 @@ export const runAutomationCheck = async (isManual = true) => {
               templateCreatedCount++;
             }
           } catch (err) {
-            console.error(`[AutomationScheduler] Automation task creation error for automation ${automation._id}:`, err);
+            console.error(
+              `[AutomationScheduler] Automation task creation error for automation ${automation._id}:`,
+              err,
+            );
           }
         }
-        
+
         totalTasksCreated += templateCreatedCount;
-        
+
         // NEW: Update this template's execution tracking if tasks were created
         if (templateCreatedCount > 0) {
           // Update the template's execution tracking fields
-          if (['dayOfMonth', 'quarterly', 'halfYearly'].includes(automation.triggerType)) {
+          if (
+            ["dayOfMonth", "quarterly", "halfYearly"].includes(
+              automation.triggerType,
+            )
+          ) {
             template.lastProcessedMonth = currentMonth;
             template.lastProcessedYear = currentYear;
             template.lastProcessedDate = now;
-          } else if (automation.triggerType === 'yearly') {
+          } else if (automation.triggerType === "yearly") {
             template.lastProcessedYear = currentYear;
             template.lastProcessedDate = now;
           }
-          
+
           // Track created task IDs for this template
           if (!template.createdTaskIds) {
             template.createdTaskIds = [];
           }
-          template.createdTaskIds.push(...automation.tasks.slice(-templateCreatedCount));
+          template.createdTaskIds.push(
+            ...automation.tasks.slice(-templateCreatedCount),
+          );
         }
       }
-      
-      // For recurring automations (dayOfMonth, quarterly, halfYearly, yearly), 
+
+      // For recurring automations (dayOfMonth, quarterly, halfYearly, yearly),
       // update lastRunDate and save for next run ONLY if tasks were actually created
-      if (['dayOfMonth', 'quarterly', 'halfYearly', 'yearly'].includes(automation.triggerType) || !automation.triggerType) {
+      if (
+        ["dayOfMonth", "quarterly", "halfYearly", "yearly"].includes(
+          automation.triggerType,
+        ) ||
+        !automation.triggerType
+      ) {
         // Count how many approved templates this automation has
-        const approvedTemplateCount = automation.taskTemplate.filter(template => 
-          template.verificationStatus === 'completed'
+        const approvedTemplateCount = automation.taskTemplate.filter(
+          (template) => template.verificationStatus === "completed",
         ).length;
-        
+
         // Debug logging to see what's happening
-        
+
         if (totalTasksCreated > 0) {
           // Update the lastRunDate, lastRunMonth, and lastRunYear to track when it was executed
           automation.lastRunDate = now.toJSDate();
           automation.lastRunMonth = now.month - 1;
           automation.lastRunYear = now.year;
-          
+
           // Ensure nested template changes are saved (Mongoose needs this for nested arrays)
-          automation.markModified('taskTemplate');
+          automation.markModified("taskTemplate");
           await automation.save();
-          
-          let nextRunInfo = 'next month';
-          if (automation.triggerType === 'quarterly') nextRunInfo = 'next quarter';
-          if (automation.triggerType === 'halfYearly') nextRunInfo = 'in 6 months';
-          if (automation.triggerType === 'yearly') nextRunInfo = 'next year';
-          
+
+          let nextRunInfo = "next month";
+          if (automation.triggerType === "quarterly")
+            nextRunInfo = "next quarter";
+          if (automation.triggerType === "halfYearly")
+            nextRunInfo = "in 6 months";
+          if (automation.triggerType === "yearly") nextRunInfo = "next year";
         } else if (approvedTemplateCount === 0) {
           // No approved templates at all - don't mark as run, will try again next run
         } else {
@@ -359,36 +599,35 @@ export const runAutomationCheck = async (isManual = true) => {
           automation.lastRunDate = now.toJSDate();
           automation.lastRunMonth = now.month - 1;
           automation.lastRunYear = now.year;
-          
+
           // Ensure nested template changes are saved even if no tasks created
-          automation.markModified('taskTemplate');
+          automation.markModified("taskTemplate");
           await automation.save();
-          
         }
-      } 
+      }
       // For dateAndTime automations, delete them after execution since they're one-time
-      else if (automation.triggerType === 'dateAndTime') {
+      else if (automation.triggerType === "dateAndTime") {
         if (totalTasksCreated > 0) {
           // Save template changes before deleting
-          automation.markModified('taskTemplate');
+          automation.markModified("taskTemplate");
           await automation.save();
           await Automation.deleteOne({ _id: automation._id });
           processedCount++;
         } else {
           // Don't delete the automation if no tasks were created, so we can retry
           // But still save any template execution tracking changes
-          automation.markModified('taskTemplate');
+          automation.markModified("taskTemplate");
           await automation.save();
         }
       }
     }
-    
+
     if (!isManual) {
     } else {
       return { success: true, processedCount };
     }
   } catch (err) {
-    console.error('[AutomationScheduler] Error:', err);
+    console.error("[AutomationScheduler] Error:", err);
     if (isManual) {
       return { success: false, error: err.message };
     }
@@ -398,15 +637,19 @@ export const runAutomationCheck = async (isManual = true) => {
 // Function to reset monthly automation run status (useful for testing or fixing issues)
 export const resetMonthlyAutomationStatus = async (automationId = null) => {
   try {
-    const query = automationId ? { _id: automationId } : { triggerType: 'dayOfMonth' };
+    const query = automationId
+      ? { _id: automationId }
+      : { triggerType: "dayOfMonth" };
     const result = await Automation.updateMany(query, {
-      $unset: { lastRunDate: "", lastRunMonth: "", lastRunYear: "" }
+      $unset: { lastRunDate: "", lastRunMonth: "", lastRunYear: "" },
     });
-    
+
     return { success: true, modifiedCount: result.modifiedCount };
   } catch (err) {
-    console.error('[AutomationScheduler] Error resetting automation status:', err);
+    console.error(
+      "[AutomationScheduler] Error resetting automation status:",
+      err,
+    );
     return { success: false, error: err.message };
   }
 };
-
