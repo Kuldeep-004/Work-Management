@@ -1772,7 +1772,13 @@ export const useAdvancedTaskTableLogic = (props) => {
                 ? "workType"
                 : columnOrder.includes("billed") && sortBy === "billed"
                   ? "billed"
-                  : null;
+                  : columnOrder.includes("assignedBy") &&
+                      sortBy === "assignedBy"
+                    ? "assignedBy"
+                    : columnOrder.includes("assignedTo") &&
+                        sortBy === "assignedTo"
+                      ? "assignedTo"
+                      : null;
   const shouldGroup = groupField && sortBy !== "createdAt";
 
   // Helper function to sort tasks based on taskSort
@@ -1857,6 +1863,42 @@ export const useAdvancedTaskTableLogic = (props) => {
       groupedTasks = {};
       orderedTasks.forEach((task) => {
         let key = task.billed ? "Yes" : "No";
+        if (!groupedTasks[key]) groupedTasks[key] = [];
+        groupedTasks[key].push(task);
+      });
+
+      // Apply sorting within each group
+      if (taskSort !== "none") {
+        Object.keys(groupedTasks).forEach((groupKey) => {
+          groupedTasks[groupKey] = sortTasks(groupedTasks[groupKey]);
+        });
+      }
+    } else if (groupField === "assignedBy") {
+      groupedTasks = {};
+      orderedTasks.forEach((task) => {
+        let key = task.assignedBy
+          ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}`
+          : "Unassigned";
+        if (!groupedTasks[key]) groupedTasks[key] = [];
+        groupedTasks[key].push(task);
+      });
+
+      // Apply sorting within each group
+      if (taskSort !== "none") {
+        Object.keys(groupedTasks).forEach((groupKey) => {
+          groupedTasks[groupKey] = sortTasks(groupedTasks[groupKey]);
+        });
+      }
+    } else if (groupField === "assignedTo") {
+      groupedTasks = {};
+      orderedTasks.forEach((task) => {
+        let key = task.assignedTo
+          ? Array.isArray(task.assignedTo)
+            ? task.assignedTo
+                .map((u) => `${u.firstName} ${u.lastName}`)
+                .join(", ")
+            : `${task.assignedTo.firstName} ${task.assignedTo.lastName}`
+          : "Unassigned";
         if (!groupedTasks[key]) groupedTasks[key] = [];
         groupedTasks[key].push(task);
       });
@@ -2083,6 +2125,18 @@ export const useAdvancedTaskTableLogic = (props) => {
         ? task.workType[0] || "Unspecified"
         : task.workType || "Unspecified";
     if (groupField === "billed") return task.billed ? "Yes" : "No";
+    if (groupField === "assignedBy")
+      return task.assignedBy
+        ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}`
+        : "Unassigned";
+    if (groupField === "assignedTo")
+      return task.assignedTo
+        ? Array.isArray(task.assignedTo)
+          ? task.assignedTo
+              .map((u) => `${u.firstName} ${u.lastName}`)
+              .join(", ")
+          : `${task.assignedTo.firstName} ${task.assignedTo.lastName}`
+        : "Unassigned";
     return task[groupField];
   };
 

@@ -84,7 +84,7 @@ const io = new Server(server, {
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: true,
     credentials: true,
   }),
 );

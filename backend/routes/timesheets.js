@@ -526,6 +526,7 @@ router.delete("/entry/:entryId", protect, async (req, res) => {
 // Get subordinates' timesheets based on user role hierarchy
 router.get("/subordinates", protect, async (req, res) => {
   try {
+    console.log("first")
     // Check if user is Admin, TimeSheet Verifier, or Team Head
     let isTimeSheetVerifier = false;
     if (Array.isArray(req.user.role2)) {
@@ -542,11 +543,11 @@ router.get("/subordinates", protect, async (req, res) => {
     let query = { status: { $ne: "rejected" } };
     let subordinates;
     // Filtering logic for Team Head
-    if (isTeamHead) {
+    if (isTeamHead || req.user.role === "Admin") {
       if (!req.user.team) {
         return res
-          .status(400)
-          .json({ message: "Team Head user does not have a team assigned" });
+        .status(400)
+        .json({ message: "Team Head user does not have a team assigned" });
       }
       // All users in the same team (including self for Team Head, only approved, exclude deleted)
       subordinates = await User.find({

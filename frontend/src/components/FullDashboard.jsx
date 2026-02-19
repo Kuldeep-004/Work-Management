@@ -276,15 +276,15 @@ const FullDashboard = () => {
           // Only reset groupOrder when FIRST enabling priority grouping (changing from non-priority to priority)
           // Don't reset if already grouped by priority or if user has custom group order
           if (patch.sortBy === "priority" && tab.sortBy !== "priority") {
-              // Build group order using database priorities
-              let groupOrder = priorities
-                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                .map((p) => p.name);
-              newTab.groupOrder = groupOrder;
-              newTab.taskOrder=[];
-            } else if(patch.sortBy!=tab.sortBy){
-              newTab.groupOrder=[];
-              newTab.taskOrder=[];
+            // Build group order using database priorities
+            let groupOrder = priorities
+              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+              .map((p) => p.name);
+            newTab.groupOrder = groupOrder;
+            newTab.taskOrder = [];
+          } else if (patch.sortBy != tab.sortBy) {
+            newTab.groupOrder = [];
+            newTab.taskOrder = [];
           }
           if (patch.visibleColumns) {
             // Remove hidden columns from order, add new visible columns at the end
@@ -908,6 +908,28 @@ const FullDashboard = () => {
           if (aValue > bValue)
             return activeTabObj.sortOrder === "desc" ? 1 : -1;
           return 0;
+        } else if (activeTabObj.sortBy === "assignedBy") {
+          aValue = a.assignedBy
+            ? `${a.assignedBy.firstName} ${a.assignedBy.lastName}`
+            : "";
+          bValue = b.assignedBy
+            ? `${b.assignedBy.firstName} ${b.assignedBy.lastName}`
+            : "";
+        } else if (activeTabObj.sortBy === "assignedTo") {
+          aValue = a.assignedTo
+            ? Array.isArray(a.assignedTo)
+              ? a.assignedTo
+                  .map((u) => `${u.firstName} ${u.lastName}`)
+                  .join(", ")
+              : `${a.assignedTo.firstName} ${a.assignedTo.lastName}`
+            : "";
+          bValue = b.assignedTo
+            ? Array.isArray(b.assignedTo)
+              ? b.assignedTo
+                  .map((u) => `${u.firstName} ${u.lastName}`)
+                  .join(", ")
+              : `${b.assignedTo.firstName} ${b.assignedTo.lastName}`
+            : "";
         }
 
         if (aValue < bValue) return activeTabObj.sortOrder === "asc" ? -1 : 1;
@@ -1541,6 +1563,20 @@ const FullDashboard = () => {
             break;
           case "billed":
             groupKey = task.billed ? "Yes" : "No";
+            break;
+          case "assignedBy":
+            groupKey = task.assignedBy
+              ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}`
+              : "Unassigned";
+            break;
+          case "assignedTo":
+            groupKey = task.assignedTo
+              ? Array.isArray(task.assignedTo)
+                ? task.assignedTo
+                    .map((u) => `${u.firstName} ${u.lastName}`)
+                    .join(", ")
+                : `${task.assignedTo.firstName} ${task.assignedTo.lastName}`
+              : "Unassigned";
             break;
           default:
             groupKey = task[groupBy] || "Unassigned";
@@ -2846,6 +2882,24 @@ const FullDashboard = () => {
                   >
                     Internal Works
                   </button>
+                  <button
+                    className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === "assignedBy" ? "bg-blue-100 text-blue-800 font-semibold" : "hover:bg-blue-50 text-gray-700"}`}
+                    onClick={() => {
+                      updateActiveTab({ sortBy: "assignedBy" });
+                      setShowGroupByDropdown(false);
+                    }}
+                  >
+                    Assigned By
+                  </button>
+                  <button
+                    className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === "assignedTo" ? "bg-blue-100 text-blue-800 font-semibold" : "hover:bg-blue-50 text-gray-700"}`}
+                    onClick={() => {
+                      updateActiveTab({ sortBy: "assignedTo" });
+                      setShowGroupByDropdown(false);
+                    }}
+                  >
+                    Assigned To
+                  </button>
                 </div>
               )}
             </div>
@@ -3287,6 +3341,24 @@ const FullDashboard = () => {
                   }}
                 >
                   Internal Works
+                </button>
+                <button
+                  className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === "assignedBy" ? "bg-blue-100 text-blue-800 font-semibold" : "hover:bg-blue-50 text-gray-700"}`}
+                  onClick={() => {
+                    updateActiveTab({ sortBy: "assignedBy" });
+                    setShowGroupByDropdown(false);
+                  }}
+                >
+                  Assigned By
+                </button>
+                <button
+                  className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === "assignedTo" ? "bg-blue-100 text-blue-800 font-semibold" : "hover:bg-blue-50 text-gray-700"}`}
+                  onClick={() => {
+                    updateActiveTab({ sortBy: "assignedTo" });
+                    setShowGroupByDropdown(false);
+                  }}
+                >
+                  Assigned To
                 </button>
               </div>
             )}

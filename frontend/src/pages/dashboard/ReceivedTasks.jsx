@@ -223,16 +223,16 @@ const ReceivedTasks = () => {
         // Don't reset if already grouped by priority or if user has custom group order
         if (patch.sortBy === "priority" && tab.sortBy !== "priority") {
           // Only reset if there's no saved groupOrder for this tab
-            // Build group order using database priorities
-            let groupOrder = priorities
-              .sort((a, b) => (a.order || 0) - (b.order || 0))
-              .map((p) => p.name);
-            newTab.groupOrder = groupOrder;
-            newTab.taskOrder=[];
-          }else if(patch.sortBy!=tab.sortBy){
-            newTab.groupOrder=[];
-            newTab.taskOrder=[];
-          }
+          // Build group order using database priorities
+          let groupOrder = priorities
+            .sort((a, b) => (a.order || 0) - (b.order || 0))
+            .map((p) => p.name);
+          newTab.groupOrder = groupOrder;
+          newTab.taskOrder = [];
+        } else if (patch.sortBy != tab.sortBy) {
+          newTab.groupOrder = [];
+          newTab.taskOrder = [];
+        }
 
         if (patch.visibleColumns) {
           // Remove hidden columns from order, add new visible columns at the end
@@ -985,6 +985,24 @@ const ReceivedTasks = () => {
         if (aValue < bValue) return activeTabObj.sortOrder === "desc" ? -1 : 1;
         if (aValue > bValue) return activeTabObj.sortOrder === "desc" ? 1 : -1;
         return 0;
+      } else if (activeTabObj.sortBy === "assignedBy") {
+        aValue = a.assignedBy
+          ? `${a.assignedBy.firstName} ${a.assignedBy.lastName}`
+          : "";
+        bValue = b.assignedBy
+          ? `${b.assignedBy.firstName} ${b.assignedBy.lastName}`
+          : "";
+      } else if (activeTabObj.sortBy === "assignedTo") {
+        aValue = a.assignedTo
+          ? Array.isArray(a.assignedTo)
+            ? a.assignedTo.map((u) => `${u.firstName} ${u.lastName}`).join(", ")
+            : `${a.assignedTo.firstName} ${a.assignedTo.lastName}`
+          : "";
+        bValue = b.assignedTo
+          ? Array.isArray(b.assignedTo)
+            ? b.assignedTo.map((u) => `${u.firstName} ${u.lastName}`).join(", ")
+            : `${b.assignedTo.firstName} ${b.assignedTo.lastName}`
+          : "";
       }
       if (aValue < bValue) return activeTabObj.sortOrder === "asc" ? -1 : 1;
       if (aValue > bValue) return activeTabObj.sortOrder === "asc" ? 1 : -1;
@@ -1108,178 +1126,217 @@ const ReceivedTasks = () => {
   // PDF Download Handler
   const handleDownloadPDF = (
     selectedColumns,
-    format,
-    fontSize = 12,
-    fontFamily = "helvetica",
+    fontSize = 10,
+    fontFamily = "tahoma",
   ) => {
     try {
       const filteredTasks = getFilteredAndSortedTasks(tasks);
 
+      // Use portrait orientation like FullDashboard
       const doc = new jsPDF({
-        orientation: "landscape",
+        orientation: "portrait",
         unit: "pt",
         format: "a4",
       });
 
+      // Set font family if available in jsPDF
       try {
         doc.setFont(fontFamily);
       } catch (e) {
-        doc.setFont("helvetica");
+        doc.setFont("helvetica"); // fallback
       }
 
-      const columnsToShow = selectedColumns
-        .map((colId) => {
-          const col = extendedColumns.find((c) => c.id === colId);
-          if (!col) return null;
-          return { dataKey: colId, header: col.label };
-        })
+      // Get selected column definitions
+      const selectedColumnDefs = selectedColumns
+        .map((colId) => extendedColumns.find((col) => col.id === colId))
         .filter(Boolean);
 
-      const rows = filteredTasks.map((task, index) => {
-        const row = { no: index + 1 };
-        selectedColumns.forEach((colId) => {
+      // Add No column at the start
+      const headers = ["No", ...selectedColumnDefs.map((col) => col.label)];
+
+      // Build table data as array of arrays (like FullDashboard)
+      const tableData = [];
+
+      filteredTasks.forEach((task, idx) => {
+        const row = [idx + 1];
+        selectedColumnDefs.forEach((col) => {
           let value = "";
 
-          switch (colId) {
-            case "title":
-              value = task.title || "";
-              break;
-            case "description":
-              value = task.description || "";
-              break;
-            case "clientName":
-              value = task.clientName || "";
-              break;
-            case "clientGroup":
-              value = task.clientGroup || "";
-              break;
-            case "workType":
-              value = task.workType ? task.workType.join(", ") : "";
-              break;
-            case "billed":
-              value = task.billed ? "Yes" : "No";
-              break;
-            case "status":
-              value = task.status || "";
-              break;
-            case "priority":
-              value = task.priority?.name || "";
-              break;
-            case "inwardEntryDate":
-              value = formatDateTime(task.inwardEntryDate);
-              break;
-            case "dueDate":
-              value = formatDate(task.dueDate);
-              break;
-            case "targetDate":
-              value = formatDate(task.targetDate);
-              break;
-            case "assignedBy":
-              value = task.assignedBy
-                ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}`
-                : "";
-              break;
-            case "assignedTo":
-              value = task.assignedTo
-                ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}`
-                : "";
-              break;
-            case "verificationAssignedTo":
-              value = task.verificationAssignedTo
-                ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`
-                : "";
-              break;
-            case "secondVerificationAssignedTo":
-              value = task.secondVerificationAssignedTo
-                ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`
-                : "";
-              break;
-            case "thirdVerificationAssignedTo":
-              value = task.thirdVerificationAssignedTo
-                ? `${task.thirdVerificationAssignedTo.firstName} ${task.thirdVerificationAssignedTo.lastName}`
-                : "";
-              break;
-            case "fourthVerificationAssignedTo":
-              value = task.fourthVerificationAssignedTo
-                ? `${task.fourthVerificationAssignedTo.firstName} ${task.fourthVerificationAssignedTo.lastName}`
-                : "";
-              break;
-            case "fifthVerificationAssignedTo":
-              value = task.fifthVerificationAssignedTo
-                ? `${task.fifthVerificationAssignedTo.firstName} ${task.fifthVerificationAssignedTo.lastName}`
-                : "";
-              break;
-            case "files":
-              value = task.files ? task.files.length.toString() : "0";
-              break;
-            case "comments":
-              value = task.comments ? task.comments.length.toString() : "0";
-              break;
-            case "verification":
-              value = task.verification || "";
-              break;
-            case "selfVerification":
-              value = task.selfVerification || "";
-              break;
-            case "guides":
-              value =
-                task.guides && task.guides.length > 0
+          if (col.isCustom && col.id.startsWith("custom_")) {
+            // Handle custom columns
+            const customColName = col.id.replace("custom_", "");
+            const customCol = customColumns.find(
+              (c) => c.name === customColName,
+            );
+            if (customCol && task.customFields) {
+              const customField = task.customFields[customCol.name];
+              if (customField !== undefined && customField !== null) {
+                value = String(customField);
+              }
+            }
+          } else {
+            switch (col.id) {
+              case "title":
+                value = task.title || "";
+                break;
+              case "description":
+                value = task.description || "";
+                break;
+              case "clientName":
+                value = task.clientName || "";
+                break;
+              case "clientGroup":
+                value = task.clientGroup || "";
+                break;
+              case "workType":
+                value = Array.isArray(task.workType)
+                  ? task.workType.join(", ")
+                  : task.workType || "";
+                break;
+              case "billed":
+                value = task.billed ? "Yes" : "No";
+                break;
+              case "status":
+                value = task.status || "";
+                break;
+              case "priority":
+                value = task.priority?.name || "";
+                break;
+              case "selfVerification":
+                value = task.selfVerification ? "✓" : "✗";
+                break;
+              case "inwardEntryDate":
+                value = task.inwardEntryDate
+                  ? formatDateTime(task.inwardEntryDate)
+                  : "";
+                break;
+              case "dueDate":
+                value = task.dueDate
+                  ? new Date(task.dueDate).toLocaleDateString()
+                  : "";
+                break;
+              case "targetDate":
+                value = task.targetDate
+                  ? new Date(task.targetDate).toLocaleDateString()
+                  : "";
+                break;
+              case "assignedBy":
+                value = task.assignedBy
+                  ? `${task.assignedBy.firstName} ${task.assignedBy.lastName}`
+                  : "";
+                break;
+              case "assignedTo":
+                value = task.assignedTo
+                  ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}`
+                  : "";
+                break;
+              case "verificationAssignedTo":
+                value = task.verificationAssignedTo
+                  ? `${task.verificationAssignedTo.firstName} ${task.verificationAssignedTo.lastName}`
+                  : "";
+                break;
+              case "secondVerificationAssignedTo":
+                value = task.secondVerificationAssignedTo
+                  ? `${task.secondVerificationAssignedTo.firstName} ${task.secondVerificationAssignedTo.lastName}`
+                  : "";
+                break;
+              case "thirdVerificationAssignedTo":
+                value = task.thirdVerificationAssignedTo
+                  ? `${task.thirdVerificationAssignedTo.firstName} ${task.thirdVerificationAssignedTo.lastName}`
+                  : "";
+                break;
+              case "fourthVerificationAssignedTo":
+                value = task.fourthVerificationAssignedTo
+                  ? `${task.fourthVerificationAssignedTo.firstName} ${task.fourthVerificationAssignedTo.lastName}`
+                  : "";
+                break;
+              case "fifthVerificationAssignedTo":
+                value = task.fifthVerificationAssignedTo
+                  ? `${task.fifthVerificationAssignedTo.firstName} ${task.fifthVerificationAssignedTo.lastName}`
+                  : "";
+                break;
+              case "guides":
+                value = task.guides
                   ? task.guides
-                      .map((g) => g.name || g.firstName + " " + g.lastName)
+                      .map((g) => g.name || `${g.firstName} ${g.lastName}`)
                       .join(", ")
                   : "";
-              break;
-            default:
-              // Handle custom columns
-              if (colId.startsWith("custom_")) {
-                const customColName = colId.replace("custom_", "");
-                const customCol = customColumns.find(
-                  (col) => col.name === customColName,
-                );
-                if (customCol && task.customFields) {
-                  const customField = task.customFields[customCol.name];
-                  if (customField !== undefined && customField !== null) {
-                    value = String(customField);
-                  }
-                }
-              }
+                break;
+              case "files":
+                value =
+                  task.files && task.files.length > 0
+                    ? task.files
+                        .map((f) => f.originalName || f.originalname)
+                        .join(", ")
+                    : "";
+                break;
+              case "comments":
+                value = task.comments ? task.comments.length.toString() : "0";
+                break;
+              case "verification":
+                value = task.verification || "";
+                break;
+              default:
+                value = "";
+            }
           }
-          row[colId] = value;
+          row.push(value);
         });
-        return row;
+        tableData.push(row);
       });
 
-      // Add "No" column at the start
-      const headers = [{ dataKey: "no", header: "No" }, ...columnsToShow];
+      // Calculate available width for table
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const marginLeft = 24;
+      const marginRight = 24;
+      const availableWidth = pageWidth - marginLeft - marginRight;
 
-      doc.setFontSize(16);
-      doc.text("Tasks Report", 40, 40);
+      // Calculate widths for columns
+      const noColWidth = 40;
+      let colWidths = selectedColumnDefs.map((col) => col.defaultWidth || 120);
+      let totalWidth = noColWidth + colWidths.reduce((a, b) => a + b, 0);
 
-      autoTable(doc, {
-        columns: headers,
-        body: rows,
-        startY: 70,
+      // If only one data column and there is extra space, expand it to fill
+      if (colWidths.length === 1 && totalWidth < availableWidth) {
+        colWidths[0] = availableWidth - noColWidth;
+        totalWidth = noColWidth + colWidths[0];
+      }
+
+      // If multiple columns and totalWidth < availableWidth, expand last column
+      if (colWidths.length > 1 && totalWidth < availableWidth) {
+        colWidths[colWidths.length - 1] += availableWidth - totalWidth;
+        totalWidth = availableWidth;
+      }
+
+      doc.autoTable({
+        head: [headers],
+        body: tableData,
+        theme: "striped",
+        margin: { left: marginLeft, right: marginRight, top: 40, bottom: 24 },
+        tableWidth: "auto",
+        columnStyles: Object.fromEntries([
+          [0, { cellWidth: noColWidth }],
+          ...colWidths.map((w, idx) => [idx + 1, { cellWidth: w }]),
+        ]),
         styles: {
           fontSize: fontSize,
-          cellPadding: 3,
-          valign: "middle",
-          halign: "left",
           font: fontFamily,
+          cellPadding: 4,
+          overflow: "linebreak",
         },
         headStyles: {
-          fillColor: [66, 139, 202],
-          textColor: [255, 255, 255],
-          fontSize: fontSize,
-          fontStyle: "bold",
+          fontSize: fontSize + 1,
           font: fontFamily,
+          fillColor: [33, 111, 182],
+          textColor: 255,
         },
-        alternateRowStyles: {
-          fillColor: [245, 245, 245],
-        },
-        margin: { top: 60, left: 40, right: 40, bottom: 60 },
-        tableWidth: "auto",
-        columnStyles: {
-          0: { cellWidth: 30 }, // No column
+        didDrawPage: function (data) {
+          doc.setFontSize(8);
+          doc.text(
+            `Page ${doc.internal.getNumberOfPages()}`,
+            data.settings.margin.left,
+            doc.internal.pageSize.height - 10,
+          );
         },
       });
 
@@ -1839,6 +1896,24 @@ const ReceivedTasks = () => {
                   }}
                 >
                   Internal Work
+                </button>
+                <button
+                  className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === "assignedBy" ? "bg-blue-100 text-blue-800 font-semibold" : "hover:bg-blue-50 text-gray-700"}`}
+                  onClick={() => {
+                    updateActiveTab({ sortBy: "assignedBy" });
+                    setShowGroupByDropdown(false);
+                  }}
+                >
+                  Assigned By
+                </button>
+                <button
+                  className={`block w-full text-left px-4 py-2 rounded ${activeTabObj.sortBy === "assignedTo" ? "bg-blue-100 text-blue-800 font-semibold" : "hover:bg-blue-50 text-gray-700"}`}
+                  onClick={() => {
+                    updateActiveTab({ sortBy: "assignedTo" });
+                    setShowGroupByDropdown(false);
+                  }}
+                >
+                  Assigned To
                 </button>
               </div>
             )}
