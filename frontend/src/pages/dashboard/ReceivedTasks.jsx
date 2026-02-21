@@ -23,6 +23,18 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
+// Fixed columns that non-admin users cannot hide or reorder
+// These columns will always appear first and in this specific order for non-admin users
+const FIXED_COLUMNS = [
+  "title", // Client Name & Work In Brief
+  "description", // Status
+  "custom_time", // Time Required
+  "targetDate", // Target Date
+  "dueDate", // Due Date
+  "status", // Task Status
+  "priority", // Priority
+];
+
 // All columns including verification - this will be used for dropdown and column management
 const ALL_COLUMNS = [
   { id: "title", label: "Client Name & Work In Brief" },
@@ -50,10 +62,20 @@ const ALL_COLUMNS = [
   { id: "comments", label: "Comments" },
 ];
 
-const DEFAULT_TAB = (taskType = "execution", customColumns = []) => {
+const DEFAULT_TAB = (
+  taskType = "execution",
+  customColumns = [],
+  isAdmin = false,
+) => {
   const baseColumns = ALL_COLUMNS.map((col) => col.id);
   const customCols = customColumns.map((col) => `custom_${col.name}`);
-  const allColumns = [...baseColumns, ...customCols];
+  let allColumns = [...baseColumns, ...customCols];
+
+  // For non-admin users, ensure fixed columns are first
+  if (!isAdmin) {
+    const otherCols = allColumns.filter((col) => !FIXED_COLUMNS.includes(col));
+    allColumns = [...FIXED_COLUMNS, ...otherCols];
+  }
 
   return {
     id: Date.now(),
@@ -81,6 +103,9 @@ const ReceivedTasks = () => {
   const { user, isAuthenticated } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Check if user is admin
+  const isAdmin = user?.role === "Admin";
 
   // Get highlight task ID and other params from URL
   const searchParams = new URLSearchParams(location.search);
@@ -180,6 +205,29 @@ const ReceivedTasks = () => {
 
   const extendedColumns = getExtendedColumns();
 
+  // Helper function to ensure non-admin users have fixed columns in correct order
+  const ensureFixedColumnsOrder = (visibleCols, columnOrder) => {
+    if (isAdmin) {
+      return { visibleCols, columnOrder };
+    }
+
+    // Ensure all fixed columns are visible
+    const ensuredVisibleCols = [...new Set([...FIXED_COLUMNS, ...visibleCols])];
+
+    // Separate fixed and other columns from the columnOrder
+    const otherColumns = columnOrder.filter(
+      (col) => !FIXED_COLUMNS.includes(col),
+    );
+
+    // Put fixed columns first in their defined order, then other columns
+    const ensuredColumnOrder = [...FIXED_COLUMNS, ...otherColumns];
+
+    return {
+      visibleCols: ensuredVisibleCols,
+      columnOrder: ensuredColumnOrder,
+    };
+  };
+
   // Tab actions
   const addTab = () => {
     const newId = Date.now();
@@ -187,7 +235,7 @@ const ReceivedTasks = () => {
     setTabs([
       ...tabs,
       {
-        ...DEFAULT_TAB(currentTaskType, customColumns),
+        ...DEFAULT_TAB(currentTaskType, customColumns, isAdmin),
         id: newId,
         title: `Tab ${tabs.length + 1}`,
       },
@@ -219,6 +267,16 @@ const ReceivedTasks = () => {
         if (tab.id !== activeTabId) return tab;
         let newTab = { ...tab, ...patch };
 
+        // Ensure fixed columns are properly ordered for non-admin users
+        if (patch.visibleColumns || patch.columnOrder) {
+          const { visibleCols, columnOrder } = ensureFixedColumnsOrder(
+            patch.visibleColumns || tab.visibleColumns,
+            patch.columnOrder || tab.columnOrder,
+          );
+          newTab.visibleColumns = visibleCols;
+          newTab.columnOrder = columnOrder;
+        }
+
         // Only reset groupOrder when FIRST enabling priority grouping (changing from non-priority to priority)
         // Don't reset if already grouped by priority or if user has custom group order
         if (patch.sortBy === "priority" && tab.sortBy !== "priority") {
@@ -234,7 +292,7 @@ const ReceivedTasks = () => {
           newTab.taskOrder = [];
         }
 
-        if (patch.visibleColumns) {
+        if (patch.visibleColumns && !patch.columnOrder) {
           // Remove hidden columns from order, add new visible columns at the end
           const currentOrder =
             newTab.columnOrder || ALL_COLUMNS.map((col) => col.id);
@@ -1770,27 +1828,58 @@ const ReceivedTasks = () => {
                   Show/Hide Columns
                 </div>
                 <div className="max-h-56 overflow-y-auto pr-1 custom-scrollbar">
-                  {extendedColumns.map((col) => (
-                    <label
-                      key={col.id}
-                      className="flex items-center space-x-2 mb-1 cursor-pointer hover:bg-blue-50 rounded px-2 py-1 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={activeTabObj.visibleColumns.includes(col.id)}
-                        onChange={() => {
-                          const cols = activeTabObj.visibleColumns;
-                          updateActiveTab({
-                            visibleColumns: cols.includes(col.id)
-                              ? cols.filter((c) => c !== col.id)
-                              : [...cols, col.id],
-                          });
-                        }}
-                        className="accent-blue-500"
-                      />
-                      <span className="text-gray-800 text-sm">{col.label}</span>
-                    </label>
-                  ))}
+                  {extendedColumns.map((col) => {
+                    const isFixedColumn = FIXED_COLUMNS.includes(col.id);
+                    const isColumnVisible =
+                      activeTabObj.visibleColumns.includes(col.id);
+                    const isDisabled = !isAdmin && isFixedColumn;
+
+                    return (
+                      <label
+                        key={col.id}
+                        className={`flex items-center space-x-2 mb-1 rounded px-2 py-1 transition-colors ${
+                          isDisabled
+                            ? "cursor-not-allowed opacity-60 bg-gray-50"
+                            : "cursor-pointer hover:bg-blue-50"
+                        }`}
+                        title={
+                          isDisabled
+                            ? "This column is fixed and cannot be hidden"
+                            : ""
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isColumnVisible}
+                          onChange={() => {
+                            // Prevent hiding fixed columns for non-admin users
+                            if (!isAdmin && isFixedColumn) {
+                              toast.error(
+                                "This column is fixed and cannot be hidden",
+                              );
+                              return;
+                            }
+                            const cols = activeTabObj.visibleColumns;
+                            updateActiveTab({
+                              visibleColumns: cols.includes(col.id)
+                                ? cols.filter((c) => c !== col.id)
+                                : [...cols, col.id],
+                            });
+                          }}
+                          disabled={isDisabled}
+                          className="accent-blue-500"
+                        />
+                        <span className="text-gray-800 text-sm">
+                          {col.label}
+                          {isDisabled && (
+                            <span className="ml-1 text-xs text-gray-500">
+                              (Fixed)
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -2299,6 +2388,8 @@ const ReceivedTasks = () => {
             tabId={activeTabObj.id}
             tabKey="receivedTasks"
             allColumns={extendedColumns}
+            isAdmin={isAdmin}
+            fixedColumns={FIXED_COLUMNS}
           />
         </div>
       </ErrorBoundary>

@@ -84,6 +84,8 @@ const AdvancedTaskTable = React.memo(
     isAllSelected = false,
     onSelectAll,
     externalTableRef = null,
+    isAdmin = false,
+    fixedColumns = [],
   }) => {
     // Core state
     const [tableWidth, setTableWidth] = useState(0);
@@ -157,6 +159,8 @@ const AdvancedTaskTable = React.memo(
       isAllSelected,
       onSelectAll,
       onEditTask: handleEditTask,
+      isAdmin,
+      fixedColumns,
     });
 
     // Destructure everything we need from logic
@@ -537,10 +541,13 @@ const AdvancedTaskTable = React.memo(
                       const col = ALL_COLUMNS.find((c) => c.id === colId);
                       if (!col) return null;
                       const isLast = idx === arr.length - 1;
+                      const isFixedColumn = fixedColumns.includes(colId);
+                      const isDraggable = isAdmin || !isFixedColumn;
+
                       return (
                         <th
                           key={colId}
-                          className={`px-2 py-1 text-left text-sm font-normal bg-white tracking-wider relative select-none whitespace-nowrap ${!isLast ? "border-r border-gray-200" : ""}`}
+                          className={`px-2 py-1 text-left text-sm font-normal bg-white tracking-wider relative select-none whitespace-nowrap ${!isLast ? "border-r border-gray-200" : ""} ${!isDraggable ? "cursor-not-allowed opacity-90" : ""}`}
                           style={{
                             width: (columnWidths[colId] || 150) + "px",
                             minWidth: (columnWidths[colId] || 150) + "px",
@@ -553,11 +560,14 @@ const AdvancedTaskTable = React.memo(
                             borderBottom: "1px solid #e5e7eb",
                             position: "relative",
                           }}
-                          draggable
+                          draggable={isDraggable}
                           onDragStart={(e) => handleDragStart(e, colId)}
                           onDragOver={(e) => handleDragOver(e, colId)}
                           onDragLeave={handleDragLeave}
                           onDrop={(e) => handleDrop(e, colId)}
+                          title={
+                            !isDraggable ? "This column position is fixed" : ""
+                          }
                         >
                           <span
                             style={{ fontWeight: 500 }}

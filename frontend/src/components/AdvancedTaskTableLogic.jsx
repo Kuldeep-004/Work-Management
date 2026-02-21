@@ -148,6 +148,8 @@ export const useAdvancedTaskTableLogic = (props) => {
     onTaskSelect,
     isAllSelected = false,
     onSelectAll,
+    isAdmin = false,
+    fixedColumns = [],
   } = props;
 
   // =============================================================================
@@ -789,6 +791,11 @@ export const useAdvancedTaskTableLogic = (props) => {
 
   // Drag and drop handlers
   const handleDragStart = (e, columnId) => {
+    // Prevent dragging fixed columns for non-admin users
+    if (!isAdmin && fixedColumns.includes(columnId)) {
+      e.preventDefault();
+      return;
+    }
     setDraggedColumn(columnId);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/html", columnId);
@@ -808,9 +815,35 @@ export const useAdvancedTaskTableLogic = (props) => {
   const handleDrop = (e, targetColumnId) => {
     e.preventDefault();
     if (draggedColumn && draggedColumn !== targetColumnId) {
+      // Prevent dropping into fixed column positions for non-admin users
+      if (!isAdmin && fixedColumns.includes(targetColumnId)) {
+        setDraggedColumn(null);
+        setDragOverColumn(null);
+        return;
+      }
+
       const newOrder = [...columnOrder];
       const draggedIndex = newOrder.indexOf(draggedColumn);
       const targetIndex = newOrder.indexOf(targetColumnId);
+
+      // For non-admin: ensure fixed columns remain at the beginning
+      if (!isAdmin) {
+        // Check if the reorder would move a column before a fixed column
+        const fixedColumnsInOrder = newOrder.filter((col) =>
+          fixedColumns.includes(col),
+        );
+        const lastFixedIndex = Math.max(
+          ...fixedColumnsInOrder.map((col) => newOrder.indexOf(col)),
+        );
+
+        // If trying to place a non-fixed column before the last fixed column, prevent it
+        if (targetIndex <= lastFixedIndex) {
+          setDraggedColumn(null);
+          setDragOverColumn(null);
+          return;
+        }
+      }
+
       newOrder.splice(draggedIndex, 1);
       newOrder.splice(targetIndex, 0, draggedColumn);
       if (isColumnOrderControlled) {
