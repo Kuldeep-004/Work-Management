@@ -20,7 +20,6 @@ import {
 import { API_BASE_URL, fetchTabState, saveTabState } from "../../apiConfig";
 import EnhancedPDFColumnSelector from "../../components/EnhancedPDFColumnSelector";
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
 // Fixed columns that non-admin users cannot hide or reorder
@@ -65,17 +64,14 @@ const ALL_COLUMNS = [
 const DEFAULT_TAB = (
   taskType = "execution",
   customColumns = [],
-  isAdmin = false,
 ) => {
   const baseColumns = ALL_COLUMNS.map((col) => col.id);
   const customCols = customColumns.map((col) => `custom_${col.name}`);
   let allColumns = [...baseColumns, ...customCols];
+  const otherCols = allColumns.filter((col) => !FIXED_COLUMNS.includes(col));
+  allColumns = [...FIXED_COLUMNS, ...otherCols];
 
   // For non-admin users, ensure fixed columns are first
-  if (!isAdmin) {
-    const otherCols = allColumns.filter((col) => !FIXED_COLUMNS.includes(col));
-    allColumns = [...FIXED_COLUMNS, ...otherCols];
-  }
 
   return {
     id: Date.now(),
