@@ -515,14 +515,58 @@ router.get("/for-verification", protect, async (req, res) => {
     } else {
       isTaskVerifier = req.user.role2 === "Task Verifier";
     }
+    const isTeamHead = req.user.role === "Team Head";
+    const isAdmin = req.user.role === "Admin";
+
     let tasks;
-    if (req.user.role === "Admin" || isTaskVerifier) {
-      // Admins and Task Verifiers see all pending tasks
+
+    // Admins and Task Verifiers see all pending tasks
+    if (isAdmin || isTaskVerifier) {
       tasks = await Task.find({
         verificationStatus: "pending",
       })
-        .populate("assignedTo", "firstName lastName photo")
-        .populate("assignedBy", "firstName lastName photo")
+        .populate("assignedTo", "firstName lastName photo team")
+        .populate("assignedBy", "firstName lastName photo team")
+        .populate("verificationAssignedTo", "firstName lastName photo")
+        .populate("secondVerificationAssignedTo", "firstName lastName photo")
+        .populate("thirdVerificationAssignedTo", "firstName lastName photo")
+        .populate("fourthVerificationAssignedTo", "firstName lastName photo")
+        .populate("fifthVerificationAssignedTo", "firstName lastName photo")
+        .populate("originalAssignee", "firstName lastName photo")
+        .populate("comments.createdBy", "firstName lastName photo")
+        .select(
+          "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields itrProgress",
+        )
+        .sort({ createdAt: -1 });
+      res.json(tasks);
+      return;
+    }
+
+    // Team Heads see pending tasks from their team members
+    if (isTeamHead) {
+      if (!req.user.team) {
+        return res
+          .status(400)
+          .json({ message: "Team Head user does not have a team assigned" });
+      }
+
+      // Get all team members
+      const teamMembers = await User.find({
+        team: req.user.team,
+        status: "approved",
+        isEmailVerified: true,
+        _id: { $ne: req.user._id }, // Exclude self
+      }).select("_id");
+
+      const teamMemberIds = teamMembers.map((member) => member._id);
+
+      // Find all pending tasks assigned to team members
+      tasks = await Task.find({
+        verificationStatus: "pending",
+        assignedTo: { $in: teamMemberIds },
+      })
+        .populate("assignedTo", "firstName lastName photo team")
+        .populate("assignedBy", "firstName lastName photo team")
         .populate("verificationAssignedTo", "firstName lastName photo")
         .populate("secondVerificationAssignedTo", "firstName lastName photo")
         .populate("thirdVerificationAssignedTo", "firstName lastName photo")
@@ -1987,13 +2031,26 @@ router.post("/:taskId/verify", protect, async (req, res) => {
     const isFifthVerifier =
       task.fifthVerificationAssignedTo?.toString() === req.user._id.toString();
 
+    // Check if user is Team Head and task assignee is in their team
+    let isTeamHead = false;
+    if (req.user.role === "Team Head" && req.user.team) {
+      const taskAssignee = await User.findById(task.assignedTo).select("team");
+      if (
+        taskAssignee &&
+        taskAssignee.team?.toString() === req.user.team.toString()
+      ) {
+        isTeamHead = true;
+      }
+    }
+
     if (
       !isFirstVerifier &&
       !isSecondVerifier &&
       !isThirdVerifier &&
       !isFourthVerifier &&
       !isFifthVerifier &&
-      !isAdminOrTaskVerifier
+      !isAdminOrTaskVerifier &&
+      !isTeamHead
     ) {
       return res
         .status(403)

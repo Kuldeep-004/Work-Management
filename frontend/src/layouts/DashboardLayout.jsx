@@ -357,6 +357,12 @@ const DashboardLayout = ({ children }) => {
             path: "/dashboard/subordinate-timesheets",
           },
           {
+            id: "task-verification",
+            label: "Tasks Pending For Approval",
+            icon: ShieldCheckIcon,
+            path: "/dashboard/task-verification",
+          },
+          {
             id: "leave-management",
             label: "Leave Management",
             icon: CalendarDaysIcon,

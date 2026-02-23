@@ -16,7 +16,7 @@ router.get("/incomplete-dates", protect, async (req, res) => {
       isCompleted: true,
     }).select("date -_id");
     const submittedDates = submittedTimesheets.map(
-      (ts) => ts.date.toISOString().split("T")[0]
+      (ts) => ts.date.toISOString().split("T")[0],
     );
 
     // Generate dates from user's join date or 3 months ago (whichever is more recent) to today
@@ -90,13 +90,6 @@ const isTimesheetEditable = async (userId, date) => {
   }
 };
 
-// Legacy helper function maintained for backwards compatibility
-const isEditableDate = (date) => {
-  // This function is no longer used for date restrictions
-  // Keep it for any potential legacy code references
-  return true;
-};
-
 // Get timeslots
 router.get("/timeslots", protect, (req, res) => {
   try {
@@ -133,7 +126,7 @@ router.get("/my-tasks", protect, async (req, res) => {
 
     // Get the full user object to check timesheetView preference
     const currentUser = await User.findById(req.user._id).select(
-      "timesheetView team"
+      "timesheetView team",
     );
     const timesheetView = currentUser?.timesheetView || "default";
 
@@ -180,7 +173,7 @@ router.get("/my-tasks", protect, async (req, res) => {
     // Get all tasks based on query
     const tasks = await Task.find(taskQuery)
       .select(
-        "title description clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides status"
+        "title description clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides status",
       )
       .sort({ createdAt: -1 });
 
@@ -200,7 +193,7 @@ router.get("/my-tasks", protect, async (req, res) => {
       // If user is a guide for this task, always allow
       if (Array.isArray(task.guides) && task.guides.length > 0) {
         const isGuide = task.guides.some(
-          (guideId) => guideId && guideId.toString() === userIdStr
+          (guideId) => guideId && guideId.toString() === userIdStr,
         );
         if (isGuide) return true;
       }
@@ -233,7 +226,9 @@ router.get("/my-tasks", protect, async (req, res) => {
 
     // Remove duplicates based on task _id
     const uniqueTasks = Array.from(
-      new Map(filteredTasks.map((task) => [task._id.toString(), task])).values()
+      new Map(
+        filteredTasks.map((task) => [task._id.toString(), task]),
+      ).values(),
     );
 
     res.json(uniqueTasks || []);
@@ -262,7 +257,7 @@ router.get("/today", protect, async (req, res) => {
       },
     }).populate(
       "entries.task",
-      "title description clientName clientGroup workType"
+      "title description clientName clientGroup workType",
     );
 
     if (!timesheet) {
@@ -299,13 +294,13 @@ router.get("/date/:date", protect, async (req, res) => {
       .populate("user", "firstName lastName email role team photo")
       .populate(
         "entries.task",
-        "title description clientName clientGroup workType"
+        "title description clientName clientGroup workType",
       );
 
     if (!timesheet) {
       // Populate user manually for new/empty timesheet
       const userDoc = await User.findById(req.user._id).select(
-        "firstName lastName email role team photo"
+        "firstName lastName email role team photo",
       );
       timesheet = {
         _id: undefined,
@@ -426,7 +421,7 @@ router.post("/add-entry", protect, async (req, res) => {
     // Populate task details before sending response
     await timesheet.populate(
       "entries.task",
-      "title description clientName clientGroup workType"
+      "title description clientName clientGroup workType",
     );
 
     // Log timesheet entry addition
@@ -456,7 +451,7 @@ router.post("/add-entry", protect, async (req, res) => {
         startTime,
         endTime,
       },
-      req
+      req,
     );
 
     res.json(timesheet);
@@ -506,7 +501,7 @@ router.delete("/entry/:entryId", protect, async (req, res) => {
         endTime: entryToDelete?.endTime,
       },
       null,
-      req
+      req,
     );
 
     timesheet.entries.pull(entryId);
@@ -514,7 +509,7 @@ router.delete("/entry/:entryId", protect, async (req, res) => {
 
     await timesheet.populate(
       "entries.task",
-      "title description clientName clientGroup workType"
+      "title description clientName clientGroup workType",
     );
 
     res.json(timesheet);
@@ -526,7 +521,7 @@ router.delete("/entry/:entryId", protect, async (req, res) => {
 // Get subordinates' timesheets based on user role hierarchy
 router.get("/subordinates", protect, async (req, res) => {
   try {
-    console.log("first")
+    console.log("first");
     // Check if user is Admin, TimeSheet Verifier, or Team Head
     let isTimeSheetVerifier = false;
     if (Array.isArray(req.user.role2)) {
@@ -542,12 +537,14 @@ router.get("/subordinates", protect, async (req, res) => {
     const { page = 1, limit = 10, startDate, userId, roleFilter } = req.query;
     let query = { status: { $ne: "rejected" } };
     let subordinates;
-    // Filtering logic for Team Head
-    if (isTeamHead || req.user.role === "Admin") {
+
+    // Filtering logic based on role
+    if (isTeamHead) {
+      // Team Head: check team assignment first
       if (!req.user.team) {
         return res
-        .status(400)
-        .json({ message: "Team Head user does not have a team assigned" });
+          .status(400)
+          .json({ message: "Team Head user does not have a team assigned" });
       }
       // All users in the same team (including self for Team Head, only approved, exclude deleted)
       subordinates = await User.find({
@@ -555,6 +552,11 @@ router.get("/subordinates", protect, async (req, res) => {
         isEmailVerified: true,
         status: "approved",
       }).select("_id firstName lastName email role team photo");
+    } else if (isAdmin) {
+      // Admins: all approved users (exclude deleted)
+      subordinates = await User.find({ status: "approved" }).select(
+        "_id firstName lastName email role team photo",
+      );
     } else if (isTimeSheetVerifier) {
       // TimeSheet Verifiers: show only their team members (excluding self, Admins, and Team Heads)
       if (req.user.team) {
@@ -566,17 +568,15 @@ router.get("/subordinates", protect, async (req, res) => {
         }).select("_id firstName lastName email role team photo");
         // Exclude self from subordinates
         subordinates = subordinates.filter(
-          (sub) => String(sub._id) !== String(req.user._id)
+          (sub) => String(sub._id) !== String(req.user._id),
         );
       } else {
         // If no team, show no one
         subordinates = [];
       }
-    } else if (req.user.role === "Admin") {
-      // Admins: all approved users (exclude deleted)
-      subordinates = await User.find({ status: "approved" }).select(
-        "_id firstName lastName email role team photo"
-      );
+    } else {
+      // No permission, return empty
+      subordinates = [];
     }
     const subordinateIds = subordinates.map((sub) => sub._id);
 
@@ -585,7 +585,7 @@ router.get("/subordinates", protect, async (req, res) => {
     if (roleFilter && req.user.role === "Admin") {
       // Filter subordinates by role
       const filteredSubordinates = subordinates.filter(
-        (sub) => sub.role === roleFilter
+        (sub) => sub.role === roleFilter,
       );
       targetUserIds = filteredSubordinates.map((sub) => sub._id);
     } else if (userId) {
@@ -619,7 +619,7 @@ router.get("/subordinates", protect, async (req, res) => {
       .populate("user", "firstName lastName email role team photo")
       .populate(
         "entries.task",
-        "title description clientName clientGroup workType"
+        "title description clientName clientGroup workType",
       )
       .sort({ date: -1, "user.firstName": 1 })
       .limit(limit * 1)
@@ -681,7 +681,7 @@ router.get("/subordinate/:userId/:date", protect, async (req, res) => {
       .populate("user", "firstName lastName email role team photo")
       .populate(
         "entries.task",
-        "title description clientName clientGroup workType"
+        "title description clientName clientGroup workType",
       );
 
     if (!timesheet) {
@@ -736,7 +736,7 @@ router.get("/subordinates-list", protect, async (req, res) => {
     } else if (req.user.role === "Admin") {
       // Admins: all approved users (exclude deleted)
       subordinates = await User.find({ status: "approved" }).select(
-        "_id firstName lastName email role team"
+        "_id firstName lastName email role team",
       );
     } else {
       subordinates = [];
@@ -815,7 +815,7 @@ router.get("/subordinates-status/:date", protect, async (req, res) => {
       }).select("_id firstName lastName email role team");
     } else if (isAdmin) {
       subordinates = await User.find({ status: "approved" }).select(
-        "_id firstName lastName email role team"
+        "_id firstName lastName email role team",
       );
     } else {
       subordinates = [];
@@ -838,7 +838,7 @@ router.get("/subordinates-status/:date", protect, async (req, res) => {
     const submittedUserIds = new Set(
       timesheets
         .filter((ts) => ts.isCompleted === true)
-        .map((ts) => ts.user.toString())
+        .map((ts) => ts.user.toString()),
     );
     const submissionStatus = subordinates.map((sub) => ({
       userId: sub._id,
@@ -895,7 +895,7 @@ router.get("/task-hours", protect, async (req, res) => {
           }
           taskUserHours[taskId][userId].totalMinutes += getMinutesBetween(
             entry.startTime,
-            entry.endTime
+            entry.endTime,
           );
         } else if (entry.manualTaskName) {
           // Manual task - create a special key for manual tasks
@@ -947,7 +947,7 @@ router.get("/user-hours", protect, async (req, res) => {
     // Get all timesheet entries
     const timesheets = await Timesheet.find({}).populate(
       "user",
-      "firstName lastName"
+      "firstName lastName",
     );
 
     // Map: { userId: { userName, totalMinutes, manualTaskMinutes } }
@@ -1017,7 +1017,7 @@ router.get("/task-costs", protect, async (req, res) => {
     const tasks = await Task.find(taskFilter)
       .populate(
         "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
-        "firstName lastName hourlyRate"
+        "firstName lastName hourlyRate",
       )
       .skip(skip)
       .limit(parseInt(limit))
@@ -1108,7 +1108,7 @@ router.get("/task-costs", protect, async (req, res) => {
 
       const guidesCost = guides.reduce(
         (sum, guide) => sum + (guide.cost || 0),
-        0
+        0,
       );
       const totalCost =
         (assignedBy?.cost || 0) +
@@ -1167,7 +1167,7 @@ router.get("/task-costs/billed", protect, async (req, res) => {
     const tasks = await Task.find(taskFilter)
       .populate(
         "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
-        "firstName lastName hourlyRate"
+        "firstName lastName hourlyRate",
       )
       .skip(skip)
       .limit(parseInt(limit))
@@ -1258,7 +1258,7 @@ router.get("/task-costs/billed", protect, async (req, res) => {
 
       const guidesCost = guides.reduce(
         (sum, guide) => sum + (guide.cost || 0),
-        0
+        0,
       );
       const totalCost =
         (assignedBy?.cost || 0) +
@@ -1317,7 +1317,7 @@ router.get("/task-costs/unbilled", protect, async (req, res) => {
     const tasks = await Task.find(taskFilter)
       .populate(
         "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
-        "firstName lastName hourlyRate"
+        "firstName lastName hourlyRate",
       )
       .skip(skip)
       .limit(parseInt(limit))
@@ -1408,7 +1408,7 @@ router.get("/task-costs/unbilled", protect, async (req, res) => {
 
       const guidesCost = guides.reduce(
         (sum, guide) => sum + (guide.cost || 0),
-        0
+        0,
       );
       const totalCost =
         (assignedBy?.cost || 0) +
@@ -1447,7 +1447,7 @@ router.get("/task-costs/unbilled", protect, async (req, res) => {
   } catch (error) {
     console.error(
       "Error aggregating unbilled task costs:",
-      error.stack || error
+      error.stack || error,
     );
     res.status(500).json({ message: "Server error" });
   }
@@ -1470,7 +1470,7 @@ router.get("/task-costs/completed-billed", protect, async (req, res) => {
     const tasks = await Task.find(taskFilter)
       .populate(
         "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
-        "firstName lastName hourlyRate"
+        "firstName lastName hourlyRate",
       )
       .skip(skip)
       .limit(parseInt(limit))
@@ -1561,7 +1561,7 @@ router.get("/task-costs/completed-billed", protect, async (req, res) => {
 
       const guidesCost = guides.reduce(
         (sum, guide) => sum + (guide.cost || 0),
-        0
+        0,
       );
       const totalCost =
         (assignedBy?.cost || 0) +
@@ -1600,7 +1600,7 @@ router.get("/task-costs/completed-billed", protect, async (req, res) => {
   } catch (error) {
     console.error(
       "Error aggregating completed billed task costs:",
-      error.stack || error
+      error.stack || error,
     );
     res.status(500).json({ message: "Server error" });
   }
@@ -1623,7 +1623,7 @@ router.get("/task-costs/completed-unbilled", protect, async (req, res) => {
     const tasks = await Task.find(taskFilter)
       .populate(
         "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
-        "firstName lastName hourlyRate"
+        "firstName lastName hourlyRate",
       )
       .skip(skip)
       .limit(parseInt(limit))
@@ -1714,7 +1714,7 @@ router.get("/task-costs/completed-unbilled", protect, async (req, res) => {
 
       const guidesCost = guides.reduce(
         (sum, guide) => sum + (guide.cost || 0),
-        0
+        0,
       );
       const totalCost =
         (assignedBy?.cost || 0) +
@@ -1753,7 +1753,7 @@ router.get("/task-costs/completed-unbilled", protect, async (req, res) => {
   } catch (error) {
     console.error(
       "Error aggregating completed unbilled task costs:",
-      error.stack || error
+      error.stack || error,
     );
     res.status(500).json({ message: "Server error" });
   }
@@ -1787,7 +1787,7 @@ router.get("/task-costs/billed/user/:userId", protect, async (req, res) => {
     const tasks = await Task.find(taskFilter)
       .populate(
         "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
-        "firstName lastName hourlyRate"
+        "firstName lastName hourlyRate",
       )
       .skip(skip)
       .limit(parseInt(limit))
@@ -1861,7 +1861,7 @@ router.get("/task-costs/billed/user/:userId", protect, async (req, res) => {
 
       const guidesCost = guides.reduce(
         (sum, guide) => sum + (guide.cost || 0),
-        0
+        0,
       );
       const totalCost =
         (assignedBy?.cost || 0) +
@@ -1901,7 +1901,7 @@ router.get("/task-costs/billed/user/:userId", protect, async (req, res) => {
   } catch (error) {
     console.error(
       "Error aggregating billed task costs for user:",
-      error.stack || error
+      error.stack || error,
     );
     res.status(500).json({ message: "Server error" });
   }
@@ -1931,7 +1931,7 @@ router.get("/task-costs/unbilled/user/:userId", protect, async (req, res) => {
     const tasks = await Task.find(taskFilter)
       .populate(
         "assignedBy assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
-        "firstName lastName hourlyRate"
+        "firstName lastName hourlyRate",
       )
       .skip(skip)
       .limit(parseInt(limit))
@@ -2004,7 +2004,7 @@ router.get("/task-costs/unbilled/user/:userId", protect, async (req, res) => {
 
       const guidesCost = guides.reduce(
         (sum, guide) => sum + (guide.cost || 0),
-        0
+        0,
       );
       const totalCost =
         (assignedBy?.cost || 0) +
@@ -2044,7 +2044,7 @@ router.get("/task-costs/unbilled/user/:userId", protect, async (req, res) => {
   } catch (error) {
     console.error(
       "Error aggregating unbilled task costs for user:",
-      error.stack || error
+      error.stack || error,
     );
     res.status(500).json({ message: "Server error" });
   }
@@ -2077,7 +2077,7 @@ router.get(
       const tasks = await Task.find(taskFilter)
         .populate(
           "assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
-          "firstName lastName hourlyRate"
+          "firstName lastName hourlyRate",
         )
         .skip(skip)
         .limit(parseInt(limit))
@@ -2150,7 +2150,7 @@ router.get(
 
         const guidesCost = guides.reduce(
           (sum, guide) => sum + (guide.cost || 0),
-          0
+          0,
         );
         const totalCost =
           (assignedBy?.cost || 0) +
@@ -2190,11 +2190,11 @@ router.get(
     } catch (error) {
       console.error(
         "Error aggregating completed billed task costs for user:",
-        error.stack || error
+        error.stack || error,
       );
       res.status(500).json({ message: "Server error" });
     }
-  }
+  },
 );
 
 // Get cost breakdown for completed unbilled tasks for a specific user
@@ -2224,7 +2224,7 @@ router.get(
       const tasks = await Task.find(taskFilter)
         .populate(
           "assignedTo verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo guides",
-          "firstName lastName hourlyRate"
+          "firstName lastName hourlyRate",
         )
         .skip(skip)
         .limit(parseInt(limit))
@@ -2297,7 +2297,7 @@ router.get(
 
         const guidesCost = guides.reduce(
           (sum, guide) => sum + (guide.cost || 0),
-          0
+          0,
         );
         const totalCost =
           (assignedBy?.cost || 0) +
@@ -2337,11 +2337,11 @@ router.get(
     } catch (error) {
       console.error(
         "Error aggregating completed unbilled task costs for user:",
-        error.stack || error
+        error.stack || error,
       );
       res.status(500).json({ message: "Server error" });
     }
-  }
+  },
 );
 
 // Get detailed timeslots for a specific task
@@ -2484,7 +2484,7 @@ router.patch("/entry/:entryId", protect, async (req, res) => {
 
     await timesheet.populate(
       "entries.task",
-      "title description clientName clientGroup workType"
+      "title description clientName clientGroup workType",
     );
 
     res.json(timesheet);
@@ -2535,7 +2535,7 @@ router.post("/submit", protect, async (req, res) => {
 
     await timesheet.populate(
       "entries.task",
-      "title description clientName clientGroup workType"
+      "title description clientName clientGroup workType",
     );
 
     res.json({ message: "Timesheet submitted successfully.", timesheet });
@@ -2549,7 +2549,7 @@ router.patch("/entry/:entryId/approve", protect, async (req, res) => {
   try {
     const { entryId } = req.params;
     const timesheet = await Timesheet.findOne({ "entries._id": entryId })
-      .populate("user", "firstName lastName email")
+      .populate("user", "firstName lastName email team")
       .populate("entries.task", "title");
 
     if (!timesheet) {
@@ -2559,6 +2559,35 @@ router.patch("/entry/:entryId/approve", protect, async (req, res) => {
     const entry = timesheet.entries.id(entryId);
     if (!entry) {
       return res.status(404).json({ message: "Entry not found" });
+    }
+
+    // Check if user has permission to approve entries
+    const isTeamHead = req.user.role === "Team Head";
+    const isTimeSheetVerifier = Array.isArray(req.user.role2)
+      ? req.user.role2.includes("TimeSheet Verifier")
+      : req.user.role2 === "TimeSheet Verifier";
+    const isAdmin = req.user.role === "Admin";
+
+    if (!isTeamHead && !isTimeSheetVerifier && !isAdmin) {
+      return res.status(403).json({
+        message:
+          "Access denied. You do not have permission to approve entries.",
+      });
+    }
+
+    // Additional authorization check for Team Head - only approve subordinates
+    if (isTeamHead && !isAdmin && !isTimeSheetVerifier) {
+      if (!req.user.team) {
+        return res
+          .status(400)
+          .json({ message: "Team Head user does not have a team assigned" });
+      }
+      if (timesheet.user.team?.toString() !== req.user.team.toString()) {
+        return res.status(403).json({
+          message:
+            "Access denied. You can only approve timesheets from your team.",
+        });
+      }
     }
 
     const previousStatus = entry.approvalStatus;
@@ -2600,7 +2629,7 @@ router.patch("/entry/:entryId/reject", protect, async (req, res) => {
   try {
     const { entryId } = req.params;
     const timesheet = await Timesheet.findOne({ "entries._id": entryId })
-      .populate("user", "firstName lastName email")
+      .populate("user", "firstName lastName email team")
       .populate("entries.task", "title");
 
     if (!timesheet) {
@@ -2610,6 +2639,34 @@ router.patch("/entry/:entryId/reject", protect, async (req, res) => {
     const entry = timesheet.entries.id(entryId);
     if (!entry) {
       return res.status(404).json({ message: "Entry not found" });
+    }
+
+    // Check if user has permission to reject entries
+    const isTeamHead = req.user.role === "Team Head";
+    const isTimeSheetVerifier = Array.isArray(req.user.role2)
+      ? req.user.role2.includes("TimeSheet Verifier")
+      : req.user.role2 === "TimeSheet Verifier";
+    const isAdmin = req.user.role === "Admin";
+
+    if (!isTeamHead && !isTimeSheetVerifier && !isAdmin) {
+      return res.status(403).json({
+        message: "Access denied. You do not have permission to reject entries.",
+      });
+    }
+
+    // Additional authorization check for Team Head - only reject subordinates
+    if (isTeamHead && !isAdmin && !isTimeSheetVerifier) {
+      if (!req.user.team) {
+        return res
+          .status(400)
+          .json({ message: "Team Head user does not have a team assigned" });
+      }
+      if (timesheet.user.team?.toString() !== req.user.team.toString()) {
+        return res.status(403).json({
+          message:
+            "Access denied. You can only reject timesheets from your team.",
+        });
+      }
     }
 
     const previousStatus = entry.approvalStatus;
@@ -2654,11 +2711,40 @@ router.patch("/:timesheetId/return", protect, async (req, res) => {
     const { timesheetId } = req.params;
     const timesheet = await Timesheet.findById(timesheetId).populate(
       "user",
-      "firstName lastName email"
+      "firstName lastName email team",
     );
 
     if (!timesheet) {
       return res.status(404).json({ message: "Timesheet not found" });
+    }
+
+    // Check if user has permission to return timesheets
+    const isTeamHead = req.user.role === "Team Head";
+    const isTimeSheetVerifier = Array.isArray(req.user.role2)
+      ? req.user.role2.includes("TimeSheet Verifier")
+      : req.user.role2 === "TimeSheet Verifier";
+    const isAdmin = req.user.role === "Admin";
+
+    if (!isTeamHead && !isTimeSheetVerifier && !isAdmin) {
+      return res.status(403).json({
+        message:
+          "Access denied. You do not have permission to return timesheets.",
+      });
+    }
+
+    // Additional authorization check for Team Head - only return subordinates' timesheets
+    if (isTeamHead && !isAdmin && !isTimeSheetVerifier) {
+      if (!req.user.team) {
+        return res
+          .status(400)
+          .json({ message: "Team Head user does not have a team assigned" });
+      }
+      if (timesheet.user.team?.toString() !== req.user.team.toString()) {
+        return res.status(403).json({
+          message:
+            "Access denied. You can only return timesheets from your team.",
+        });
+      }
     }
 
     // Set isCompleted to false so user can edit
@@ -2699,7 +2785,7 @@ router.patch("/:timesheetId/accept-all", protect, async (req, res) => {
     const { timesheetId } = req.params;
     const timesheet = await Timesheet.findById(timesheetId).populate(
       "user",
-      "firstName lastName email"
+      "firstName lastName email",
     );
 
     if (!timesheet) {
@@ -2727,7 +2813,11 @@ router.patch("/:timesheetId/accept-all", protect, async (req, res) => {
           .status(400)
           .json({ message: "Team Head user does not have a team assigned" });
       }
-      if (timesheet.user.team !== req.user.team) {
+      // Populate the user's team if not already populated
+      if (!timesheet.user.team) {
+        await timesheet.populate("user", "firstName lastName email team");
+      }
+      if (timesheet.user.team?.toString() !== req.user.team.toString()) {
         return res.status(403).json({
           message:
             "Access denied. You can only approve timesheets from your team.",
@@ -2739,7 +2829,7 @@ router.patch("/:timesheetId/accept-all", protect, async (req, res) => {
     const entriesToAccept = timesheet.entries.filter(
       (entry) =>
         entry.approvalStatus === "pending" ||
-        entry.approvalStatus === "rejected"
+        entry.approvalStatus === "rejected",
     );
 
     if (entriesToAccept.length === 0) {
