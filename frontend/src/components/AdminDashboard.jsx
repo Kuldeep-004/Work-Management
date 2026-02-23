@@ -844,6 +844,25 @@ const AdminDashboard = () => {
                   filterResult = false;
                 }
                 break;
+              case "between":
+                if (column === "dueDate") {
+                  if (
+                    !taskValue ||
+                    !value ||
+                    !value.startDate ||
+                    !value.endDate
+                  ) {
+                    filterResult = false;
+                  } else {
+                    const taskDate = new Date(taskValue);
+                    const startDate = new Date(value.startDate);
+                    const endDate = new Date(value.endDate);
+                    filterResult = taskDate >= startDate && taskDate <= endDate;
+                  }
+                } else {
+                  filterResult = false;
+                }
+                break;
               case "contains":
                 filterResult = String(taskValue)
                   .toLowerCase()

@@ -61,10 +61,7 @@ const ALL_COLUMNS = [
   { id: "comments", label: "Comments" },
 ];
 
-const DEFAULT_TAB = (
-  taskType = "execution",
-  customColumns = [],
-) => {
+const DEFAULT_TAB = (taskType = "execution", customColumns = []) => {
   const baseColumns = ALL_COLUMNS.map((col) => col.id);
   const customCols = customColumns.map((col) => `custom_${col.name}`);
   let allColumns = [...baseColumns, ...customCols];
@@ -975,6 +972,25 @@ const ReceivedTasks = () => {
                   filterResult = false;
                 } else {
                   filterResult = new Date(taskValue) >= new Date(value);
+                }
+              } else {
+                filterResult = false;
+              }
+              break;
+            case "between":
+              if (column === "dueDate") {
+                if (
+                  !taskValue ||
+                  !value ||
+                  !value.startDate ||
+                  !value.endDate
+                ) {
+                  filterResult = false;
+                } else {
+                  const taskDate = new Date(taskValue);
+                  const startDate = new Date(value.startDate);
+                  const endDate = new Date(value.endDate);
+                  filterResult = taskDate >= startDate && taskDate <= endDate;
                 }
               } else {
                 filterResult = false;
