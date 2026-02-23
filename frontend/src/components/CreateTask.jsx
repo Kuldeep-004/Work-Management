@@ -2252,6 +2252,8 @@ const CreateTask = ({
                                       ...prev,
                                       workType: [type.name],
                                     }));
+                                  const hasHAAWorkType = type?.name?.startsWith("HAA");
+                                    if(hasHAAWorkType) setFormData((prev)=>({...prev,"billed":true}));
                                     setIsWorkTypeDropdownOpen(false);
                                   }
                                 }}
