@@ -181,6 +181,11 @@ const FullDashboard = () => {
     useState(false);
   const [bulkPriorityLoading, setBulkPriorityLoading] = useState(false);
   const bulkPriorityDropdownRef = useRef(null);
+  // Bulk reassign states
+  const [showBulkReassignDropdown, setShowBulkReassignDropdown] =
+    useState(false);
+  const [bulkReassignLoading, setBulkReassignLoading] = useState(false);
+  const bulkReassignDropdownRef = useRef(null);
   // State for showing completed tasks temporarily
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   // Handler for Automation submit
@@ -517,6 +522,14 @@ const FullDashboard = () => {
       ) {
         setShowBulkPriorityDropdown(false);
       }
+
+      // Handle bulk reassign dropdown
+      if (
+        bulkReassignDropdownRef.current &&
+        !bulkReassignDropdownRef.current.contains(event.target)
+      ) {
+        setShowBulkReassignDropdown(false);
+      }
     };
 
     const handleKeyDown = (event) => {
@@ -528,6 +541,7 @@ const FullDashboard = () => {
         setShowSortDropdown(false);
         setShowBulkStatusDropdown(false);
         setShowBulkPriorityDropdown(false);
+        setShowBulkReassignDropdown(false);
       }
     };
 
@@ -1429,6 +1443,51 @@ const FullDashboard = () => {
       console.error("Bulk priority update error:", error);
     } finally {
       setBulkPriorityLoading(false);
+    }
+  };
+
+  const handleBulkReassign = async (newAssigneeId) => {
+    if (selectedTasks.length === 0) return;
+
+    setBulkReassignLoading(true);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/bulk-update/execute-reassign`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.token}`,
+          },
+          body: JSON.stringify({
+            taskIds: selectedTasks,
+            newAssigneeId: newAssigneeId,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to reassign tasks");
+      }
+
+      toast.success(data.message);
+
+      // Fetch updated tasks to reflect the changes
+      await fetchTasks();
+
+      // Clear selection and close dropdown
+      setSelectedTasks([]);
+      setIsAllSelected(false);
+      setShowBulkActions(false);
+      setShowBulkReassignDropdown(false);
+      setShowCheckboxes(false);
+    } catch (error) {
+      toast.error(error.message || "Failed to reassign selected tasks");
+      console.error("Bulk reassign error:", error);
+    } finally {
+      setBulkReassignLoading(false);
     }
   };
 
@@ -3850,6 +3909,86 @@ const FullDashboard = () => {
                 </div>
               )}
             </div>
+
+            {/* Bulk Reassign Dropdown - Only for Team Head and Admin */}
+            {(user.role === "Admin" || user.role === "Team Head") && (
+              <div className="relative" ref={bulkReassignDropdownRef}>
+                <button
+                  onClick={() =>
+                    setShowBulkReassignDropdown(!showBulkReassignDropdown)
+                  }
+                  disabled={bulkReassignLoading}
+                  className="inline-flex items-center px-4 py-2 border border-purple-300 rounded-md shadow-sm text-sm font-medium text-purple-700 bg-white hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg
+                    className="h-4 w-4 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                    />
+                  </svg>
+                  {bulkReassignLoading ? "Reassigning..." : "Shift To"}
+                  <svg
+                    className="h-4 w-4 ml-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+
+                {showBulkReassignDropdown && !bulkReassignLoading && (
+                  <div className="absolute right-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-64 max-h-64 overflow-y-auto animate-fade-in">
+                    <div className="font-semibold text-gray-700 mb-2 text-sm px-3 pt-3">
+                      Reassign {selectedTasks.length} Task
+                      {selectedTasks.length > 1 ? "s" : ""} To
+                    </div>
+                    {users && users.length > 0 ? (
+                      users.map((assignee) => (
+                        <div key={assignee._id} className="relative">
+                          <button
+                            className="block w-full text-left px-4 py-2 transition-colors hover:bg-purple-50 text-gray-700"
+                            onClick={() => handleBulkReassign(assignee._id)}
+                          >
+                            <div className="flex items-center">
+                              <img
+                                src={assignee.photo?.url || defaultProfile}
+                                alt={`${assignee.firstName} ${assignee.lastName}`}
+                                className="w-6 h-6 rounded-full mr-2"
+                              />
+                              <span className="text-sm">
+                                {assignee.firstName} {assignee.lastName}
+                              </span>
+                              {assignee.role && (
+                                <span className="ml-auto text-xs text-gray-500">
+                                  {assignee.role}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-4 py-2 text-gray-500 text-sm">
+                        No users available
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               onClick={() => setShowDeleteConfirmation(true)}
