@@ -7,6 +7,7 @@ import { toast } from "react-hot-toast";
 import ErrorBoundary from "../../components/ErrorBoundary";
 import FilterPopup from "../../components/FilterPopup";
 import TabBar from "../../components/TabBar";
+import ConfirmationModal from "../../components/ConfirmationModal";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ChartBarIcon,
@@ -163,6 +164,11 @@ const ReceivedTasks = () => {
   // PDF download state
   const [showPDFColumnSelector, setShowPDFColumnSelector] = useState(false);
 
+  // State for tab deletion confirmation
+  const [showTabDeleteConfirmation, setShowTabDeleteConfirmation] =
+    useState(false);
+  const [tabToDelete, setTabToDelete] = useState(null);
+
   // Get active tab object (defensive) - use empty array for customColumns as fallback
   const activeTabObj =
     tabs.find((tab) => tab.id === activeTabId) ||
@@ -236,13 +242,26 @@ const ReceivedTasks = () => {
     setActiveTabId(newId);
   };
   const closeTab = (id) => {
-    let idx = tabs.findIndex((tab) => tab.id === id);
     if (tabs.length === 1) return; // Don't close last tab
+    const tab = tabs.find((t) => t.id === id);
+    setTabToDelete({ id, title: tab?.title || "this tab" });
+    setShowTabDeleteConfirmation(true);
+  };
+
+  const confirmCloseTab = () => {
+    if (!tabToDelete) return;
+
+    const id = tabToDelete.id;
+    let idx = tabs.findIndex((tab) => tab.id === id);
     const newTabs = tabs.filter((tab) => tab.id !== id);
     setTabs(newTabs);
     if (activeTabId === id) {
       setActiveTabId(newTabs[Math.max(0, idx - 1)].id);
     }
+
+    toast.success("Tab deleted successfully");
+    setShowTabDeleteConfirmation(false);
+    setTabToDelete(null);
   };
   const renameTab = (id, newTitle) => {
     setTabs(
@@ -2434,6 +2453,21 @@ const ReceivedTasks = () => {
         onDownload={handleDownloadPDF}
         onDownloadExcel={handleDownloadExcel}
         availableColumns={extendedColumns}
+      />
+
+      {/* Tab deletion confirmation modal */}
+      <ConfirmationModal
+        isOpen={showTabDeleteConfirmation}
+        onClose={() => {
+          setShowTabDeleteConfirmation(false);
+          setTabToDelete(null);
+        }}
+        onConfirm={confirmCloseTab}
+        title="Delete Tab"
+        message={`Are you sure you want to delete "${tabToDelete?.title}"?\n\nThis will remove the tab and all its saved settings.`}
+        confirmText="Yes, Delete"
+        cancelText="Cancel"
+        type="danger"
       />
     </div>
   );

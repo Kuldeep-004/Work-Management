@@ -2,7 +2,6 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import defaultProfile from "../assets/avatar.jpg";
-import FileUpload from "./FileUpload";
 import FileList from "./FileList";
 import { API_BASE_URL } from "../apiConfig";
 import TaskStatusDropdown from "./TaskStatusDropdown";
@@ -491,13 +490,12 @@ const CreateTask = ({
           assignedTo: defaultAssignedTo,
         }));
       }
-        // For non-admin/team-head roles, always use current user
-        setFormData((prev) => ({
-          ...prev,
-          assignedBy: loggedInUser._id,
-        }));
-        setSelectedAssignedBy(loggedInUser);
-      
+      // For non-admin/team-head roles, always use current user
+      setFormData((prev) => ({
+        ...prev,
+        assignedBy: loggedInUser._id,
+      }));
+      setSelectedAssignedBy(loggedInUser);
     }
   }, [mode, isOpen, selectedUserId, users, loggedInUser]);
 
@@ -1153,27 +1151,6 @@ const CreateTask = ({
     });
   };
 
-  const handleClientNameChange = (clientId) => {
-    const selectedClient = clients.find((client) => client._id === clientId);
-
-    if (selectedClient) {
-      setFormData((prev) => ({
-        ...prev,
-        clientName: selectedClient.name,
-        clientGroup: selectedClient.group.name,
-        workType: selectedClient.workOffered.map((wt) => wt.name),
-      }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        clientName: "",
-        clientGroup: "",
-        workType: [],
-      }));
-    }
-    setIsClientDropdownOpen(false);
-  };
-
   const selectedUserDisplay =
     selectedUsers.length > 0
       ? `${selectedUsers.length} user${
@@ -1267,55 +1244,6 @@ const CreateTask = ({
     } catch (error) {
       toast.error(error.message);
     }
-  };
-
-  const handleFileDeleted = (fileId) => {
-    setTaskFiles((prev) => prev.filter((f) => f._id !== fileId));
-  };
-
-  const handleOpenModal = () => {
-    const { date, time } = getCurrentDateTime();
-    setFormData({
-      title: "",
-      description: "",
-      clientName: "",
-      clientGroup: "",
-      workType: [],
-      assignedTo: [],
-      priority: "today",
-      inwardEntryDate: date,
-      inwardEntryTime: time,
-      dueDate: "",
-      targetDate: "",
-      billed: false,
-      status: "yet_to_start", // Use yet_to_start as default
-    });
-    setIsModalOpen(true);
-  };
-
-  const handleClose = () => {
-    setIsModalOpen(false);
-    setFormData({
-      title: "",
-      description: "",
-      clientName: "",
-      clientGroup: "",
-      workType: [],
-      assignedTo: [],
-      guides: [],
-      priority: "today",
-      inwardEntryDate: "",
-      inwardEntryTime: "",
-      dueDate: "",
-      targetDate: "",
-      billed: false,
-      status: "yet_to_start", // Use yet_to_start as default
-    });
-    setSelectedFiles([]);
-    setTaskFiles([]);
-    setCreatedTaskId(null);
-    setUploading(false);
-    setSelectedGuides([]);
   };
 
   const filteredWorkTypes = useMemo(() => {
@@ -1416,12 +1344,17 @@ const CreateTask = ({
                                 const isInternalWorkGroup =
                                   internalWorkGroups.includes(clientGroupName);
 
+                                  const haaInternalWorks = workTypes.find(
+                                    (wt) => wt.name == "HAA-Internal works",
+                                  );
                                 setFormData((prev) => ({
                                   ...prev,
                                   clientName: client.name,
                                   clientGroup: clientGroupName,
                                   billed: isInternalWorkGroup ? true : false, // Set to true for internal work groups
+                                  workType: isInternalWorkGroup && haaInternalWorks ?  ["HAA-Internal works"] : [],
                                 }));
+                                
                                 setClientSearchTerm(client.name);
                                 setIsClientDropdownOpen(false);
                               }}
@@ -1624,17 +1557,39 @@ const CreateTask = ({
                           ? "no"
                           : ""
                     }
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        billed:
-                          e.target.value === "yes"
-                            ? true
-                            : e.target.value === "no"
-                              ? false
-                              : "",
-                      })
-                    }
+                    onChange={(e) => {
+                      const newBilled =
+                        e.target.value === "yes"
+                          ? true
+                          : e.target.value === "no"
+                            ? false
+                            : "";
+
+                      setFormData((prev) => {
+                        const updatedData = {
+                          ...prev,
+                          billed: newBilled,
+                        };
+                        console.log("first", workTypes);
+                        // If Internal Works is set to "yes" (billed:true), auto-select "HAA-Internal Works"
+                        if (newBilled === true) {
+                          const haaInternalWorks = workTypes.find(
+                            (wt) => wt.name === "HAA-Internal works",
+                          );
+                          if (
+                            haaInternalWorks &&
+                            !prev.workType.includes("HAA-Internal works")
+                          ) {
+                            updatedData.workType = [
+                              ...prev.workType,
+                              "HAA-Internal works",
+                            ];
+                          }
+                        }
+
+                        return updatedData;
+                      });
+                    }}
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >
@@ -1711,9 +1666,7 @@ const CreateTask = ({
                       <button
                         type="button"
                         disabled={
-                          ["Admin"].includes(loggedInUser.role)
-                            ? false
-                            : true
+                          ["Admin"].includes(loggedInUser.role) ? false : true
                         }
                         onClick={() =>
                           setIsAssignedByDropdownOpen(!isAssignedByDropdownOpen)
@@ -2252,8 +2205,13 @@ const CreateTask = ({
                                       ...prev,
                                       workType: [type.name],
                                     }));
-                                  const hasHAAWorkType = type?.name?.startsWith("HAA");
-                                    if(hasHAAWorkType) setFormData((prev)=>({...prev,"billed":true}));
+                                    const hasHAAWorkType =
+                                      type?.name?.startsWith("HAA");
+                                    if (hasHAAWorkType)
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        billed: true,
+                                      }));
                                     setIsWorkTypeDropdownOpen(false);
                                   }
                                 }}

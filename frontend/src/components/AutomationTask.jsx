@@ -1,16 +1,16 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import toast from 'react-hot-toast';
-import defaultProfile from '../assets/avatar.jpg';
-import FileUpload from './FileUpload';
-import FileList from './FileList';
-import { API_BASE_URL } from '../apiConfig';
-import TaskStatusDropdown from './TaskStatusDropdown';
+import { useState, useMemo, useRef, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import toast from "react-hot-toast";
+import defaultProfile from "../assets/avatar.jpg";
+import FileUpload from "./FileUpload";
+import FileList from "./FileList";
+import { API_BASE_URL } from "../apiConfig";
+import TaskStatusDropdown from "./TaskStatusDropdown";
 
 // Accept new props for automation task creation
 const AutomationTask = ({
   users = [],
-  mode = 'create',
+  mode = "create",
   initialData = null,
   isOpen = false,
   onClose = () => {},
@@ -20,31 +20,31 @@ const AutomationTask = ({
 }) => {
   const { user: loggedInUser, isAuthenticated } = useAuth();
   const [isWorkTypeModalOpen, setIsWorkTypeModalOpen] = useState(false);
-  const [workTypeFormData, setWorkTypeFormData] = useState({ name: '' });
+  const [workTypeFormData, setWorkTypeFormData] = useState({ name: "" });
   const [clients, setClients] = useState([]);
   const [clientGroups, setClientGroups] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
   const [priorities, setPriorities] = useState([]);
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    clientName: '',
-    clientGroup: '',
+    title: "",
+    description: "",
+    clientName: "",
+    clientGroup: "",
     workType: [],
     assignedTo: [],
-    priority: '',
-    inwardEntryDate: '',
-    inwardEntryTime: '',
-    dueDate: '',
-    targetDate: '',
+    priority: "",
+    inwardEntryDate: "",
+    inwardEntryTime: "",
+    dueDate: "",
+    targetDate: "",
     billed: false, // default to No (Internal Works)
-    status: 'yet_to_start' // default to yet_to_start
+    status: "yet_to_start", // default to yet_to_start
   });
   const [selectedUsers, setSelectedUsers] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
-  const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [clientSearchTerm, setClientSearchTerm] = useState("");
   const modalRef = useRef(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [taskFiles, setTaskFiles] = useState([]);
@@ -64,43 +64,43 @@ const AutomationTask = ({
   // Function to get current date and time in required format
   const getCurrentDateTime = () => {
     const now = new Date();
-    
+
     // Format date as YYYY-MM-DD
-    const date = now.toISOString().split('T')[0];
-    
+    const date = now.toISOString().split("T")[0];
+
     // Format time as HH:MM in 12-hour format
     const hours = now.getHours();
     const minutes = now.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const ampm = hours >= 12 ? "PM" : "AM";
     const displayHours = hours % 12 || 12;
-    const time = `${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-    
+    const time = `${displayHours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")} ${ampm}`;
+
     return { date, time };
   };
 
   // Function to convert 12-hour time to 24-hour format for backend
   const convertTo24Hour = (time12h) => {
-    const [time, modifier] = time12h.split(' ');
-    let [hours, minutes] = time.split(':');
-    
+    const [time, modifier] = time12h.split(" ");
+    let [hours, minutes] = time.split(":");
+
     hours = parseInt(hours, 10);
-    
+
     if (hours === 12) {
-      hours = modifier === 'PM' ? 12 : 0;
-    } else if (modifier === 'PM') {
+      hours = modifier === "PM" ? 12 : 0;
+    } else if (modifier === "PM") {
       hours = hours + 12;
     }
-    
-    return `${hours.toString().padStart(2, '0')}:${minutes}`;
+
+    return `${hours.toString().padStart(2, "0")}:${minutes}`;
   };
 
   // Function to convert 24-hour time to 12-hour format for display
   const convertTo12Hour = (time24h) => {
-    const [hours, minutes] = time24h.split(':');
+    const [hours, minutes] = time24h.split(":");
     const hour = parseInt(hours, 10);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const ampm = hour >= 12 ? "PM" : "AM";
     const displayHour = hour % 12 || 12;
-    return `${displayHour.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    return `${displayHour.toString().padStart(2, "0")}:${minutes} ${ampm}`;
   };
 
   // Fetch clients, client groups, work types, and priorities
@@ -117,39 +117,48 @@ const AutomationTask = ({
         setClients(clientsData);
 
         // Fetch client groups
-        const groupsResponse = await fetch(`${API_BASE_URL}/api/clients/groups`, {
-          headers: {
-            Authorization: `Bearer ${loggedInUser.token}`,
+        const groupsResponse = await fetch(
+          `${API_BASE_URL}/api/clients/groups`,
+          {
+            headers: {
+              Authorization: `Bearer ${loggedInUser.token}`,
+            },
           },
-        });
+        );
         const groupsData = await groupsResponse.json();
         setClientGroups(groupsData);
 
         // Fetch work types
-        const workTypesResponse = await fetch(`${API_BASE_URL}/api/clients/work-types`, {
-          headers: {
-            Authorization: `Bearer ${loggedInUser.token}`,
+        const workTypesResponse = await fetch(
+          `${API_BASE_URL}/api/clients/work-types`,
+          {
+            headers: {
+              Authorization: `Bearer ${loggedInUser.token}`,
+            },
           },
-        });
+        );
         const workTypesData = await workTypesResponse.json();
         setWorkTypes(workTypesData);
 
         // Fetch priorities and merge with defaults
         try {
-          const prioritiesResponse = await fetch(`${API_BASE_URL}/api/priorities`, {
-            headers: {
-              Authorization: `Bearer ${loggedInUser.token}`,
+          const prioritiesResponse = await fetch(
+            `${API_BASE_URL}/api/priorities`,
+            {
+              headers: {
+                Authorization: `Bearer ${loggedInUser.token}`,
+              },
             },
-          });
+          );
           const prioritiesData = await prioritiesResponse.json();
           setPriorities(prioritiesData);
         } catch (priorityError) {
-          console.error('Error fetching priorities:', priorityError);
+          console.error("Error fetching priorities:", priorityError);
           setPriorities([]);
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
-        toast.error('Failed to fetch required data');
+        console.error("Error fetching data:", error);
+        toast.error("Failed to fetch required data");
       }
     };
 
@@ -161,16 +170,24 @@ const AutomationTask = ({
   // Filter clients based on search term
   const filteredClients = useMemo(() => {
     if (!clientSearchTerm) return clients;
-    return clients.filter(client => 
-      client.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) ||
-      (client.group && client.group.name.toLowerCase().includes(clientSearchTerm.toLowerCase()))
+    return clients.filter(
+      (client) =>
+        client.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) ||
+        (client.group &&
+          client.group.name
+            .toLowerCase()
+            .includes(clientSearchTerm.toLowerCase())),
     );
   }, [clients, clientSearchTerm]);
 
   // Handle click outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target) && !event.target.closest('.work-type-modal')) {
+      if (
+        modalRef.current &&
+        !modalRef.current.contains(event.target) &&
+        !event.target.closest(".work-type-modal")
+      ) {
         onClose();
         setIsDropdownOpen(false);
         setIsClientDropdownOpen(false);
@@ -178,11 +195,11 @@ const AutomationTask = ({
     };
 
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isOpen, onClose]);
 
@@ -197,7 +214,7 @@ const AutomationTask = ({
 
     // Check individual file sizes and total size
     let totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
-    newFiles.forEach(file => {
+    newFiles.forEach((file) => {
       if (file.size > MAX_FILE_SIZE) {
         errors.push(`${file.name} exceeds 10MB limit`);
       }
@@ -210,27 +227,27 @@ const AutomationTask = ({
 
     // Check file types
     const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-powerpoint',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-      'text/plain'
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "text/plain",
     ];
 
-    newFiles.forEach(file => {
+    newFiles.forEach((file) => {
       if (!allowedTypes.includes(file.type)) {
         errors.push(`${file.name} is not a supported file type`);
       }
     });
 
     if (errors.length > 0) {
-      toast.error(errors.join('\n'));
+      toast.error(errors.join("\n"));
       return false;
     }
 
@@ -243,101 +260,120 @@ const AutomationTask = ({
 
     // Convert FileList to Array and validate
     const newFiles = Array.from(files);
-    console.log('Selected files:', newFiles); // Debug log
+    console.log("Selected files:", newFiles); // Debug log
 
     if (validateFiles(newFiles)) {
-      setSelectedFiles(prev => {
+      setSelectedFiles((prev) => {
         const updatedFiles = [...prev, ...newFiles];
-        console.log('Updated selected files:', updatedFiles); // Debug log
+        console.log("Updated selected files:", updatedFiles); // Debug log
         return updatedFiles;
       });
     }
     // Reset the input value to allow selecting the same file again
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
   };
 
   const removeSelectedFile = (index) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Prefill formData if in edit mode
   useEffect(() => {
-    if (mode === 'edit' && initialData && isOpen) {
-      let inwardEntryTime = '';
+    if (mode === "edit" && initialData && isOpen) {
+      let inwardEntryTime = "";
       if (initialData.inwardEntryTime) {
         inwardEntryTime = initialData.inwardEntryTime;
       } else if (initialData.inwardEntryDate) {
         const dateObj = new Date(initialData.inwardEntryDate);
-        const hours = dateObj.getHours().toString().padStart(2, '0');
-        const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+        const hours = dateObj.getHours().toString().padStart(2, "0");
+        const minutes = dateObj.getMinutes().toString().padStart(2, "0");
         inwardEntryTime = `${hours}:${minutes}`;
       }
-      const convertedTime = inwardEntryTime ? convertTo12Hour(inwardEntryTime) : '';
+      const convertedTime = inwardEntryTime
+        ? convertTo12Hour(inwardEntryTime)
+        : "";
       setFormData({
-        title: initialData.title || '',
-        description: initialData.description || '',
-        clientName: initialData.clientName || '',
-        clientGroup: initialData.clientGroup || '',
-        workType: Array.isArray(initialData.workType) ? initialData.workType : [],
+        title: initialData.title || "",
+        description: initialData.description || "",
+        clientName: initialData.clientName || "",
+        clientGroup: initialData.clientGroup || "",
+        workType: Array.isArray(initialData.workType)
+          ? initialData.workType
+          : [],
         assignedTo: Array.isArray(initialData.assignedTo)
-          ? initialData.assignedTo.map(u => typeof u === 'string' ? u : u._id)
+          ? initialData.assignedTo.map((u) =>
+              typeof u === "string" ? u : u._id,
+            )
           : initialData.assignedTo
-            ? [typeof initialData.assignedTo === 'string' ? initialData.assignedTo : initialData.assignedTo._id]
+            ? [
+                typeof initialData.assignedTo === "string"
+                  ? initialData.assignedTo
+                  : initialData.assignedTo._id,
+              ]
             : [],
-        priority: initialData.priority || 'regular',
-        inwardEntryDate: initialData.inwardEntryDate ? initialData.inwardEntryDate.split('T')[0] : '',
+        priority: initialData.priority || "regular",
+        inwardEntryDate: initialData.inwardEntryDate
+          ? initialData.inwardEntryDate.split("T")[0]
+          : "",
         inwardEntryTime: convertedTime,
-        dueDate: initialData.dueDate ? initialData.dueDate.split('T')[0] : '',
-        targetDate: initialData.targetDate ? initialData.targetDate.split('T')[0] : '',
-        billed: typeof initialData.billed === 'boolean' ? initialData.billed : true,
-        status: initialData.status || 'yet_to_start' // Use yet_to_start as fallback
+        dueDate: initialData.dueDate ? initialData.dueDate.split("T")[0] : "",
+        targetDate: initialData.targetDate
+          ? initialData.targetDate.split("T")[0]
+          : "",
+        billed:
+          typeof initialData.billed === "boolean" ? initialData.billed : true,
+        status: initialData.status || "yet_to_start", // Use yet_to_start as fallback
       });
-      setClientSearchTerm(initialData.clientName || '');
+      setClientSearchTerm(initialData.clientName || "");
       const assignedToRaw = Array.isArray(initialData.assignedTo)
         ? initialData.assignedTo
         : initialData.assignedTo
           ? [initialData.assignedTo]
           : [];
-      const assignedUserIds = assignedToRaw.map(u => typeof u === 'string' ? u : u._id);
-      console.log('[EditModal-FIX] assignedToRaw:', assignedToRaw);
-      console.log('[EditModal-FIX] users:', users);
-      console.log('[EditModal-FIX] assignedUserIds:', assignedUserIds);
-      const selected = usersWithCurrent.filter(u => assignedUserIds.includes(u._id));
-      console.log('[EditModal-FIX] selectedUsers to set:', selected);
+      const assignedUserIds = assignedToRaw.map((u) =>
+        typeof u === "string" ? u : u._id,
+      );
+      console.log("[EditModal-FIX] assignedToRaw:", assignedToRaw);
+      console.log("[EditModal-FIX] users:", users);
+      console.log("[EditModal-FIX] assignedUserIds:", assignedUserIds);
+      const selected = usersWithCurrent.filter((u) =>
+        assignedUserIds.includes(u._id),
+      );
+      console.log("[EditModal-FIX] selectedUsers to set:", selected);
       setSelectedUsers(selected);
-      
+
       // Set multi-user assignment toggle based on number of assigned users
       setIsMultiUserAssign(assignedUserIds.length > 1);
-    } else if (mode === 'create' && isOpen) {
+    } else if (mode === "create" && isOpen) {
       const { date, time } = getCurrentDateTime();
-      
+
       // Only reset form data if it's not already initialized (when modal first opens)
-      setFormData(prev => {
+      setFormData((prev) => {
         // If the form already has data (user has been using it), don't reset the status
-        if (prev.title || prev.status !== 'yet_to_start') {
+        if (prev.title || prev.status !== "yet_to_start") {
           return prev; // Keep existing data
         }
-        
+
         // Initialize form for first time
         return {
-          title: '',
-          description: '',
-          clientName: '',
-          clientGroup: '',
+          title: "",
+          description: "",
+          clientName: "",
+          clientGroup: "",
           workType: [],
           assignedTo: [],
-          priority: 'today',
+          priority: "today",
           inwardEntryDate: date,
           inwardEntryTime: time,
-          dueDate: '',
-          targetDate: '',
+          dueDate: "",
+          targetDate: "",
           billed: false,
-          status: 'yet_to_start' // Use yet_to_start as default
+          status: "yet_to_start", // Use yet_to_start as default
         };
       });
-      setClientSearchTerm('');
+      setClientSearchTerm("");
       setSelectedUsers([]);
       setIsMultiUserAssign(false); // Reset multi-user toggle for create mode
     }
@@ -346,7 +382,7 @@ const AutomationTask = ({
   // Ensure selectedUsers is set for edit mode when users are loaded
   useEffect(() => {
     if (
-      mode === 'edit' &&
+      mode === "edit" &&
       initialData &&
       isOpen &&
       users.length > 0 &&
@@ -358,14 +394,27 @@ const AutomationTask = ({
         : initialData.assignedTo
           ? [initialData.assignedTo]
           : [];
-      const assignedUserIds = assignedToRaw.map(u => typeof u === 'string' ? u : u._id);
-      console.log('[EditModal-FIX][users effect] assignedToRaw:', assignedToRaw);
-      console.log('[EditModal-FIX][users effect] users:', users);
-      console.log('[EditModal-FIX][users effect] assignedUserIds:', assignedUserIds);
-      const selected = usersWithCurrent.filter(u => assignedUserIds.includes(u._id));
-      console.log('[EditModal-FIX][users effect] selectedUsers to set:', selected);
+      const assignedUserIds = assignedToRaw.map((u) =>
+        typeof u === "string" ? u : u._id,
+      );
+      console.log(
+        "[EditModal-FIX][users effect] assignedToRaw:",
+        assignedToRaw,
+      );
+      console.log("[EditModal-FIX][users effect] users:", users);
+      console.log(
+        "[EditModal-FIX][users effect] assignedUserIds:",
+        assignedUserIds,
+      );
+      const selected = usersWithCurrent.filter((u) =>
+        assignedUserIds.includes(u._id),
+      );
+      console.log(
+        "[EditModal-FIX][users effect] selectedUsers to set:",
+        selected,
+      );
       setSelectedUsers(selected);
-      
+
       // Set multi-user assignment toggle based on number of assigned users
       setIsMultiUserAssign(assignedUserIds.length > 1);
     }
@@ -375,49 +424,49 @@ const AutomationTask = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isAuthenticated()) {
-      toast.error('Please login to create tasks');
+      toast.error("Please login to create tasks");
       return;
     }
 
     // Validate required fields
     if (!formData.title.trim()) {
-      toast.error('Task Title is required');
+      toast.error("Task Title is required");
       return;
     }
 
     if (!formData.clientName.trim()) {
-      toast.error('Client Name is required');
+      toast.error("Client Name is required");
       return;
     }
 
     if (!formData.inwardEntryDate) {
-      toast.error('Inward Entry Date is required');
+      toast.error("Inward Entry Date is required");
       return;
     }
 
     if (!formData.inwardEntryTime) {
-      toast.error('Inward Entry Time is required');
+      toast.error("Inward Entry Time is required");
       return;
     }
 
     if (formData.assignedTo.length === 0) {
-      toast.error('Please select at least one user to assign the task to');
+      toast.error("Please select at least one user to assign the task to");
       return;
     }
 
     if (formData.workType.length === 0) {
-      toast.error('Please select at least one work type');
+      toast.error("Please select at least one work type");
       return;
     }
 
     if (formData.billed !== true && formData.billed !== false) {
-      toast.error('Please select whether the task is billed or not');
+      toast.error("Please select whether the task is billed or not");
       return;
     }
 
     try {
       setUploading(true);
-      console.log('Creating task with files:', selectedFiles); // Debug log
+      console.log("Creating task with files:", selectedFiles); // Debug log
 
       // Convert 12-hour time to 24-hour format for backend
       // Make sure assignedTo is properly formatted as an array of non-empty IDs
@@ -427,113 +476,129 @@ const AutomationTask = ({
       } else {
         assignedToArray = formData.assignedTo ? [formData.assignedTo] : [];
       }
-      
+
       if (assignedToArray.length === 0) {
-        toast.error('Please select at least one user to assign the task to');
+        toast.error("Please select at least one user to assign the task to");
         setUploading(false);
         return;
       }
-      
+
       const taskData = {
         ...formData,
         assignedTo: assignedToArray,
         inwardEntryTime: convertTo24Hour(formData.inwardEntryTime),
-        billed: formData.billed
+        billed: formData.billed,
       };
 
       let response, updatedTask;
-      if (mode === 'edit' && initialData) {
+      if (mode === "edit" && initialData) {
         if (isEditingTemplate) {
           // When editing a template, just return the updated data to the parent
           // The parent (AdminDashboard) will handle the API call to update the automation
           const updatedTemplate = {
             ...taskData,
-            _id: initialData._id // Preserve the original template ID if it exists
+            _id: initialData._id, // Preserve the original template ID if it exists
           };
-          toast.success('Template updated successfully');
+          toast.success("Template updated successfully");
           if (onSubmit) onSubmit(updatedTemplate);
           onClose();
           return;
         } else if (initialData._id) {
           // Regular task editing
-          response = await fetch(`${API_BASE_URL}/api/tasks/${initialData._id}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${loggedInUser.token}`,
+          response = await fetch(
+            `${API_BASE_URL}/api/tasks/${initialData._id}`,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${loggedInUser.token}`,
+              },
+              body: JSON.stringify(taskData),
             },
-            body: JSON.stringify(taskData),
-          });
+          );
           if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to update task');
+            throw new Error(errorData.message || "Failed to update task");
           }
           updatedTask = await response.json();
-          toast.success('Task updated successfully');
+          toast.success("Task updated successfully");
           if (onSubmit) onSubmit(updatedTask);
           onClose();
         } else {
-          throw new Error('Task ID not found for editing');
+          throw new Error("Task ID not found for editing");
         }
       } else {
         // Only post to automation endpoint for new tasks
         if (!automationId) {
-          toast.error('Automation ID is required to create a task');
+          toast.error("Automation ID is required to create a task");
           setUploading(false);
           return;
         }
-        
+
         try {
           // First save the automation template
-          const response = await fetch(`${API_BASE_URL}/api/automations/${automationId}/tasks`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${loggedInUser.token}`,
+          const response = await fetch(
+            `${API_BASE_URL}/api/automations/${automationId}/tasks`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${loggedInUser.token}`,
+              },
+              body: JSON.stringify(taskData),
             },
-            body: JSON.stringify(taskData),
-          });
+          );
 
           if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to create task template');
+            throw new Error(
+              errorData.message || "Failed to create task template",
+            );
           }
 
           const result = await response.json();
-          console.log('Automation template save response:', result); // Debug log
-          toast.success(result.message || 'Automation task template saved successfully');
-          
+          console.log("Automation template save response:", result); // Debug log
+          toast.success(
+            result.message || "Automation task template saved successfully",
+          );
+
           // If files are selected, create an actual task to attach files to
           if (selectedFiles.length > 0) {
             // Make sure assignedTo is non-empty and properly formatted
             if (!taskData.assignedTo || !taskData.assignedTo.length) {
-              throw new Error('assignedTo must be a non-empty array of user IDs');
+              throw new Error(
+                "assignedTo must be a non-empty array of user IDs",
+              );
             }
-            
+
             // Create a real task for file upload
             const taskRequestData = {
               ...taskData,
               // Double check that assignedTo is properly formatted as an array of IDs
-              assignedTo: Array.isArray(taskData.assignedTo) ? taskData.assignedTo : [taskData.assignedTo]
+              assignedTo: Array.isArray(taskData.assignedTo)
+                ? taskData.assignedTo
+                : [taskData.assignedTo],
             };
-            
+
             console.log("Creating task with data:", taskRequestData);
-            
+
             const taskResponse = await fetch(`${API_BASE_URL}/api/tasks`, {
-              method: 'POST',
+              method: "POST",
               headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
                 Authorization: `Bearer ${loggedInUser.token}`,
               },
               body: JSON.stringify(taskRequestData),
             });
-            
+
             if (!taskResponse.ok) {
               const errorText = await taskResponse.text();
-              console.error('Error creating task for file upload:', errorText);
-              throw new Error(`Failed to create task for file upload: ${errorText}`);
+              console.error("Error creating task for file upload:", errorText);
+              throw new Error(
+                `Failed to create task for file upload: ${errorText}`,
+              );
             }
-            
+
             let taskResult;
             try {
               taskResult = await taskResponse.json();
@@ -542,7 +607,7 @@ const AutomationTask = ({
               console.error("Error parsing task creation response:", err);
               throw new Error("Failed to parse task creation response");
             }
-            
+
             // Handle case where API returns an array instead of a single object
             let taskObj;
             if (Array.isArray(taskResult) && taskResult.length > 0) {
@@ -551,35 +616,38 @@ const AutomationTask = ({
             } else {
               taskObj = taskResult;
             }
-            
+
             if (taskObj && taskObj._id) {
               console.log("Got valid task ID:", taskObj._id);
               setCreatedTaskId(taskObj._id);
               await uploadFiles(taskObj._id);
-              toast.success('Files uploaded successfully');
+              toast.success("Files uploaded successfully");
             } else {
               console.error("Invalid task result:", taskResult);
-              throw new Error('Invalid task ID received from server');
+              throw new Error("Invalid task ID received from server");
             }
           }
-          
+
           // Pass the newly created template or the full array of templates to the parent component
           if (onSubmit) {
             if (result.taskTemplate) {
               onSubmit(result.taskTemplate); // Single template from old API
-            } else if (result.allTemplates && Array.isArray(result.allTemplates)) {
+            } else if (
+              result.allTemplates &&
+              Array.isArray(result.allTemplates)
+            ) {
               onSubmit(result.allTemplates); // All templates from updated API
             }
           }
           onClose();
         } catch (error) {
-          console.error('Error in task creation process:', error);
+          console.error("Error in task creation process:", error);
           toast.error(`Task template saved but ${error.message}`);
           throw error;
         }
       }
     } catch (error) {
-      console.error('Error creating task:', error);
+      console.error("Error creating task:", error);
       toast.error(error.message);
       setCreatedTaskId(null);
     } finally {
@@ -589,63 +657,66 @@ const AutomationTask = ({
 
   const uploadFiles = async (taskId) => {
     if (!taskId) {
-      console.error('Missing task ID for file upload');
-      throw new Error('Invalid task ID');
+      console.error("Missing task ID for file upload");
+      throw new Error("Invalid task ID");
     }
 
     if (!selectedFiles.length) {
-      console.log('No files to upload'); // Debug log
+      console.log("No files to upload"); // Debug log
       return;
     }
-    
+
     // Validate taskId format
-    if (typeof taskId !== 'string' || !taskId.match(/^[0-9a-fA-F]{24}$/)) {
-      console.error('Invalid task ID format:', taskId);
-      throw new Error('Invalid task ID format');
+    if (typeof taskId !== "string" || !taskId.match(/^[0-9a-fA-F]{24}$/)) {
+      console.error("Invalid task ID format:", taskId);
+      throw new Error("Invalid task ID format");
     }
 
-    console.log('Uploading files for task:', taskId, 'Files:', selectedFiles); // Debug log
+    console.log("Uploading files for task:", taskId, "Files:", selectedFiles); // Debug log
     setUploadProgress({});
-    
+
     // Upload files in batches of 3
     const batchSize = 3;
     for (let i = 0; i < selectedFiles.length; i += batchSize) {
       const batch = selectedFiles.slice(i, i + batchSize);
       const formData = new FormData();
-      
-      batch.forEach(file => {
-        formData.append('files', file);
+
+      batch.forEach((file) => {
+        formData.append("files", file);
       });
 
       try {
-        console.log('Uploading batch:', batch); // Debug log
-        const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/files`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${loggedInUser.token}`,
+        console.log("Uploading batch:", batch); // Debug log
+        const response = await fetch(
+          `${API_BASE_URL}/api/tasks/${taskId}/files`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${loggedInUser.token}`,
+            },
+            body: formData,
           },
-          body: formData,
-        });
+        );
 
         if (!response.ok) {
           const error = await response.json();
-          throw new Error(error.message || 'Failed to upload files');
+          throw new Error(error.message || "Failed to upload files");
         }
 
         const uploadedFiles = await response.json();
-        console.log('Uploaded files response:', uploadedFiles); // Debug log
-        
-        setTaskFiles(prev => {
+        console.log("Uploaded files response:", uploadedFiles); // Debug log
+
+        setTaskFiles((prev) => {
           const updatedFiles = [...prev, ...uploadedFiles];
-          console.log('Updated task files:', updatedFiles); // Debug log
+          console.log("Updated task files:", updatedFiles); // Debug log
           return updatedFiles;
         });
-        
+
         // Update progress for this batch
         batch.forEach((_, index) => {
-          setUploadProgress(prev => ({
+          setUploadProgress((prev) => ({
             ...prev,
-            [i + index]: 'completed'
+            [i + index]: "completed",
           }));
         });
       } catch (error) {
@@ -657,76 +728,87 @@ const AutomationTask = ({
     // Clear selected files only after all uploads are successful
     setSelectedFiles([]);
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
   };
 
   const handleAssignedToChange = (userId) => {
-    const user = usersWithCurrent.find(u => u._id === userId);
+    const user = usersWithCurrent.find((u) => u._id === userId);
     if (!user) return;
 
-    setFormData(prev => {
+    setFormData((prev) => {
       const newAssignedTo = prev.assignedTo.includes(userId)
-        ? prev.assignedTo.filter(id => id !== userId)
+        ? prev.assignedTo.filter((id) => id !== userId)
         : [...prev.assignedTo, userId];
-      setSelectedUsers(usersWithCurrent.filter(u => newAssignedTo.includes(u._id)));
+      setSelectedUsers(
+        usersWithCurrent.filter((u) => newAssignedTo.includes(u._id)),
+      );
       setIsDropdownOpen(false); // Close dropdown after each selection
       return { ...prev, assignedTo: newAssignedTo };
     });
   };
 
   const handleWorkTypeChange = (type) => {
-    setFormData(prev => {
+    setFormData((prev) => {
       const newWorkType = prev.workType.includes(type)
-        ? prev.workType.filter(t => t !== type)
+        ? prev.workType.filter((t) => t !== type)
         : [...prev.workType, type];
-      
+
       return { ...prev, workType: newWorkType };
     });
   };
 
   const handleClientNameChange = (clientId) => {
-    const selectedClient = clients.find(client => client._id === clientId);
-    
+    const selectedClient = clients.find((client) => client._id === clientId);
+
     if (selectedClient) {
       // Check if client group is one of the internal work groups
-      const internalWorkGroups = ['Hari Agarwal and Associates', 'Dreamlabs', 'SFS'];
-      const isInternalWorkGroup = internalWorkGroups.includes(selectedClient.group.name);
-      
-      setFormData(prev => ({
+      const internalWorkGroups = [
+        "Hari Agarwal and Associates",
+        "Dreamlabs",
+        "SFS",
+      ];
+      const isInternalWorkGroup = internalWorkGroups.includes(
+        selectedClient.group.name,
+      );
+
+      setFormData((prev) => ({
         ...prev,
         clientName: selectedClient.name,
         clientGroup: selectedClient.group.name,
-        workType: selectedClient.workOffered.map(wt => wt.name),
-        billed: isInternalWorkGroup ? true : false // Set to true for internal work groups
+        workType: selectedClient.workOffered.map((wt) => wt.name),
+        billed: isInternalWorkGroup ? true : false, // Set to true for internal work groups
       }));
     } else {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
-        clientName: '',
-        clientGroup: '',
+        clientName: "",
+        clientGroup: "",
         workType: [],
-        billed: false
+        billed: false,
       }));
     }
     setIsClientDropdownOpen(false);
   };
 
-  const selectedUserDisplay = selectedUsers.length > 0
-    ? `${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''} selected`
-    : 'Select users';
+  const selectedUserDisplay =
+    selectedUsers.length > 0
+      ? `${selectedUsers.length} user${selectedUsers.length > 1 ? "s" : ""} selected`
+      : "Select users";
 
   // Ensure current user is always in the users list for assignment
   const usersWithCurrent = useMemo(() => {
     if (!loggedInUser) return users;
-    if (users.some(u => u._id === loggedInUser._id)) return users;
+    if (users.some((u) => u._id === loggedInUser._id)) return users;
     return [loggedInUser, ...users];
   }, [users, loggedInUser]);
 
   // Filter users based on role-based permissions
-  const filteredUsers = usersWithCurrent.filter(user => {
+  const filteredUsers = usersWithCurrent.filter((user) => {
     // First filter by search term
-    const matchesSearch = `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = `${user.firstName} ${user.lastName}`
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
@@ -734,48 +816,48 @@ const AutomationTask = ({
     e.preventDefault();
     try {
       const response = await fetch(`${API_BASE_URL}/api/clients/work-types`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${loggedInUser.token}`,
         },
         body: JSON.stringify(workTypeFormData),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create work type');
+        throw new Error("Failed to create work type");
       }
 
       const newWorkType = await response.json();
-      setWorkTypes(prev => [...prev, newWorkType]);
+      setWorkTypes((prev) => [...prev, newWorkType]);
       setIsWorkTypeModalOpen(false);
-      setWorkTypeFormData({ name: '' });
-      toast.success('Work type created successfully');
+      setWorkTypeFormData({ name: "" });
+      toast.success("Work type created successfully");
     } catch (error) {
       toast.error(error.message);
     }
   };
 
   const handleFileDeleted = (fileId) => {
-    setTaskFiles(prev => prev.filter(f => f._id !== fileId));
+    setTaskFiles((prev) => prev.filter((f) => f._id !== fileId));
   };
 
   const handleOpenModal = () => {
     const { date, time } = getCurrentDateTime();
     setFormData({
-      title: '',
-      description: '',
-      clientName: '',
-      clientGroup: '',
+      title: "",
+      description: "",
+      clientName: "",
+      clientGroup: "",
       workType: [],
       assignedTo: [],
-      priority: 'today',
+      priority: "today",
       inwardEntryDate: date,
       inwardEntryTime: time,
-      dueDate: '',
-      targetDate: '',
+      dueDate: "",
+      targetDate: "",
       billed: false,
-      status: 'yet_to_start' // Use yet_to_start as default
+      status: "yet_to_start", // Use yet_to_start as default
     });
     setIsModalOpen(true);
   };
@@ -783,19 +865,19 @@ const AutomationTask = ({
   const handleClose = () => {
     setIsModalOpen(false);
     setFormData({
-      title: '',
-      description: '',
-      clientName: '',
-      clientGroup: '',
+      title: "",
+      description: "",
+      clientName: "",
+      clientGroup: "",
       workType: [],
       assignedTo: [],
-      priority: 'today',
-      inwardEntryDate: '',
-      inwardEntryTime: '',
-      dueDate: '',
-      targetDate: '',
+      priority: "today",
+      inwardEntryDate: "",
+      inwardEntryTime: "",
+      dueDate: "",
+      targetDate: "",
       billed: false,
-      status: 'yet_to_start' // Use yet_to_start as default
+      status: "yet_to_start", // Use yet_to_start as default
     });
     setSelectedFiles([]);
     setTaskFiles([]);
@@ -803,22 +885,24 @@ const AutomationTask = ({
     setUploading(false);
   };
 
-  const filteredWorkTypes   = useMemo(() => {
+  const filteredWorkTypes = useMemo(() => {
     if (!workTypeSearchTerm) return workTypes;
-    return workTypes.filter(type => type.name.toLowerCase().includes(workTypeSearchTerm.toLowerCase()));
+    return workTypes.filter((type) =>
+      type.name.toLowerCase().includes(workTypeSearchTerm.toLowerCase()),
+    );
   }, [workTypes, workTypeSearchTerm]);
 
   useEffect(() => {
     const handleClickOutsideDropdown = (event) => {
-      if (!event.target.closest('.work-type-dropdown')) {
+      if (!event.target.closest(".work-type-dropdown")) {
         setTimeout(() => setIsWorkTypeDropdownOpen(false), 100);
       }
     };
     if (isWorkTypeDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutsideDropdown);
+      document.addEventListener("mousedown", handleClickOutsideDropdown);
     }
     return () => {
-      document.removeEventListener('mousedown', handleClickOutsideDropdown);
+      document.removeEventListener("mousedown", handleClickOutsideDropdown);
     };
   }, [isWorkTypeDropdownOpen]);
 
@@ -829,7 +913,9 @@ const AutomationTask = ({
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">{mode === 'edit' ? 'Edit Task' : 'Create New Task'}</h2>
+              <h2 className="text-xl font-semibold">
+                {mode === "edit" ? "Edit Task" : "Create New Task"}
+              </h2>
               <button
                 onClick={onClose}
                 className="text-gray-500 hover:text-gray-700"
@@ -879,26 +965,45 @@ const AutomationTask = ({
                               className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
                               onClick={() => {
                                 // Check if client group is one of the internal work groups
-                                const internalWorkGroups = ['Hari Agarwal and Associates', 'Dreamlabs', 'SFS'];
-                                const clientGroupName = client.group ? client.group.name : '';
-                                const isInternalWorkGroup = internalWorkGroups.includes(clientGroupName);
-                                
-                                setFormData(prev => ({ 
-                                  ...prev, 
+                                const internalWorkGroups = [
+                                  "Hari Agarwal and Associates",
+                                  "Dreamlabs",
+                                  "SFS",
+                                ];
+                                const clientGroupName = client.group
+                                  ? client.group.name
+                                  : "";
+                                const isInternalWorkGroup =
+                                  internalWorkGroups.includes(clientGroupName);
+                                const haaInternalWorks = workTypes.find(
+                                  (wt) => wt.name == "HAA-Internal works",
+                                );
+                                setFormData((prev) => ({
+                                  ...prev,
                                   clientName: client.name,
                                   clientGroup: clientGroupName,
-                                  billed: isInternalWorkGroup ? true : false // Set to true for internal work groups
+                                  billed: isInternalWorkGroup ? true : false, // Set to true for internal work groups
+                                  workType:
+                                    isInternalWorkGroup && haaInternalWorks
+                                      ? ["HAA-Internal works"]
+                                      : [],
                                 }));
                                 setClientSearchTerm(client.name);
                                 setIsClientDropdownOpen(false);
                               }}
                             >
-                              <div className="font-medium text-gray-900">{client.name}</div>
-                              <div className="text-sm text-gray-500">{client.group ? client.group.name : 'No Group'}</div>
+                              <div className="font-medium text-gray-900">
+                                {client.name}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {client.group ? client.group.name : "No Group"}
+                              </div>
                             </div>
                           ))
                         ) : (
-                          <div className="px-4 py-2 text-gray-500">No clients found</div>
+                          <div className="px-4 py-2 text-gray-500">
+                            No clients found
+                          </div>
                         )}
                       </div>
                     )}
@@ -930,8 +1035,12 @@ const AutomationTask = ({
                   >
                     <option value="">Select Priority</option>
                     {priorities.map((priority) => (
-                      <option key={priority._id || priority.name} value={priority.name}>
-                        {priority.name.charAt(0).toUpperCase() + priority.name.slice(1).replace(/([A-Z])/g, ' $1')}
+                      <option
+                        key={priority._id || priority.name}
+                        value={priority.name}
+                      >
+                        {priority.name.charAt(0).toUpperCase() +
+                          priority.name.slice(1).replace(/([A-Z])/g, " $1")}
                       </option>
                     ))}
                   </select>
@@ -946,53 +1055,85 @@ const AutomationTask = ({
                       type="date"
                       value={formData.inwardEntryDate}
                       onChange={(e) =>
-                        setFormData({ ...formData, inwardEntryDate: e.target.value })
+                        setFormData({
+                          ...formData,
+                          inwardEntryDate: e.target.value,
+                        })
                       }
                       className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                     <div className="flex items-center space-x-2">
                       <select
-                        value={formData.inwardEntryTime.split(' ')[0]?.split(':')[0] || '12'}
+                        value={
+                          formData.inwardEntryTime
+                            .split(" ")[0]
+                            ?.split(":")[0] || "12"
+                        }
                         onChange={(e) => {
-                          const timeParts = formData.inwardEntryTime.split(' ');
-                          const [_, minutes] = (timeParts[0] || '12:00').split(':');
-                          const ampm = timeParts[1] || 'AM';
+                          const timeParts = formData.inwardEntryTime.split(" ");
+                          const [_, minutes] = (timeParts[0] || "12:00").split(
+                            ":",
+                          );
+                          const ampm = timeParts[1] || "AM";
                           const newTime = `${e.target.value}:${minutes} ${ampm}`;
-                          setFormData({ ...formData, inwardEntryTime: newTime });
+                          setFormData({
+                            ...formData,
+                            inwardEntryTime: newTime,
+                          });
                         }}
                         className="w-1/3 border rounded-md px-2 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map(hour => (
-                          <option key={hour} value={hour.toString().padStart(2, '0')}>
-                            {hour}
-                          </option>
-                        ))}
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(
+                          (hour) => (
+                            <option
+                              key={hour}
+                              value={hour.toString().padStart(2, "0")}
+                            >
+                              {hour}
+                            </option>
+                          ),
+                        )}
                       </select>
                       <span className="text-gray-500">:</span>
                       <select
-                        value={formData.inwardEntryTime.split(' ')[0]?.split(':')[1] || '00'}
+                        value={
+                          formData.inwardEntryTime
+                            .split(" ")[0]
+                            ?.split(":")[1] || "00"
+                        }
                         onChange={(e) => {
-                          const timeParts = formData.inwardEntryTime.split(' ');
-                          const [hours] = (timeParts[0] || '12:00').split(':');
-                          const ampm = timeParts[1] || 'AM';
+                          const timeParts = formData.inwardEntryTime.split(" ");
+                          const [hours] = (timeParts[0] || "12:00").split(":");
+                          const ampm = timeParts[1] || "AM";
                           const newTime = `${hours}:${e.target.value} ${ampm}`;
-                          setFormData({ ...formData, inwardEntryTime: newTime });
+                          setFormData({
+                            ...formData,
+                            inwardEntryTime: newTime,
+                          });
                         }}
                         className="w-1/3 border rounded-md px-2 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
-                        {Array.from({ length: 60 }, (_, i) => i).map(minute => (
-                          <option key={minute} value={minute.toString().padStart(2, '0')}>
-                            {minute.toString().padStart(2, '0')}
-                          </option>
-                        ))}
+                        {Array.from({ length: 60 }, (_, i) => i).map(
+                          (minute) => (
+                            <option
+                              key={minute}
+                              value={minute.toString().padStart(2, "0")}
+                            >
+                              {minute.toString().padStart(2, "0")}
+                            </option>
+                          ),
+                        )}
                       </select>
                       <select
-                        value={formData.inwardEntryTime.split(' ')[1] || 'AM'}
+                        value={formData.inwardEntryTime.split(" ")[1] || "AM"}
                         onChange={(e) => {
-                          const timeParts = formData.inwardEntryTime.split(' ');
-                          const time = timeParts[0] || '12:00';
+                          const timeParts = formData.inwardEntryTime.split(" ");
+                          const time = timeParts[0] || "12:00";
                           const newTime = `${time} ${e.target.value}`;
-                          setFormData({ ...formData, inwardEntryTime: newTime });
+                          setFormData({
+                            ...formData,
+                            inwardEntryTime: newTime,
+                          });
                         }}
                         className="w-1/3 border rounded-md px-1 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
@@ -1036,12 +1177,52 @@ const AutomationTask = ({
                     Internal Works <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={formData.billed === true ? 'yes' : formData.billed === false ? 'no' : ''}
-                    onChange={e => setFormData({ ...formData, billed: e.target.value === 'yes' ? true : e.target.value === 'no' ? false : '' })}
+                    value={
+                      formData.billed === true
+                        ? "yes"
+                        : formData.billed === false
+                          ? "no"
+                          : ""
+                    }
+                    onChange={(e) => {
+                      const newBilled =
+                        e.target.value === "yes"
+                          ? true
+                          : e.target.value === "no"
+                            ? false
+                            : "";
+
+                      setFormData((prev) => {
+                        const updatedData = {
+                          ...prev,
+                          billed: newBilled,
+                        };
+
+                        // If Internal Works is set to "yes" (billed:true), auto-select "HAA-Internal Works"
+                        if (newBilled === true) {
+                          const haaInternalWorks = workTypes.find(
+                            (wt) => wt.name === "HAA-Internal works",
+                          );
+                          if (
+                            haaInternalWorks &&
+                            !prev.workType.includes("HAA-Internal works")
+                          ) {
+                            updatedData.workType = [
+                              ...prev.workType,
+                              "HAA-Internal works",
+                            ];
+                          }
+                        }
+
+                        return updatedData;
+                      });
+                    }}
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >
-                    <option value="" disabled>Select internal works status</option>
+                    <option value="" disabled>
+                      Select internal works status
+                    </option>
                     <option value="yes">Yes</option>
                     <option value="no">No</option>
                   </select>
@@ -1078,17 +1259,22 @@ const AutomationTask = ({
                                       if (isMultiUserAssign) {
                                         handleAssignedToChange(user._id);
                                       } else {
-                                        setFormData(prev => ({ ...prev, assignedTo: [user._id] }));
+                                        setFormData((prev) => ({
+                                          ...prev,
+                                          assignedTo: [user._id],
+                                        }));
                                         setSelectedUsers([user]);
                                         setIsDropdownOpen(false);
                                       }
                                     }}
-                                    className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${formData.assignedTo.includes(user._id) ? 'bg-blue-50' : ''}`}
+                                    className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 ${formData.assignedTo.includes(user._id) ? "bg-blue-50" : ""}`}
                                   >
                                     <div className="flex items-center">
                                       <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium mr-3 overflow-hidden">
-                                        <img 
-                                          src={user.photo?.url || defaultProfile} 
+                                        <img
+                                          src={
+                                            user.photo?.url || defaultProfile
+                                          }
                                           alt={`${user.firstName} ${user.lastName}`}
                                           className="w-full h-full object-cover"
                                         />
@@ -1097,13 +1283,17 @@ const AutomationTask = ({
                                         <div className="font-medium text-gray-900">
                                           {user.firstName} {user.lastName}
                                         </div>
-                                        <div className="text-sm text-gray-500">{user.group}</div>
+                                        <div className="text-sm text-gray-500">
+                                          {user.group}
+                                        </div>
                                       </div>
                                     </div>
                                   </button>
                                 ))
                               ) : (
-                                <div className="px-4 py-2 text-gray-500 text-center">No users found</div>
+                                <div className="px-4 py-2 text-gray-500 text-center">
+                                  No users found
+                                </div>
                               )}
                             </div>
                           </div>
@@ -1117,12 +1307,17 @@ const AutomationTask = ({
                             {selectedUserDisplay}
                           </span>
                           <svg
-                            className={`w-5 h-5 text-gray-400 transition-transform ${isDropdownOpen ? 'transform rotate-180' : ''}`}
+                            className={`w-5 h-5 text-gray-400 transition-transform ${isDropdownOpen ? "transform rotate-180" : ""}`}
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
                           >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M19 9l-7 7-7-7"
+                            />
                           </svg>
                         </button>
                       </div>
@@ -1130,28 +1325,37 @@ const AutomationTask = ({
                         type="button"
                         aria-pressed={isMultiUserAssign}
                         onClick={() => {
-                          setIsMultiUserAssign(v => {
+                          setIsMultiUserAssign((v) => {
                             const next = !v;
                             if (!next && formData.assignedTo.length > 1) {
-                              setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.slice(0, 1) }));
-                              setSelectedUsers(usersWithCurrent.filter(u => u._id === formData.assignedTo[0]));
+                              setFormData((prev) => ({
+                                ...prev,
+                                assignedTo: prev.assignedTo.slice(0, 1),
+                              }));
+                              setSelectedUsers(
+                                usersWithCurrent.filter(
+                                  (u) => u._id === formData.assignedTo[0],
+                                ),
+                              );
                             }
                             return next;
                           });
                         }}
-                        className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiUserAssign ? 'bg-blue-500' : 'bg-gray-200'}`}
+                        className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiUserAssign ? "bg-blue-500" : "bg-gray-200"}`}
                         tabIndex={0}
                       >
                         <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiUserAssign ? 'translate-x-5' : 'translate-x-1'}`}
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiUserAssign ? "translate-x-5" : "translate-x-1"}`}
                         />
                       </button>
-                      <span className="ml-2 text-xs text-gray-500">Multiple</span>
+                      <span className="ml-2 text-xs text-gray-500">
+                        Multiple
+                      </span>
                     </div>
                     {/* Absolutely position chips below dropdown, not affecting Team Head */}
                     {selectedUsers.length > 0 && (
                       <div className="absolute left-0 w-full mt-2 flex flex-wrap gap-2 z-10">
-                        {selectedUsers.map(user => (
+                        {selectedUsers.map((user) => (
                           <span
                             key={user._id}
                             className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
@@ -1161,17 +1365,37 @@ const AutomationTask = ({
                               type="button"
                               onClick={() => {
                                 if (isMultiUserAssign) {
-                                  setFormData(prev => ({ ...prev, assignedTo: prev.assignedTo.filter(id => id !== user._id) }));
-                                  setSelectedUsers(prev => prev.filter(u => u._id !== user._id));
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    assignedTo: prev.assignedTo.filter(
+                                      (id) => id !== user._id,
+                                    ),
+                                  }));
+                                  setSelectedUsers((prev) =>
+                                    prev.filter((u) => u._id !== user._id),
+                                  );
                                 } else {
-                                  setFormData(prev => ({ ...prev, assignedTo: [] }));
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    assignedTo: [],
+                                  }));
                                   setSelectedUsers([]);
                                 }
                               }}
                               className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200"
                             >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              <svg
+                                className="w-3 h-3"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M6 18L18 6M6 6l12 12"
+                                />
                               </svg>
                             </button>
                           </span>
@@ -1181,20 +1405,29 @@ const AutomationTask = ({
                   </div>
                   {/* Team Head */}
                   <div className="flex-1 flex flex-col justify-end">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Team Head</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Team Head
+                    </label>
                     <input
                       type="text"
                       value={(() => {
                         const teamIds = new Set();
-                        selectedUsers.forEach(u => {
+                        selectedUsers.forEach((u) => {
                           if (u.team) teamIds.add(u.team.toString());
                         });
                         const heads = usersWithCurrent.filter(
-                          x => x.team && teamIds.has(x.team.toString()) && (x.role === 'Team Head' || x.role === 'Admin')
+                          (x) =>
+                            x.team &&
+                            teamIds.has(x.team.toString()) &&
+                            (x.role === "Team Head" || x.role === "Admin"),
                         );
-                        if (heads.length === 0) return '';
-                        const uniqueHeads = Array.from(new Map(heads.map(h => [h._id, h])).values());
-                        return uniqueHeads.map(h => `${h.firstName} ${h.lastName}`).join(', ');
+                        if (heads.length === 0) return "";
+                        const uniqueHeads = Array.from(
+                          new Map(heads.map((h) => [h._id, h])).values(),
+                        );
+                        return uniqueHeads
+                          .map((h) => `${h.firstName} ${h.lastName}`)
+                          .join(", ");
                       })()}
                       className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700"
                       readOnly
@@ -1202,7 +1435,7 @@ const AutomationTask = ({
                     />
                   </div>
                 </div>
-                
+
                 {/* Task Status Dropdown */}
                 <div className="md:col-span-2 mt-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1215,7 +1448,7 @@ const AutomationTask = ({
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
-                
+
                 {/* Description/Notes */}
                 <div className="md:col-span-2 mt-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1223,7 +1456,9 @@ const AutomationTask = ({
                   </label>
                   <textarea
                     value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, description: e.target.value })
+                    }
                     className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     rows="3"
                     placeholder="Enter task description or notes..."
@@ -1239,22 +1474,40 @@ const AutomationTask = ({
                       onClick={() => setIsWorkTypeDropdownOpen(true)}
                     >
                       {formData.workType.length === 0 && (
-                        <span className="text-gray-400">Select or search work type...</span>
+                        <span className="text-gray-400">
+                          Select or search work type...
+                        </span>
                       )}
-                      {formData.workType.map(type => (
+                      {formData.workType.map((type) => (
                         <span
                           key={type}
                           className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-400"
                         >
                           {type}
-                          {formData.workType.includes(type) && <span className="float-right text-blue-600">✔</span>}
+                          {formData.workType.includes(type) && (
+                            <span className="float-right text-blue-600">✔</span>
+                          )}
                           <button
                             type="button"
-                            onClick={e => { e.preventDefault(); e.stopPropagation(); handleWorkTypeChange(type); }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleWorkTypeChange(type);
+                            }}
                             className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200"
                           >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            <svg
+                              className="w-3 h-3"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M6 18L18 6M6 6l12 12"
+                              />
                             </svg>
                           </button>
                         </span>
@@ -1263,7 +1516,7 @@ const AutomationTask = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setWorkTypeFormData({ name: '' });
+                        setWorkTypeFormData({ name: "" });
                         setIsWorkTypeModalOpen(true);
                         setIsWorkTypeDropdownOpen(false);
                       }}
@@ -1275,19 +1528,22 @@ const AutomationTask = ({
                       type="button"
                       aria-pressed={isMultiWorkTypeAssign}
                       onClick={() => {
-                        setIsMultiWorkTypeAssign(v => {
+                        setIsMultiWorkTypeAssign((v) => {
                           const next = !v;
                           if (!next && formData.workType.length > 1) {
-                            setFormData(prev => ({ ...prev, workType: prev.workType.slice(0, 1) }));
+                            setFormData((prev) => ({
+                              ...prev,
+                              workType: prev.workType.slice(0, 1),
+                            }));
                           }
                           return next;
                         });
                       }}
-                      className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiWorkTypeAssign ? 'bg-blue-500' : 'bg-gray-200'}`}
+                      className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300 ${isMultiWorkTypeAssign ? "bg-blue-500" : "bg-gray-200"}`}
                       tabIndex={0}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiWorkTypeAssign ? 'translate-x-5' : 'translate-x-1'}`}
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isMultiWorkTypeAssign ? "translate-x-5" : "translate-x-1"}`}
                       />
                     </button>
                     <span className="ml-2 text-xs text-gray-500">Multiple</span>
@@ -1298,37 +1554,53 @@ const AutomationTask = ({
                             type="text"
                             placeholder="Search work type..."
                             value={workTypeSearchTerm}
-                            onChange={e => setWorkTypeSearchTerm(e.target.value)}
+                            onChange={(e) =>
+                              setWorkTypeSearchTerm(e.target.value)
+                            }
                             className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             autoFocus
                           />
                         </div>
                         <div className="py-1">
                           {filteredWorkTypes.length > 0 ? (
-                            filteredWorkTypes.map(type => (
+                            filteredWorkTypes.map((type) => (
                               <button
                                 key={type._id}
                                 type="button"
-                                className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 cursor-pointer ${formData.workType.includes(type.name) ? 'bg-blue-50' : ''}`}
-                                onClick={e => {
+                                className={`w-full px-4 py-2 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 cursor-pointer ${formData.workType.includes(type.name) ? "bg-blue-50" : ""}`}
+                                onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
                                   if (isMultiWorkTypeAssign) {
                                     handleWorkTypeChange(type.name);
                                   } else {
-                                    setFormData(prev => ({ ...prev, workType: [type.name] }));
-                                    const hasHAAWorkType = type?.name?.startsWith("HAA");
-                                   if(hasHAAWorkType) setFormData((prev)=>({...prev,"billed":true}));
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      workType: [type.name],
+                                    }));
+                                    const hasHAAWorkType =
+                                      type?.name?.startsWith("HAA");
+                                    if (hasHAAWorkType)
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        billed: true,
+                                      }));
                                     setIsWorkTypeDropdownOpen(false);
                                   }
                                 }}
                               >
                                 {type.name}
-                                {formData.workType.includes(type.name) && <span className="float-right text-blue-600">✔</span>}
+                                {formData.workType.includes(type.name) && (
+                                  <span className="float-right text-blue-600">
+                                    ✔
+                                  </span>
+                                )}
                               </button>
                             ))
                           ) : (
-                            <div className="px-4 py-2 text-gray-500">No work types found</div>
+                            <div className="px-4 py-2 text-gray-500">
+                              No work types found
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1339,9 +1611,12 @@ const AutomationTask = ({
               {/* Enhanced File selection section */}
               <div className="border-t pt-4 mt-4">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium">Attach Files (Optional)</h3>
+                  <h3 className="text-lg font-medium">
+                    Attach Files (Optional)
+                  </h3>
                   <div className="text-sm text-gray-500">
-                    Max {MAX_FILES} files, {MAX_FILE_SIZE / 1024 / 1024}MB per file, {MAX_TOTAL_SIZE / 1024 / 1024}MB total
+                    Max {MAX_FILES} files, {MAX_FILE_SIZE / 1024 / 1024}MB per
+                    file, {MAX_TOTAL_SIZE / 1024 / 1024}MB total
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -1357,8 +1632,18 @@ const AutomationTask = ({
                           accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif"
                         />
                         <div className="text-center">
-                          <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          <svg
+                            className="mx-auto h-12 w-12 text-gray-400"
+                            stroke="currentColor"
+                            fill="none"
+                            viewBox="0 0 48 48"
+                          >
+                            <path
+                              d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
                           </svg>
                           <p className="mt-1 text-sm text-gray-600">
                             Click to select files or drag and drop
@@ -1378,18 +1663,30 @@ const AutomationTask = ({
                       </div>
                       <ul className="divide-y">
                         {selectedFiles.map((file, index) => (
-                          <li key={index} className="p-3 flex items-center justify-between hover:bg-gray-50">
+                          <li
+                            key={index}
+                            className="p-3 flex items-center justify-between hover:bg-gray-50"
+                          >
                             <div className="flex items-center space-x-3">
                               <span className="text-gray-500">
-                                {file.type.startsWith('image/') ? '🖼️' : 
-                                 file.type.includes('pdf') ? '📄' :
-                                 file.type.includes('word') ? '📝' :
-                                 file.type.includes('excel') || file.type.includes('spreadsheet') ? '📊' :
-                                 file.type.includes('powerpoint') || file.type.includes('presentation') ? '📑' :
-                                 '📎'}
+                                {file.type.startsWith("image/")
+                                  ? "🖼️"
+                                  : file.type.includes("pdf")
+                                    ? "📄"
+                                    : file.type.includes("word")
+                                      ? "📝"
+                                      : file.type.includes("excel") ||
+                                          file.type.includes("spreadsheet")
+                                        ? "📊"
+                                        : file.type.includes("powerpoint") ||
+                                            file.type.includes("presentation")
+                                          ? "📑"
+                                          : "📎"}
                               </span>
                               <div>
-                                <p className="text-sm font-medium text-gray-700">{file.name}</p>
+                                <p className="text-sm font-medium text-gray-700">
+                                  {file.name}
+                                </p>
                                 <p className="text-xs text-gray-500">
                                   {(file.size / 1024 / 1024).toFixed(2)} MB
                                 </p>
@@ -1411,20 +1708,34 @@ const AutomationTask = ({
 
                   {uploading && (
                     <div className="mt-4">
-                      <div className="text-sm text-gray-600 mb-2">Uploading files...</div>
+                      <div className="text-sm text-gray-600 mb-2">
+                        Uploading files...
+                      </div>
                       <div className="space-y-2">
                         {selectedFiles.map((file, index) => (
-                          <div key={index} className="flex items-center space-x-2">
+                          <div
+                            key={index}
+                            className="flex items-center space-x-2"
+                          >
                             <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${
-                                  uploadProgress[index] === 'completed' ? 'bg-green-500' : 'bg-blue-500 animate-pulse'
+                                  uploadProgress[index] === "completed"
+                                    ? "bg-green-500"
+                                    : "bg-blue-500 animate-pulse"
                                 }`}
-                                style={{ width: uploadProgress[index] === 'completed' ? '100%' : '50%' }}
+                                style={{
+                                  width:
+                                    uploadProgress[index] === "completed"
+                                      ? "100%"
+                                      : "50%",
+                                }}
                               />
                             </div>
                             <span className="text-xs text-gray-500">
-                              {uploadProgress[index] === 'completed' ? 'Done' : 'Uploading...'}
+                              {uploadProgress[index] === "completed"
+                                ? "Done"
+                                : "Uploading..."}
                             </span>
                           </div>
                         ))}
@@ -1447,9 +1758,15 @@ const AutomationTask = ({
                   type="submit"
                   disabled={uploading}
                   className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700
-                    ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  {uploading ? (mode === 'edit' ? 'Updating...' : 'Creating Task...') : (mode === 'edit' ? 'Update Task' : 'Create Task')}
+                  {uploading
+                    ? mode === "edit"
+                      ? "Updating..."
+                      : "Creating Task..."
+                    : mode === "edit"
+                      ? "Update Task"
+                      : "Create Task"}
                 </button>
               </div>
             </form>
@@ -1462,7 +1779,9 @@ const AutomationTask = ({
                     taskId={createdTaskId}
                     files={taskFiles}
                     onFileDeleted={(fileId) => {
-                      setTaskFiles(prev => prev.filter(f => f._id !== fileId));
+                      setTaskFiles((prev) =>
+                        prev.filter((f) => f._id !== fileId),
+                      );
                     }}
                   />
                   <div className="flex justify-end">
@@ -1483,7 +1802,10 @@ const AutomationTask = ({
       {/* Add Work Type Modal */}
       {isWorkTypeModalOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 work-type-modal">
-          <div className="bg-white rounded-lg p-8 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="bg-white rounded-lg p-8 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-2xl font-bold mb-6">Add New Work Type</h2>
             <form onSubmit={handleWorkTypeSubmit} className="space-y-4">
               <div>
@@ -1493,7 +1815,12 @@ const AutomationTask = ({
                 <input
                   type="text"
                   value={workTypeFormData.name}
-                  onChange={(e) => setWorkTypeFormData({ ...workTypeFormData, name: e.target.value })}
+                  onChange={(e) =>
+                    setWorkTypeFormData({
+                      ...workTypeFormData,
+                      name: e.target.value,
+                    })
+                  }
                   className="w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   required
                 />
@@ -1522,4 +1849,4 @@ const AutomationTask = ({
   );
 };
 
-export default AutomationTask; 
+export default AutomationTask;

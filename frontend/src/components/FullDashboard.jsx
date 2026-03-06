@@ -28,6 +28,7 @@ import { API_BASE_URL, fetchTabState, saveTabState } from "../apiConfig";
 import AdvancedTaskTable from "./AdvancedTaskTable";
 import CreateTask from "./CreateTask";
 import TabBar from "./TabBar";
+import ConfirmationModal from "./ConfirmationModal";
 
 function formatDate(date) {
   if (!date) return "NA";
@@ -188,6 +189,10 @@ const FullDashboard = () => {
   const bulkReassignDropdownRef = useRef(null);
   // State for showing completed tasks temporarily
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
+  // State for tab deletion confirmation
+  const [showTabDeleteConfirmation, setShowTabDeleteConfirmation] =
+    useState(false);
+  const [tabToDelete, setTabToDelete] = useState(null);
   // Handler for Automation submit
   const handleAutomationSubmit = (data) => {
     setAutomationModalOpen(false);
@@ -356,9 +361,18 @@ const FullDashboard = () => {
       console.error("🔴 [FullDashboard] Error saving tab:", err);
     }
   };
-  const closeTab = async (id) => {
-    let idx = tabs.findIndex((tab) => tab.id === id);
+  const closeTab = (id) => {
     if (tabs.length === 1) return; // Don't close last tab
+    const tab = tabs.find((t) => t.id === id);
+    setTabToDelete({ id, title: tab?.title || "this tab" });
+    setShowTabDeleteConfirmation(true);
+  };
+
+  const confirmCloseTab = async () => {
+    if (!tabToDelete) return;
+
+    const id = tabToDelete.id;
+    let idx = tabs.findIndex((tab) => tab.id === id);
     const newTabs = tabs.filter((tab) => tab.id !== id);
     const newActiveTabId =
       activeTabId === id ? newTabs[Math.max(0, idx - 1)].id : activeTabId;
@@ -384,9 +398,15 @@ const FullDashboard = () => {
         },
         body: JSON.stringify({ tabKey: "fullDashboard", tabId: id }),
       });
+
+      toast.success("Tab deleted successfully");
     } catch (err) {
       console.error("Error saving tab state after closing tab:", err);
+      toast.error("Failed to delete tab");
     }
+
+    setShowTabDeleteConfirmation(false);
+    setTabToDelete(null);
   };
   const renameTab = (id, newTitle) => {
     setTabs(
@@ -4653,6 +4673,21 @@ const FullDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Tab deletion confirmation modal */}
+      <ConfirmationModal
+        isOpen={showTabDeleteConfirmation}
+        onClose={() => {
+          setShowTabDeleteConfirmation(false);
+          setTabToDelete(null);
+        }}
+        onConfirm={confirmCloseTab}
+        title="Delete Tab"
+        message={`Are you sure you want to delete "${tabToDelete?.title}"?\n\nThis will remove the tab and all its saved settings.`}
+        confirmText="Yes, Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
     </div>
   );
 };
