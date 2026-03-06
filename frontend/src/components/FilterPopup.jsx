@@ -21,7 +21,7 @@ const FilterPopup = ({
     { value: "title", label: "Title" },
     {
       value: "status",
-      label: "Status",
+      label: "Stages",
       options: taskStatuses.map((s) => s.name),
     },
     {
