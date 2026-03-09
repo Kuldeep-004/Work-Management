@@ -521,7 +521,6 @@ router.delete("/entry/:entryId", protect, async (req, res) => {
 // Get subordinates' timesheets based on user role hierarchy
 router.get("/subordinates", protect, async (req, res) => {
   try {
-    console.log("first");
     // Check if user is Admin, TimeSheet Verifier, or Team Head
     let isTimeSheetVerifier = false;
     if (Array.isArray(req.user.role2)) {
@@ -531,6 +530,7 @@ router.get("/subordinates", protect, async (req, res) => {
     }
     const isAdmin = req.user.role === "Admin";
     const isTeamHead = req.user.role === "Team Head";
+    const userAccessLevel = req.user.userAccessLevel || "Team Only";
     if (!(isAdmin || isTimeSheetVerifier || isTeamHead)) {
       return res.status(403).json({ message: "Access denied" });
     }
@@ -540,23 +540,39 @@ router.get("/subordinates", protect, async (req, res) => {
 
     // Filtering logic based on role
     if (isTeamHead) {
-      // Team Head: check team assignment first
       if (!req.user.team) {
         return res
           .status(400)
           .json({ message: "Team Head user does not have a team assigned" });
       }
-      // All users in the same team (including self for Team Head, only approved, exclude deleted)
-      subordinates = await User.find({
-        team: req.user.team,
-        isEmailVerified: true,
-        status: "approved",
-      }).select("_id firstName lastName email role team photo");
+      if (userAccessLevel == "All Users") {
+        subordinates = await User.find({ status: "approved" }).select(
+          "_id firstName lastName email role team photo",
+        );
+      } else {
+        subordinates = await User.find({
+          team: req.user.team,
+          isEmailVerified: true,
+          status: "approved",
+        }).select("_id firstName lastName email role team photo");
+      }
     } else if (isAdmin) {
-      // Admins: all approved users (exclude deleted)
-      subordinates = await User.find({ status: "approved" }).select(
-        "_id firstName lastName email role team photo",
-      );
+      if (userAccessLevel == "All Users") {
+        subordinates = await User.find({ status: "approved" }).select(
+          "_id firstName lastName email role team photo",
+        );
+      } else {
+        if (!req.user.team) {
+          return res
+            .status(400)
+            .json({ message: "Admin does not have a team assigned" });
+        }
+        subordinates = await User.find({
+          team: req.user.team,
+          isEmailVerified: true,
+          status: "approved",
+        }).select("_id firstName lastName email role team photo");
+      }
     } else if (isTimeSheetVerifier) {
       // TimeSheet Verifiers: show only their team members (excluding self, Admins, and Team Heads)
       if (req.user.team) {
