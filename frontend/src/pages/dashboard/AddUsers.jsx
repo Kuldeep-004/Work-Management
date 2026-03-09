@@ -135,11 +135,17 @@ const AllUsers = () => {
       }
 
       setUsers((prev) =>
-        prev.map((u) =>
-          u._id === userId
-            ? { ...u, role: newRole } // Do not touch team when changing to Senior
-            : u,
-        ),
+        prev.map((u) => {
+          if (u._id === userId) {
+            // If new role is Admin or Team Head, set requiresTaskApproval to false
+            const requiresTaskApproval =
+              newRole === "Admin" || newRole === "Team Head"
+                ? false
+                : u.requiresTaskApproval;
+            return { ...u, role: newRole, requiresTaskApproval };
+          }
+          return u;
+        }),
       );
 
       // If the updated user is the current logged-in user, refresh their data
@@ -467,7 +473,7 @@ const AllUsers = () => {
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[200px]">
                   {u.email}
                 </td>
-                <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[120px] min-w-[120px]">
+                <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[120px]">
                   <select
                     value={u.role || ""}
                     onChange={(e) => handleRoleChange(u._id, e.target.value)}

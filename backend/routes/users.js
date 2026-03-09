@@ -419,6 +419,10 @@ router.patch("/:userId/update-fields", protect, async (req, res) => {
         // swapped
         updatedFields.team = null;
       }
+      // If role is Admin or Team Head, set requiresTaskApproval to false
+      if (role === "Admin" || role === "Team Head") {
+        updatedFields.requiresTaskApproval = false;
+      }
     }
 
     // Handle team update
