@@ -905,9 +905,9 @@ const AdvancedTaskTable = React.memo(
                                           return (
                                             <td
                                               key={colId}
-                                              className={`px-2 py-1 text-sm font-normal align-middle bg-white border-0 ${!isLast ? "border-r border-gray-200" : ""}`}
+                                              className={`px-2 py-1 text-sm font-normal align-top bg-white border-0 ${!isLast ? "border-r border-gray-200" : ""}`}
                                               style={{
-                                                verticalAlign: "middle",
+                                                verticalAlign: "top",
                                                 width:
                                                   (columnWidths[colId] || 180) +
                                                   "px",
@@ -918,7 +918,7 @@ const AdvancedTaskTable = React.memo(
                                                   (columnWidths[colId] || 180) +
                                                   "px",
                                                 background: "white",
-                                                overflow: "hidden",
+                                                overflow: "visible",
                                               }}
                                             >
                                               {editingDescriptionTaskId ===
@@ -954,10 +954,11 @@ const AdvancedTaskTable = React.memo(
                                                 />
                                               ) : (
                                                 <div
-                                                  className="overflow-x-auto whitespace-nowrap"
+                                                  className="overflow-visible whitespace-normal"
                                                   style={{
                                                     width: "100%",
                                                     maxWidth: "100%",
+                                                    wordWrap: "break-word",
                                                   }}
                                                 >
                                                   <span
@@ -1001,7 +1002,7 @@ const AdvancedTaskTable = React.memo(
                                           return (
                                             <td
                                               key={colId}
-                                              className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? "border-r border-gray-200" : ""}`}
+                                              className={`px-2 py-1 text-sm font-normal align-top bg-white ${!isLast ? "border-r border-gray-200" : ""}`}
                                               style={{
                                                 width:
                                                   (columnWidths[colId] || 150) +
@@ -1013,14 +1014,15 @@ const AdvancedTaskTable = React.memo(
                                                   (columnWidths[colId] || 150) +
                                                   "px",
                                                 background: "white",
-                                                overflow: "hidden",
+                                                overflow: "visible",
                                               }}
                                             >
                                               <div
-                                                className="overflow-x-auto whitespace-nowrap"
+                                                className="overflow-visible whitespace-normal"
                                                 style={{
                                                   width: "100%",
                                                   maxWidth: "100%",
+                                                  wordWrap: "break-word",
                                                 }}
                                               >
                                                 <span className="text-sm font-medium text-gray-900">
@@ -1196,7 +1198,7 @@ const AdvancedTaskTable = React.memo(
                                           return (
                                             <td
                                               key={colId}
-                                              className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? "border-r border-gray-200" : ""}`}
+                                              className={`px-2 py-1 text-sm font-normal align-top bg-white ${!isLast ? "border-r border-gray-200" : ""}`}
                                               style={{
                                                 width:
                                                   (columnWidths[colId] || 120) +
@@ -1241,32 +1243,20 @@ const AdvancedTaskTable = React.memo(
                                               <div
                                                 style={{
                                                   position: "relative",
-                                                  display: "inline-block",
+                                                  display: "block",
                                                   width: "100%",
                                                 }}
                                               >
                                                 <span
-                                                  className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status) || ""}`}
+                                                  className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status) || ""}`}
                                                   style={{
-                                                    display: "inline-block",
-                                                    whiteSpace: "nowrap",
+                                                    whiteSpace: "normal",
                                                     ...getStatusStyles(
                                                       task.status,
                                                     ),
-                                                    overflowX: "auto",
-                                                    textOverflow: "ellipsis",
+                                                    wordWrap: "break-word",
                                                     maxWidth: "100%",
-                                                    verticalAlign: "middle",
-                                                    scrollbarWidth: "thin",
-                                                    msOverflowStyle: "auto",
                                                   }}
-                                                  title={
-                                                    currentStatusOptions.find(
-                                                      (opt) =>
-                                                        opt.value ===
-                                                        task.status,
-                                                    )?.label || task.status
-                                                  }
                                                 >
                                                   {currentStatusOptions.find(
                                                     (opt) =>
@@ -3614,16 +3604,16 @@ const AdvancedTaskTable = React.memo(
                               return (
                                 <td
                                   key={colId}
-                                  className={`px-2 py-1 text-sm font-normal align-middle bg-white border-0 ${!isLast ? "border-r border-gray-200" : ""}`}
+                                  className={`px-2 py-1 text-sm font-normal align-top bg-white border-0 ${!isLast ? "border-r border-gray-200" : ""}`}
                                   style={{
-                                    verticalAlign: "middle",
+                                    verticalAlign: "top",
                                     width: (columnWidths[colId] || 180) + "px",
                                     minWidth:
                                       (columnWidths[colId] || 180) + "px",
                                     maxWidth:
                                       (columnWidths[colId] || 180) + "px",
                                     background: "white",
-                                    overflow: "hidden",
+                                    overflow: "visible",
                                   }}
                                 >
                                   {editingDescriptionTaskId === task._id ? (
@@ -3652,10 +3642,11 @@ const AdvancedTaskTable = React.memo(
                                     />
                                   ) : (
                                     <div
-                                      className="overflow-x-auto whitespace-nowrap"
+                                      className="overflow-visible whitespace-normal"
                                       style={{
                                         width: "100%",
                                         maxWidth: "100%",
+                                        wordWrap: "break-word",
                                       }}
                                     >
                                       <span
@@ -3696,7 +3687,7 @@ const AdvancedTaskTable = React.memo(
                               return (
                                 <td
                                   key={colId}
-                                  className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? "border-r border-gray-200" : ""}`}
+                                  className={`px-2 py-1 text-sm font-normal align-top bg-white ${!isLast ? "border-r border-gray-200" : ""}`}
                                   style={{
                                     width: (columnWidths[colId] || 150) + "px",
                                     minWidth:
@@ -3704,12 +3695,16 @@ const AdvancedTaskTable = React.memo(
                                     maxWidth:
                                       (columnWidths[colId] || 150) + "px",
                                     background: "white",
-                                    overflow: "hidden",
+                                    overflow: "visible",
                                   }}
                                 >
                                   <div
-                                    className="overflow-x-auto whitespace-nowrap"
-                                    style={{ width: "100%", maxWidth: "100%" }}
+                                    className="overflow-visible whitespace-normal"
+                                    style={{
+                                      width: "100%",
+                                      maxWidth: "100%",
+                                      wordWrap: "break-word",
+                                    }}
                                   >
                                     <span className="text-sm font-medium text-gray-900">
                                       {task.clientName}
@@ -3849,7 +3844,7 @@ const AdvancedTaskTable = React.memo(
                               return (
                                 <td
                                   key={colId}
-                                  className={`px-2 py-1 text-sm font-normal align-middle bg-white ${!isLast ? "border-r border-gray-200" : ""}`}
+                                  className={`px-2 py-1 text-sm font-normal align-top bg-white ${!isLast ? "border-r border-gray-200" : ""}`}
                                   style={{
                                     width: (columnWidths[colId] || 120) + "px",
                                     minWidth:
@@ -3884,28 +3879,18 @@ const AdvancedTaskTable = React.memo(
                                   <div
                                     style={{
                                       position: "relative",
-                                      display: "inline-block",
+                                      display: "block",
                                       width: "100%",
                                     }}
                                   >
                                     <span
-                                      className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status) || ""}`}
+                                      className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status) || ""}`}
                                       style={{
-                                        display: "inline-block",
-                                        whiteSpace: "nowrap",
-                                        overflowX: "auto",
+                                        whiteSpace: "normal",
                                         ...getStatusStyles(task.status),
-                                        textOverflow: "ellipsis",
+                                        wordWrap: "break-word",
                                         maxWidth: "100%",
-                                        verticalAlign: "middle",
-                                        scrollbarWidth: "thin",
-                                        msOverflowStyle: "auto",
                                       }}
-                                      title={
-                                        currentStatusOptions.find(
-                                          (opt) => opt.value === task.status,
-                                        )?.label || task.status
-                                      }
                                     >
                                       {currentStatusOptions.find(
                                         (opt) => opt.value === task.status,
