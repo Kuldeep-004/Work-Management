@@ -412,6 +412,35 @@ const AdminDashboard = () => {
     );
   };
 
+  const duplicateTab = async (id) => {
+    const tabToDuplicate = tabs.find((tab) => tab.id === id);
+    if (!tabToDuplicate) return;
+
+    const newId = String(Date.now());
+    const newTab = {
+      ...JSON.parse(JSON.stringify(tabToDuplicate)), // Deep clone
+      id: newId,
+      title: `${tabToDuplicate.title} (copy)`,
+    };
+
+    const newTabs = [...tabs, newTab];
+    setTabs(newTabs);
+    setActiveTabId(newId);
+
+    // Sync with backend
+    try {
+      await saveTabState(
+        "adminDashboard",
+        { tabs: newTabs, activeTabId: newId },
+        user.token,
+      );
+      toast.success(`Tab "${tabToDuplicate.title}" duplicated successfully`);
+    } catch (err) {
+      console.error("Error duplicating tab:", err);
+      toast.error("Failed to duplicate tab");
+    }
+  };
+
   const reorderTabs = (newTabsOrder) => {
     setTabs(newTabsOrder);
   };
@@ -2690,6 +2719,7 @@ const AdminDashboard = () => {
         onAddTab={addTab}
         onCloseTab={closeTab}
         onRenameTab={renameTab}
+        onDuplicateTab={duplicateTab}
         onReorderTabs={reorderTabs}
       />
       {/* Restore original summary cards/widgets here */}

@@ -271,6 +271,24 @@ const AssignedTasks = () => {
     );
   };
 
+  const duplicateTab = (id) => {
+    const tabToDuplicate = tabs.find((tab) => tab.id === id);
+    if (!tabToDuplicate) return;
+
+    const newId = Date.now();
+    const newTab = {
+      ...JSON.parse(JSON.stringify(tabToDuplicate)), // Deep clone
+      id: newId,
+      title: `${tabToDuplicate.title} (copy)`,
+    };
+
+    const newTabs = [...tabs, newTab];
+    setTabs(newTabs);
+    setActiveTabId(newId);
+
+    toast.success(`Tab "${tabToDuplicate.title}" duplicated successfully`);
+  };
+
   const reorderTabs = (newTabsOrder) => {
     setTabs(newTabsOrder);
   };
@@ -934,6 +952,7 @@ const AssignedTasks = () => {
         onAddTab={addTab}
         onCloseTab={closeTab}
         onRenameTab={renameTab}
+        onDuplicateTab={duplicateTab}
         onReorderTabs={reorderTabs}
       />
       <div className="mb-6">
