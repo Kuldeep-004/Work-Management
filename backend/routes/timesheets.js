@@ -574,11 +574,9 @@ router.get("/subordinates", protect, async (req, res) => {
         }).select("_id firstName lastName email role team photo");
       }
     } else if (isTimeSheetVerifier) {
-      // TimeSheet Verifiers: show only their team members (excluding self, Admins, and Team Heads)
       if (req.user.team) {
         subordinates = await User.find({
           team: req.user.team,
-          role: { $nin: ["Team Head", "Admin"] }, // Exclude team heads and admins
           isEmailVerified: true,
           status: "approved",
         }).select("_id firstName lastName email role team photo");
@@ -731,18 +729,13 @@ router.get("/subordinates-list", protect, async (req, res) => {
       subordinates = await User.find({
         team: req.user.team,
         isEmailVerified: true,
-        _id: { $ne: req.user._id },
-        role: { $ne: "Admin" },
         status: "approved",
       }).select("_id firstName lastName email role team");
     } else if (isTimeSheetVerifier) {
-      // TimeSheet Verifiers: show only their team members (excluding team head, admin, and themselves)
       if (req.user.team) {
         subordinates = await User.find({
           team: req.user.team,
-          role: { $nin: ["Team Head", "Admin"] }, // Exclude team heads and admins
           isEmailVerified: true,
-          _id: { $ne: req.user._id },
           status: "approved",
         }).select("_id firstName lastName email role team");
       } else {
