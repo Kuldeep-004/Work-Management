@@ -530,8 +530,9 @@ router.get("/subordinates", protect, async (req, res) => {
     }
     const isAdmin = req.user.role === "Admin";
     const isTeamHead = req.user.role === "Team Head";
+    const isSenior = req.user.role === "Senior";
     const userAccessLevel = req.user.userAccessLevel || "Team Only";
-    if (!(isAdmin || isTimeSheetVerifier || isTeamHead)) {
+    if (!(isAdmin || isTimeSheetVerifier || isTeamHead || isSenior)) {
       return res.status(403).json({ message: "Access denied" });
     }
     const { page = 1, limit = 10, startDate, userId, roleFilter } = req.query;
@@ -580,10 +581,18 @@ router.get("/subordinates", protect, async (req, res) => {
           isEmailVerified: true,
           status: "approved",
         }).select("_id firstName lastName email role team photo");
-        // Exclude self from subordinates
-        subordinates = subordinates.filter(
-          (sub) => String(sub._id) !== String(req.user._id),
-        );
+      } else {
+        // If no team, show no one
+        subordinates = [];
+      }
+    } else if (isSenior) {
+      if (req.user.team) {
+        subordinates = await User.find({
+          team: req.user.team,
+          isEmailVerified: true,
+          status: "approved",
+          role: { $nin: ["Team Head", "Admin"] },
+        }).select("_id firstName lastName email role team photo");
       } else {
         // If no team, show no one
         subordinates = [];
@@ -800,17 +809,13 @@ router.get("/subordinates-status/:date", protect, async (req, res) => {
       subordinates = await User.find({
         team: req.user.team,
         isEmailVerified: true,
-        _id: { $ne: req.user._id },
-        role: { $ne: "Admin" },
         status: "approved",
       }).select("_id firstName lastName email role team");
     } else if (isTimeSheetVerifier) {
       if (req.user.team) {
         subordinates = await User.find({
           team: req.user.team,
-          role: { $nin: ["Team Head", "Admin"] },
           isEmailVerified: true,
-          _id: { $ne: req.user._id },
           status: "approved",
         }).select("_id firstName lastName email role team");
       } else {
