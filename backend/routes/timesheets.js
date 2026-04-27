@@ -576,10 +576,12 @@ router.get("/subordinates", protect, async (req, res) => {
       }
     } else if (isTimeSheetVerifier) {
       if (req.user.team) {
+        // Exclude Admin and Team Head roles
         subordinates = await User.find({
           team: req.user.team,
           isEmailVerified: true,
           status: "approved",
+          role: { $nin: ["Admin", "Team Head"] },
         }).select("_id firstName lastName email role team photo");
       } else {
         // If no team, show no one
@@ -742,10 +744,12 @@ router.get("/subordinates-list", protect, async (req, res) => {
       }).select("_id firstName lastName email role team");
     } else if (isTimeSheetVerifier) {
       if (req.user.team) {
+        // Exclude Admin and Team Head roles
         subordinates = await User.find({
           team: req.user.team,
           isEmailVerified: true,
           status: "approved",
+          role: { $nin: ["Admin", "Team Head"] },
         }).select("_id firstName lastName email role team");
       } else {
         // If no team, show only themselves
@@ -813,10 +817,12 @@ router.get("/subordinates-status/:date", protect, async (req, res) => {
       }).select("_id firstName lastName email role team");
     } else if (isTimeSheetVerifier) {
       if (req.user.team) {
+        // Exclude Admin and Team Head roles
         subordinates = await User.find({
           team: req.user.team,
           isEmailVerified: true,
           status: "approved",
+          role: { $nin: ["Admin", "Team Head"] },
         }).select("_id firstName lastName email role team");
       } else {
         subordinates = [];
