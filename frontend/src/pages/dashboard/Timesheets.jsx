@@ -350,18 +350,30 @@ const Timesheets = () => {
   const handleAddTimeslot = async () => {
     if (!timesheet) return;
     
-    // Get current time, round up to next multiple of 5 minutes
-    const now = new Date();
-    let minutes = now.getMinutes();
-    let add = 5 - (minutes % 5);
-    if (add === 5) add = 0;
-    now.setMinutes(minutes + add);
-    now.setSeconds(0);
-    now.setMilliseconds(0);
-    const pad = (n) => n.toString().padStart(2, '0');
-    const startTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    // End time same as start time
-    const endTime = startTime;
+    let startTime, endTime;
+    
+    // Get all entries (both existing and pending)
+    const allEntries = [...(timesheet.entries || []), ...pendingEntries];
+    
+    // If there are existing entries, use the last entry's end time
+    if (allEntries.length > 0) {
+      const lastEntry = allEntries[allEntries.length - 1];
+      startTime = lastEntry.endTime;
+      endTime = lastEntry.endTime;
+    } else {
+      // Fallback: Get current time, round up to next multiple of 5 minutes
+      const now = new Date();
+      let minutes = now.getMinutes();
+      let add = 5 - (minutes % 5);
+      if (add === 5) add = 0;
+      now.setMinutes(minutes + add);
+      now.setSeconds(0);
+      now.setMilliseconds(0);
+      const pad = (n) => n.toString().padStart(2, '0');
+      startTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      // End time same as start time
+      endTime = startTime;
+    }
     
     // Create a temporary ID for the pending entry
     const tempId = `temp_${Date.now()}`;
