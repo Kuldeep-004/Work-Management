@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { API_BASE_URL } from '../../apiConfig';
 import generateTimesheetPdf from '../../utils/generateTimesheetPdf';
+import TimesheetDownloadModal from '../../components/TimesheetDownloadModal';
 
 
 const SubordinateTimesheets = () => {
@@ -18,6 +19,7 @@ const SubordinateTimesheets = () => {
   const [subordinates, setSubordinates] = useState([]);
   const [subordinatesStatus, setSubordinatesStatus] = useState([]); // New state for submission status
   const [loading, setLoading] = useState(true);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedDate, setSelectedDate] = useState(() => {
     const yesterday = new Date();
@@ -558,10 +560,29 @@ const SubordinateTimesheets = () => {
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Subordinate Timesheets</h1>
-        <p className="text-sm sm:text-base text-gray-600">{getHierarchyInfo()}</p>
+      <div className="mb-8 flex justify-between">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Subordinate Timesheets</h1>
+          <p className="text-sm sm:text-base text-gray-600">{getHierarchyInfo()}</p>
+        </div>
+        <div className="flex flex-col">
+              <label className="block text-sm font-medium text-gray-700 mb-1 opacity-0">
+                Download
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDownloadModal(true)
+                  console.log('first')
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 16a1 1 0 0 1-.707-.293l-4-4 1.414-1.414L11 12.586V3h2v9.586l2.293-2.293 1.414 1.414-4 4A1 1 0 0 1 12 16z"/><path d="M5 19h14v2H5z"/></svg>
+                Download Range
+              </button>
+            </div>
       </div>
+      
 
 
       {/* Filters + Search Bar */}
@@ -1178,6 +1199,15 @@ const SubordinateTimesheets = () => {
           </div>
         </div>
       )}
+      
+      {/* Download Modal */}
+      <TimesheetDownloadModal 
+        isOpen={showDownloadModal}
+        onClose={() => setShowDownloadModal(false)}
+        subordinates={subordinates}
+        user={user}
+        pdfFontSize={pdfFontSize}
+      />
     </div>
   );
 };

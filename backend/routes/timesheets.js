@@ -535,7 +535,14 @@ router.get("/subordinates", protect, async (req, res) => {
     if (!(isAdmin || isTimeSheetVerifier || isTeamHead || isSenior)) {
       return res.status(403).json({ message: "Access denied" });
     }
-    const { page = 1, limit = 10, startDate, userId, roleFilter } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      startDate,
+      endDate,
+      userId,
+      roleFilter,
+    } = req.query;
     let query = { status: { $ne: "rejected" } };
     let subordinates;
 
@@ -630,7 +637,18 @@ router.get("/subordinates", protect, async (req, res) => {
       });
     }
     const timesheetQuery = { user: { $in: targetUserIds } };
-    if (startDate) {
+    if (startDate && endDate) {
+      // Support date range filtering
+      const fromDate = new Date(startDate);
+      fromDate.setUTCHours(0, 0, 0, 0);
+      const toDate = new Date(endDate);
+      toDate.setUTCHours(23, 59, 59, 999);
+      timesheetQuery.date = {
+        $gte: fromDate,
+        $lte: toDate,
+      };
+    } else if (startDate) {
+      // If only startDate is provided, treat as single date
       const targetDate = new Date(startDate);
       targetDate.setUTCHours(0, 0, 0, 0);
       const nextDate = new Date(targetDate);
