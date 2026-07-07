@@ -1,26 +1,38 @@
-/* Hide scrollbar for Chrome, Safari and Opera */
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-/* Hide scrollbar for IE, Edge and Firefox */
-.hide-scrollbar {
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none; /* Firefox */
+/* Tab bar with visible horizontal scrollbar */
+.tabbar-scroll {
+  overflow-x: auto;
   overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  white-space: nowrap;
 }
 
-/* Prevent tabs from wrapping to the next line */
-.hide-scrollbar > div {
+/* Prevent tabs from shrinking/wrapping */
+.tabbar-scroll > div {
   flex-shrink: 0;
 }
-rollbar for Chrome,
-Safari and Opera */ .hide-scrollbar::-webkit-scrollbar {
-  display: none;
+
+/* Webkit (Chrome, Safari, Edge Chromium) horizontal scrollbar */
+.tabbar-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+.tabbar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tabbar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.32);
+  border-radius: 8px;
+}
+.tabbar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.5);
 }
 
-/* Hide scrollbar for IE, Edge and Firefox */
-.hide-scrollbar {
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none; /* Firefox */
+/* Firefox */
+.tabbar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.32) transparent;
+}
+
+/* Make sure vertical scrollbar never appears */
+.tabbar-scroll {
+  overflow-y: hidden;
 }

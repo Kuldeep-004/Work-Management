@@ -135,11 +135,9 @@ const TabBar = ({
         overflowX: "auto",
         whiteSpace: "nowrap",
         paddingBottom: "4px",
-        msOverflowStyle: "none" /* IE and Edge */,
-        scrollbarWidth: "none" /* Firefox */,
         width: "100%",
       }}
-      className="hide-scrollbar" // Add a class for custom scrollbar CSS
+      className="tabbar-scroll" // horizontal scrollbar visible and draggable
     >
       {tabs.map((tab, index) => (
         <div

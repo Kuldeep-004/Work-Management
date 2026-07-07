@@ -53,6 +53,7 @@ const ALL_COLUMNS = [
   { id: "guides", label: "Guide" },
   { id: "files", label: "Files" },
   { id: "comments", label: "Comments" },
+  { id: "remindedOn", label: "Reminded on" },
 ];
 
 const AssignedTasks = () => {

@@ -89,6 +89,7 @@ const ALL_COLUMNS = [
   { id: "guides", label: "Guide", defaultWidth: 150 },
   { id: "files", label: "Files", defaultWidth: 120 },
   { id: "comments", label: "Comments", defaultWidth: 120 },
+  { id: "remindedOn", label: "Reminded on", defaultWidth: 150 },
 ];
 
 // 1. Add columnOrder to DEFAULT_TAB
@@ -1933,6 +1934,9 @@ const AdminDashboard = () => {
             case "comments":
               value = task.comments ? task.comments.length.toString() : "0";
               break;
+            case "remindedOn":
+              value = task.remindedOn || "";
+              break;
             default:
               value = "";
           }
@@ -2104,6 +2108,9 @@ const AdminDashboard = () => {
                 break;
               case "comments":
                 row[column.label] = task.comments ? task.comments.length : 0;
+                break;
+              case "remindedOn":
+                row[column.label] = task.remindedOn || "";
                 break;
               default:
                 row[column.label] = "";

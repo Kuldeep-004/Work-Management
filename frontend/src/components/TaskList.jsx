@@ -74,6 +74,7 @@ const ALL_COLUMNS = [
   { id: "secondVerificationAssignedTo", label: "Second Verifier" },
   { id: "files", label: "Files" },
   { id: "comments", label: "Comments" },
+  { id: "remindedOn", label: "Reminded on" },
 ];
 
 const TaskList = ({
@@ -137,6 +138,7 @@ const TaskList = ({
       "secondVerificationAssignedTo",
       "files",
       "comments",
+      "remindedOn",
     ];
   });
   const visibleColumns = externalVisibleColumns || internalVisibleColumns;

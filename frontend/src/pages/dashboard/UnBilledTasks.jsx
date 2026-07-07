@@ -25,6 +25,7 @@ const ALL_COLUMNS = [
   { id: 'secondVerificationAssignedTo', label: 'Second Verifier', defaultWidth: 150 },
   { id: 'files', label: 'Files', defaultWidth: 120 },
   { id: 'comments', label: 'Comments', defaultWidth: 120 },
+  { id: 'remindedOn', label: 'Reminded on', defaultWidth: 150 },
 ];
 
 const UnBilledTasks = () => {

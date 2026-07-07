@@ -198,6 +198,11 @@ const taskSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    remindedOn: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     guides: [
       {
         type: mongoose.Schema.Types.ObjectId,

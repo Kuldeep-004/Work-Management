@@ -60,6 +60,7 @@ const ALL_COLUMNS = [
   { id: "guides", label: "Guide" },
   { id: "files", label: "Files" },
   { id: "comments", label: "Comments" },
+  { id: "remindedOn", label: "Reminded on", defaultWidth: 150 },
 ];
 
 const DEFAULT_TAB = (taskType = "execution", customColumns = []) => {
@@ -1380,6 +1381,9 @@ const ReceivedTasks = () => {
               case "comments":
                 value = task.comments ? task.comments.length.toString() : "0";
                 break;
+              case "remindedOn":
+                value = task.remindedOn || "";
+                break;
               case "verification":
                 value = task.verification || "";
                 break;
@@ -1556,6 +1560,9 @@ const ReceivedTasks = () => {
                 break;
               case "comments":
                 row[column.label] = task.comments ? task.comments.length : 0;
+                break;
+              case "remindedOn":
+                row[column.label] = task.remindedOn || "";
                 break;
               case "guides":
                 row[column.label] =

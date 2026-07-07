@@ -235,6 +235,10 @@ const AdvancedTaskTable = React.memo(
       setEditingDescriptionTaskId,
       editingDescriptionValue,
       setEditingDescriptionValue,
+      editingRemindedOnTaskId,
+      setEditingRemindedOnTaskId,
+      editingRemindedOnValue,
+      setEditingRemindedOnValue,
       showRemarksModal,
       setShowRemarksModal,
       remarksModalTask,
@@ -313,6 +317,7 @@ const AdvancedTaskTable = React.memo(
       handleFileUploaded,
       handleFileDeleted,
       handleDescriptionEditSave,
+      handleRemindedOnEditSave,
       handleCustomTextEditSave,
       handleCustomTagsChange,
       handlePriorityChange,
@@ -1731,10 +1736,6 @@ const AdvancedTaskTable = React.memo(
                                                               );
                                                             const updatedTask =
                                                               await response.json();
-                                                            console.log(
-                                                              "Updated task received:",
-                                                              updatedTask,
-                                                            );
                                                             // Update task in state immediately - no refetch needed
                                                             if (onTaskUpdate) {
                                                               onTaskUpdate(
@@ -3064,6 +3065,100 @@ const AdvancedTaskTable = React.memo(
                                             </td>
                                           );
 
+                                        case "remindedOn":
+                                          return (
+                                            <td
+                                              key={colId}
+                                              className={`px-2 py-1 text-sm font-normal align-top bg-white ${!isLast ? "border-r border-gray-200" : ""}`}
+                                              style={{
+                                                width:
+                                                  (columnWidths[colId] || 150) +
+                                                  "px",
+                                                minWidth:
+                                                  (columnWidths[colId] || 150) +
+                                                  "px",
+                                                maxWidth:
+                                                  (columnWidths[colId] || 150) +
+                                                  "px",
+                                                background: "white",
+                                                overflow: "visible",
+                                              }}
+                                            >
+                                              {editingRemindedOnTaskId ===
+                                              task._id ? (
+                                                <input
+                                                  type="text"
+                                                  value={editingRemindedOnValue}
+                                                  autoFocus
+                                                  onChange={(e) =>
+                                                    setEditingRemindedOnValue(
+                                                      e.target.value,
+                                                    )
+                                                  }
+                                                  onBlur={() =>
+                                                    handleRemindedOnEditSave(
+                                                      task,
+                                                    )
+                                                  }
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === "Enter") {
+                                                      handleRemindedOnEditSave(
+                                                        task,
+                                                      );
+                                                    }
+                                                  }}
+                                                  className="no-border-input w-full bg-white px-1 py-1 rounded"
+                                                  style={{
+                                                    fontSize: "inherit",
+                                                    height: "28px",
+                                                  }}
+                                                />
+                                              ) : (
+                                                <div
+                                                  className="overflow-visible whitespace-normal"
+                                                  style={{
+                                                    width: "100%",
+                                                    maxWidth: "100%",
+                                                    wordWrap: "break-word",
+                                                  }}
+                                                >
+                                                  <span
+                                                    className="cursor-pointer block"
+                                                    onClick={() => {
+                                                      setEditingRemindedOnTaskId(
+                                                        task._id,
+                                                      );
+                                                      setEditingRemindedOnValue(
+                                                        task.remindedOn || "",
+                                                      );
+                                                    }}
+                                                    title="Click to edit"
+                                                    style={{
+                                                      minHeight: "14px",
+                                                      color: !task.remindedOn
+                                                        ? "#aaa"
+                                                        : undefined,
+                                                      fontSize: "inherit",
+                                                    }}
+                                                  >
+                                                    {task.remindedOn &&
+                                                    task.remindedOn.trim() !==
+                                                      "" ? (
+                                                      task.remindedOn
+                                                    ) : (
+                                                      <span
+                                                        style={{
+                                                          fontStyle: "italic",
+                                                          fontSize: "inherit",
+                                                        }}
+                                                      ></span>
+                                                    )}
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </td>
+                                          );
+
                                         default:
                                           // Check if this is a custom column
                                           if (colId.startsWith("custom_")) {
@@ -4288,10 +4383,6 @@ const AdvancedTaskTable = React.memo(
                                                   );
                                                 const updatedTask =
                                                   await response.json();
-                                                console.log(
-                                                  "Updated task received:",
-                                                  updatedTask,
-                                                );
                                                 // Update task in state immediately
                                                 if (onTaskUpdate) {
                                                   onTaskUpdate(
@@ -5367,6 +5458,88 @@ const AdvancedTaskTable = React.memo(
                                       </button>
                                     </div>
                                   </div>
+                                </td>
+                              );
+
+                            case "remindedOn":
+                              return (
+                                <td
+                                  key={colId}
+                                  className={`px-2 py-1 text-sm font-normal align-top bg-white ${!isLast ? "border-r border-gray-200" : ""}`}
+                                  style={{
+                                    width: (columnWidths[colId] || 150) + "px",
+                                    minWidth:
+                                      (columnWidths[colId] || 150) + "px",
+                                    maxWidth:
+                                      (columnWidths[colId] || 150) + "px",
+                                    background: "white",
+                                    overflow: "visible",
+                                  }}
+                                >
+                                  {editingRemindedOnTaskId === task._id ? (
+                                    <input
+                                      type="text"
+                                      value={editingRemindedOnValue}
+                                      autoFocus
+                                      onChange={(e) =>
+                                        setEditingRemindedOnValue(
+                                          e.target.value,
+                                        )
+                                      }
+                                      onBlur={() =>
+                                        handleRemindedOnEditSave(task)
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          handleRemindedOnEditSave(task);
+                                        }
+                                      }}
+                                      className="no-border-input w-full bg-white px-1 py-1 rounded"
+                                      style={{
+                                        fontSize: "inherit",
+                                        height: "28px",
+                                      }}
+                                    />
+                                  ) : (
+                                    <div
+                                      className="overflow-visible whitespace-normal"
+                                      style={{
+                                        width: "100%",
+                                        maxWidth: "100%",
+                                        wordWrap: "break-word",
+                                      }}
+                                    >
+                                      <span
+                                        className="cursor-pointer block"
+                                        onClick={() => {
+                                          setEditingRemindedOnTaskId(task._id);
+                                          setEditingRemindedOnValue(
+                                            task.remindedOn || "",
+                                          );
+                                        }}
+                                        title="Click to edit"
+                                        style={{
+                                          minHeight: "14px",
+                                          color: !task.remindedOn
+                                            ? "#aaa"
+                                            : undefined,
+                                          fontSize: "inherit",
+                                        }}
+                                      >
+                                        {task.remindedOn &&
+                                        task.remindedOn.trim() !== "" ? (
+                                          task.remindedOn
+                                        ) : (
+                                          <span
+                                            style={{
+                                              fontStyle: "italic",
+                                              fontSize: "inherit",
+                                            }}
+                                          ></span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  )}
                                 </td>
                               );
 

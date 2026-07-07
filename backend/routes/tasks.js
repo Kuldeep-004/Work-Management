@@ -363,7 +363,7 @@ router.get("/", protect, async (req, res) => {
       .populate("comments.createdBy", "firstName lastName photo")
       .populate("guides", "firstName lastName photo")
       .select(
-        "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy approvedBy approvedAt createdAt updatedAt files comments billed selfVerification customFields itrProgress",
+        "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy approvedBy approvedAt createdAt updatedAt files comments billed selfVerification customFields itrProgress remindedOn",
       )
       .sort({ createdAt: -1 });
     res.json(tasks);
@@ -414,7 +414,7 @@ router.get("/all", protect, async (req, res) => {
         .populate("comments.createdBy", "firstName lastName photo")
         .populate("guides", "firstName lastName photo")
         .select(
-          "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy approvedBy approvedAt verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress",
+          "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy approvedBy approvedAt verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress remindedOn",
         )
         .sort({ createdAt: -1 });
     } else {
@@ -495,7 +495,7 @@ router.get("/team-tasks", protect, async (req, res) => {
       .populate("comments.createdBy", "firstName lastName photo")
       .populate("guides", "firstName lastName photo")
       .select(
-        "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy approvedBy approvedAt verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress",
+        "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy approvedBy approvedAt verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress remindedOn",
       )
       .sort({ createdAt: -1 });
 
@@ -535,7 +535,7 @@ router.get("/for-verification", protect, async (req, res) => {
         .populate("originalAssignee", "firstName lastName photo")
         .populate("comments.createdBy", "firstName lastName photo")
         .select(
-          "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields itrProgress",
+          "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields itrProgress remindedOn",
         )
         .sort({ createdAt: -1 });
       res.json(tasks);
@@ -575,7 +575,7 @@ router.get("/for-verification", protect, async (req, res) => {
         .populate("originalAssignee", "firstName lastName photo")
         .populate("comments.createdBy", "firstName lastName photo")
         .select(
-          "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields itrProgress",
+          "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields itrProgress remindedOn",
         )
         .sort({ createdAt: -1 });
       res.json(tasks);
@@ -602,7 +602,7 @@ router.get("/for-verification", protect, async (req, res) => {
       .populate("originalAssignee", "firstName lastName photo")
       .populate("comments.createdBy", "firstName lastName photo")
       .select(
-        "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields itrProgress",
+        "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification customFields itrProgress remindedOn",
       )
       .sort({ createdAt: -1 });
     // Filter: if user is first verifier, exclude tasks with status 'first_verified'
@@ -729,7 +729,7 @@ router.get("/assigned", protect, async (req, res) => {
       .populate("comments.createdBy", "firstName lastName photo")
       .populate("guides", "firstName lastName photo")
       .select(
-        "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy approvedBy approvedAt verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields",
+        "title description status priority verification inwardEntryDate dueDate targetDate clientName clientGroup workType assignedTo assignedBy approvedBy approvedAt verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields remindedOn",
       )
       .sort({ createdAt: -1 });
     res.json(tasks);
@@ -856,7 +856,7 @@ router.get("/received", protect, async (req, res) => {
       .populate("fifthVerificationAssignedTo", "firstName lastName photo")
       .populate("guides", "firstName lastName photo")
       .select(
-        "title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy approvedBy approvedAt verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress",
+        "title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy approvedBy approvedAt verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress remindedOn",
       )
       .sort({ createdAt: -1 });
     res.json(tasks);
@@ -881,7 +881,7 @@ router.get("/received/guidance", protect, async (req, res) => {
       .populate("fifthVerificationAssignedTo", "firstName lastName photo")
       .populate("guides", "firstName lastName photo")
       .select(
-        "title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress",
+        "title description clientName clientGroup workType status priority verification inwardEntryDate dueDate assignedTo assignedBy verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo verificationStatus verificationComments createdAt updatedAt files comments billed selfVerification guides customFields itrProgress remindedOn",
       )
       .sort({ createdAt: -1 });
     res.json(tasks);
@@ -910,7 +910,7 @@ router.get("/:id", protect, async (req, res) => {
       .populate("files.uploadedBy", "firstName lastName photo")
       .populate("comments.createdBy", "firstName lastName photo")
       .select(
-        "title description clientName clientGroup workType assignedTo assignedBy approvedBy approvedAt verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo priority status verification inwardEntryDate dueDate targetDate billed selfVerification guides files comments verificationStatus verificationComments createdAt updatedAt customFields",
+        "title description clientName clientGroup workType assignedTo assignedBy approvedBy approvedAt verificationAssignedTo secondVerificationAssignedTo thirdVerificationAssignedTo fourthVerificationAssignedTo fifthVerificationAssignedTo priority status verification inwardEntryDate dueDate targetDate billed selfVerification guides files comments verificationStatus verificationComments createdAt updatedAt customFields remindedOn",
       );
     if (!task) {
       return res.status(404).json({ message: "Task not found" });
@@ -1202,6 +1202,7 @@ router.put("/:id", protect, async (req, res) => {
       dueDate: task.dueDate,
       targetDate: task.targetDate,
       billed: task.billed,
+      remindedOn: task.remindedOn,
     };
 
     const updatedTask = await Task.findByIdAndUpdate(req.params.id, req.body, {
@@ -1236,6 +1237,7 @@ router.put("/:id", protect, async (req, res) => {
         dueDate: updatedTask.dueDate,
         targetDate: updatedTask.targetDate,
         billed: updatedTask.billed,
+        remindedOn: updatedTask.remindedOn,
       },
       req,
     );
@@ -1392,6 +1394,40 @@ async function updateTaskDescription(req, res) {
 
 // PATCH /:taskId/description
 router.patch("/:taskId/description", protect, updateTaskDescription);
+
+// PATCH /:taskId/reminded-on
+router.patch("/:taskId/reminded-on", protect, async (req, res) => {
+  try {
+    const { remindedOn } = req.body;
+    if (typeof remindedOn !== "string") {
+      return res.status(400).json({ message: "Reminded on is required." });
+    }
+
+    const task = await Task.findByIdAndUpdate(
+      req.params.taskId,
+      { remindedOn: remindedOn.trim() },
+      { new: true },
+    )
+      .populate("assignedTo", "firstName lastName photo")
+      .populate("assignedBy", "firstName lastName photo")
+      .populate("verificationAssignedTo", "firstName lastName photo")
+      .populate("secondVerificationAssignedTo", "firstName lastName photo")
+      .populate("thirdVerificationAssignedTo", "firstName lastName photo")
+      .populate("fourthVerificationAssignedTo", "firstName lastName photo")
+      .populate("fifthVerificationAssignedTo", "firstName lastName photo")
+      .populate("files.uploadedBy", "firstName lastName photo")
+      .populate("comments.createdBy", "firstName lastName photo");
+
+    if (!task) {
+      return res.status(404).json({ message: "Task not found." });
+    }
+
+    res.json(task);
+  } catch (error) {
+    console.error("Error updating reminded on:", error);
+    res.status(500).json({ message: "Failed to update reminded on." });
+  }
+});
 
 // PATCH /:taskId/priority
 router.patch("/:taskId/priority", protect, async (req, res) => {

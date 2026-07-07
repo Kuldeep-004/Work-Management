@@ -71,6 +71,7 @@ const BASE_COLUMNS = [
   { id: "guides", label: "Guide", defaultWidth: 200 },
   { id: "files", label: "Files", defaultWidth: 120 },
   { id: "comments", label: "Comments", defaultWidth: 120 },
+  { id: "remindedOn", label: "Reminded on", defaultWidth: 150 },
 ];
 
 // Add verification column only for receivedVerification tab
@@ -385,6 +386,8 @@ export const useAdvancedTaskTableLogic = (props) => {
   const [editingDescriptionTaskId, setEditingDescriptionTaskId] =
     useState(null);
   const [editingDescriptionValue, setEditingDescriptionValue] = useState("");
+  const [editingRemindedOnTaskId, setEditingRemindedOnTaskId] = useState(null);
+  const [editingRemindedOnValue, setEditingRemindedOnValue] = useState("");
 
   // Verification remarks modal state
   const [showRemarksModal, setShowRemarksModal] = useState(false);
@@ -1113,6 +1116,48 @@ export const useAdvancedTaskTableLogic = (props) => {
     }
     setEditingDescriptionTaskId(null);
     // Add a small delay to ensure the update is processed before allowing refetches
+    setTimeout(() => setIsUpdatingTaskProperties(false), 100);
+  };
+
+  const handleRemindedOnEditSave = async (task) => {
+    const currentValue = task.remindedOn || "";
+    if (editingRemindedOnValue === currentValue) {
+      setEditingRemindedOnTaskId(null);
+      setEditingRemindedOnValue("");
+      return;
+    }
+
+    setIsUpdatingTaskProperties(true);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/tasks/${task._id}/reminded-on`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.token}`,
+          },
+          body: JSON.stringify({ remindedOn: editingRemindedOnValue }),
+        },
+      );
+
+      if (!response.ok) throw new Error("Failed to update reminded on");
+      const updatedTask = await response.json();
+
+      if (onTaskUpdate) {
+        onTaskUpdate(task._id, () => ({
+          ...task,
+          remindedOn: updatedTask.remindedOn,
+        }));
+      }
+
+      toast.success("Reminded on updated");
+    } catch (error) {
+      toast.error(error.message || "Failed to update reminded on");
+    }
+
+    setEditingRemindedOnTaskId(null);
+    setEditingRemindedOnValue("");
     setTimeout(() => setIsUpdatingTaskProperties(false), 100);
   };
 
@@ -2999,6 +3044,11 @@ export const useAdvancedTaskTableLogic = (props) => {
     handleFileUploaded,
     handleFileDeleted,
     handleDescriptionEditSave,
+    editingRemindedOnTaskId,
+    setEditingRemindedOnTaskId,
+    editingRemindedOnValue,
+    setEditingRemindedOnValue,
+    handleRemindedOnEditSave,
     handleCustomTextEditSave,
     handleCustomTagsChange,
     handlePriorityChange,
