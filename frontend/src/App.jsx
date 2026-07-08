@@ -6,7 +6,6 @@ import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import PrivateRoute from './components/PrivateRoute';
 import { AuthProvider } from './context/AuthContext';
-import Notes from './components/Notes';
 
 function App() {
   return (
