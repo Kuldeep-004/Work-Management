@@ -77,9 +77,6 @@ cron.schedule(
  * Send daily backup and timesheets email to all admin users
  */
 const sendDailyBackupAndTimesheetsEmail = async () => {
-  console.log(
-    "[DailyEmailScheduler] Starting daily backup and timesheets email process...",
-  );
 
   let backupFilePath = null;
   let timesheetFilePath = null;
@@ -93,17 +90,12 @@ const sendDailyBackupAndTimesheetsEmail = async () => {
     }).select("email firstName lastName");
 
     if (adminUsers.length === 0) {
-      console.log(
-        "[DailyEmailScheduler] No admin users found. Skipping email.",
-      );
       return;
     }
 
     const adminEmails = adminUsers.map((user) => user.email);
-    console.log(`[DailyEmailScheduler] Found ${adminUsers.length} admin users`);
 
     // 2. Create local backup for email attachment
-    console.log("[DailyEmailScheduler] Creating local backup...");
     try {
       backupFilePath = await createLocalBackup();
     } catch (backupError) {
@@ -115,30 +107,16 @@ const sendDailyBackupAndTimesheetsEmail = async () => {
     }
 
     // 3. Generate timesheets report for previous working day
-    console.log("[DailyEmailScheduler] Generating timesheets report...");
     const previousWorkingDay = getPreviousWorkingDay();
-    console.log(
-      `[DailyEmailScheduler] Generating report for: ${previousWorkingDay.toISOString().split("T")[0]}`,
-    );
 
     try {
       timesheetFilePath = await generateTimesheetPDF(previousWorkingDay);
-      if (!timesheetFilePath) {
-        console.log(
-          "[DailyEmailScheduler] No timesheets found for the previous working day",
-        );
-      }
     } catch (timesheetError) {
-      console.error(
-        "[DailyEmailScheduler] Failed to generate timesheet report:",
-        timesheetError.message,
-      );
       // Continue anyway to send backup if timesheets fail
     }
 
     // 4. Send email only if we have at least one attachment
     if (backupFilePath || timesheetFilePath) {
-      console.log("[DailyEmailScheduler] Sending email to admins...");
       await sendDailyBackupEmail(
         adminEmails,
         backupFilePath,
@@ -146,17 +124,11 @@ const sendDailyBackupAndTimesheetsEmail = async () => {
         new Date(),
         previousWorkingDay,
       );
-      console.log("[DailyEmailScheduler] Email sent successfully!");
-    } else {
-      console.log("[DailyEmailScheduler] No files to send. Skipping email.");
-    }
-
+    } 
     // 5. Clean up temporary files
-    console.log("[DailyEmailScheduler] Cleaning up temporary files...");
     if (backupFilePath && fs.existsSync(backupFilePath)) {
       try {
         fs.unlinkSync(backupFilePath);
-        console.log("[DailyEmailScheduler] Backup file cleaned up");
       } catch (cleanupError) {
         console.warn(
           "[DailyEmailScheduler] Warning: Could not clean up backup file:",
@@ -168,7 +140,6 @@ const sendDailyBackupAndTimesheetsEmail = async () => {
     if (timesheetFilePath && fs.existsSync(timesheetFilePath)) {
       try {
         fs.unlinkSync(timesheetFilePath);
-        console.log("[DailyEmailScheduler] Timesheet file cleaned up");
       } catch (cleanupError) {
         console.warn(
           "[DailyEmailScheduler] Warning: Could not clean up timesheet file:",
@@ -180,15 +151,11 @@ const sendDailyBackupAndTimesheetsEmail = async () => {
     // 6. Clean up old report files
     cleanupOldReports();
 
-    console.log(
-      "[DailyEmailScheduler] Daily backup and timesheets email process completed successfully!",
-    );
   } catch (error) {
     console.error(
       "[DailyEmailScheduler] Fatal error in daily email process:",
       error.message,
     );
-    console.error("[DailyEmailScheduler] Stack trace:", error.stack);
 
     // Ensure cleanup of temporary files even on error
     try {
