@@ -573,7 +573,6 @@ const SubordinateTimesheets = () => {
                 type="button"
                 onClick={() => {
                   setShowDownloadModal(true)
-                  console.log('first')
                 }}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >

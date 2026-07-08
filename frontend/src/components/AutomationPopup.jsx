@@ -328,11 +328,7 @@ const AutomationPopup = ({
           ? [initialData.assignedTo]
           : [];
       const assignedUserIds = assignedToRaw.map(u => typeof u === 'string' ? u : u._id);
-      console.log('[EditModal-FIX] assignedToRaw:', assignedToRaw);
-      console.log('[EditModal-FIX] users:', users);
-      console.log('[EditModal-FIX] assignedUserIds:', assignedUserIds);
       const selected = users.filter(u => assignedUserIds.includes(u._id));
-      console.log('[EditModal-FIX] selectedUsers to set:', selected);
       setSelectedUsers(selected);
     } else if (mode === 'create' && isOpen) {
       const { date, time } = getCurrentDateTime();
@@ -371,11 +367,7 @@ const AutomationPopup = ({
           ? [initialData.assignedTo]
           : [];
       const assignedUserIds = assignedToRaw.map(u => typeof u === 'string' ? u : u._id);
-      console.log('[EditModal-FIX][users effect] assignedToRaw:', assignedToRaw);
-      console.log('[EditModal-FIX][users effect] users:', users);
-      console.log('[EditModal-FIX][users effect] assignedUserIds:', assignedUserIds);
       const selected = users.filter(u => assignedUserIds.includes(u._id));
-      console.log('[EditModal-FIX][users effect] selectedUsers to set:', selected);
       setSelectedUsers(selected);
     }
     // eslint-disable-next-line

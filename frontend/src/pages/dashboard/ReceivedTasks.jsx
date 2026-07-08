@@ -485,7 +485,6 @@ const ReceivedTasks = () => {
   // Use a pending highlight state to ensure highlight happens after tab switch and data load
   const [pendingHighlight, setPendingHighlight] = useState(null);
   const searchAndHighlightTask = async (taskId) => {
-    console.log("searchAndHighlightTask called with:", taskId, typeof taskId);
     const taskIdString = String(taskId);
     navigate(location.pathname, { replace: true });
     try {
@@ -501,8 +500,6 @@ const ReceivedTasks = () => {
         return;
       }
       const taskDetails = await taskResponse.json();
-      console.log("Found task:", taskDetails);
-
       // Search all browser-like tabs (pages)
       let found = false;
       let foundTabId = null;
@@ -1136,16 +1133,12 @@ const ReceivedTasks = () => {
         },
         body: JSON.stringify({ status: newStatus }),
       });
-
-      console.log("Response status:", response.status);
       console.log(
         "Response headers:",
         Object.fromEntries(response.headers.entries()),
       );
 
       const data = await response.json();
-      console.log("Response data:", data);
-
       if (!response.ok) {
         console.error("Server error response:", {
           status: response.status,
@@ -1154,14 +1147,11 @@ const ReceivedTasks = () => {
         });
         throw new Error(data.message || "Failed to update task status");
       }
-
-      console.log("Updating tasks state with new data");
       // Update the task in the state with the server response
       setTasks((prevTasks) => {
         const updatedTasks = prevTasks.map((task) =>
           task._id === taskId ? data : task,
         );
-        console.log("Updated tasks state:", updatedTasks);
         return updatedTasks;
       });
 
@@ -1179,7 +1169,6 @@ const ReceivedTasks = () => {
         const revertedTasks = prevTasks.map((task) =>
           task._id === taskId ? { ...task, status: task.status } : task,
         );
-        console.log("Reverted tasks state:", revertedTasks);
         return revertedTasks;
       });
 
@@ -2411,7 +2400,6 @@ const ReceivedTasks = () => {
                 });
                 if (res.ok) {
                   const updatedTask = await res.json();
-                  console.log("Re-fetched task after update:", updatedTask);
                   setTasks((prevTasks) =>
                     prevTasks.map((task) =>
                       task._id === taskId ? updatedTask : task,

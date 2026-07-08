@@ -33,10 +33,8 @@ const router = express.Router();
 
 // Helper function to validate priority - check if priority exists in database
 const isValidPriority = async (priorityName) => {
-  console.log(`Validating priority: "${priorityName}"`);
   // All priorities are now stored in the database
   const priority = await Priority.findOne({ name: priorityName });
-  console.log(`Priority found in DB: ${!!priority}`);
   return !!priority;
 };
 
@@ -1498,7 +1496,6 @@ router.patch("/:taskId/priority", protect, async (req, res) => {
 
     // Validate priority against database
     if (!(await isValidPriority(priority))) {
-      console.log(`Priority validation failed for: "${priority}"`);
       return res.status(400).json({ message: "Invalid priority value" });
     }
 
@@ -1571,7 +1568,6 @@ router.patch("/:taskId/verification", protect, async (req, res) => {
       .populate("comments.createdBy", "firstName lastName photo");
 
     if (!task) {
-      console.log("Task not found:", req.params.taskId);
       return res.status(404).json({ message: "Task not found" });
     }
 
@@ -1585,7 +1581,6 @@ router.patch("/:taskId/verification", protect, async (req, res) => {
       "next verification",
     ];
     if (!validVerifications.includes(verification)) {
-      console.log("Invalid verification value:", verification);
       return res.status(400).json({ message: "Invalid verification value" });
     }
 
@@ -1661,9 +1656,6 @@ router.patch("/:taskId/verification", protect, async (req, res) => {
     }
 
     await task.save();
-
-    console.log("Verification updated successfully");
-
     // Log verification activity
     if (verification === "rejected") {
       await ActivityLogger.logTaskActivity(
@@ -1713,8 +1705,6 @@ router.patch("/:taskId/verification", protect, async (req, res) => {
     if (!updatedTask) {
       throw new Error("Failed to fetch updated task");
     }
-
-    console.log("Updated task verification:", updatedTask.verification);
     res.json(updatedTask);
   } catch (error) {
     console.error("Error updating task verification:", error);
@@ -1796,7 +1786,6 @@ router.post(
             // Wait before retrying (exponential backoff)
             if (attempt < maxRetries) {
               const waitTime = Math.min(1000 * Math.pow(2, attempt), 10000);
-              console.log(`Waiting ${waitTime}ms before retry...`);
               await new Promise((resolve) => setTimeout(resolve, waitTime));
             } else {
               throw error;
@@ -1821,7 +1810,6 @@ router.post(
           // Delete local file after successful cloud upload
           try {
             await unlinkAsync(file.path);
-            console.log(`Deleted local file: ${file.path}`);
           } catch (unlinkError) {
             // Ignore errors if file doesn't exist
             if (unlinkError.code !== "ENOENT") {
@@ -1836,8 +1824,6 @@ router.post(
             cloudUrl: cloudResult.url,
             uploadedBy: req.user._id,
           });
-
-          console.log(`Successfully uploaded: ${file.originalname}`);
         } catch (cloudError) {
           console.error(
             `Failed to upload ${file.originalname}:`,
@@ -2253,9 +2239,6 @@ router.post(
       // Debug logging
       try {
         const stats = fs.statSync(req.file.path);
-        console.log("Audio file path:", req.file.path);
-        console.log("Audio file size:", stats.size);
-        console.log("Audio file mimetype:", req.file.mimetype);
       } catch (err) {
         console.error("Error getting audio file stats:", err);
       }
@@ -2264,7 +2247,6 @@ router.post(
       try {
         // Upload to pCloud
         const cloudResult = await uploadFile(req.file.path, "files");
-        console.log("pCloud upload result:", cloudResult);
         audioUrl = cloudResult.url;
         // Delete local file after cloud upload
         try {

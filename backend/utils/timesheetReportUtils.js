@@ -53,8 +53,6 @@ export const generateTimesheetPDF = async (date) => {
     .populate("user", "firstName lastName email role")
     .populate("entries.task", "title")
     .lean();
-    
-    console.log(timesheets,targetDate);
     if (timesheets.length === 0) {
       console.log(
         `[TimesheetReport] No submitted timesheets found for ${targetDate.toISOString().split("T")[0]}`,

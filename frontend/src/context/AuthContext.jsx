@@ -120,7 +120,6 @@ export const AuthProvider = ({ children }) => {
     try {
       const initialized = await pushNotificationManager.initialize();
       if (!initialized) {
-        console.log("Push notifications not supported or failed to initialize");
         return;
       }
 

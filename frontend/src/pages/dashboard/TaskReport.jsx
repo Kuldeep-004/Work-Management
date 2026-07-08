@@ -124,7 +124,6 @@ const Cost = () => {
     let isMounted = true;
     (async () => {
       try {
-        console.log("Loading tab states for all Task management tabs...");
         const [
           billedTabState,
           unbilledTabState,
@@ -255,7 +254,6 @@ const Cost = () => {
       } catch (error) {
         console.error("Error loading tab state:", error);
         if (isMounted) {
-          console.log("Error occurred, setting default columns for all tabs");
           setBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           setUnbilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
           setCompletedBilledVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
@@ -263,7 +261,6 @@ const Cost = () => {
         }
       } finally {
         if (isMounted) {
-          console.log("Tab state loading complete, setting tabsLoaded to true");
           setTabsLoaded(true);
         }
       }
@@ -290,7 +287,6 @@ const Cost = () => {
       user.token,
     )
       .then(() => {
-        console.log("Successfully saved billed tab state");
       })
       .catch((error) => {
         console.error("Error saving billed tab state:", error);
@@ -313,7 +309,6 @@ const Cost = () => {
       user.token,
     )
       .then(() => {
-        console.log("Successfully saved unbilled tab state");
       })
       .catch((error) => {
         console.error("Error saving unbilled tab state:", error);
@@ -340,7 +335,6 @@ const Cost = () => {
       user.token,
     )
       .then(() => {
-        console.log("Successfully saved completed billed tab state");
       })
       .catch((error) => {
         console.error("Error saving completed billed tab state:", error);
@@ -372,7 +366,6 @@ const Cost = () => {
       user.token,
     )
       .then(() => {
-        console.log("Successfully saved completed unbilled tab state");
       })
       .catch((error) => {
         console.error("Error saving completed unbilled tab state:", error);
@@ -743,22 +736,16 @@ const Cost = () => {
   };
 
   const toggleColumn = (columnId) => {
-    console.log("Toggling column:", columnId);
     const currentColumns = getCurrentVisibleColumns();
-    console.log("Previous visible columns:", currentColumns);
-
     if (currentColumns.includes(columnId)) {
       // Don't allow hiding all columns
       if (currentColumns.length <= 1) {
-        console.log("Cannot hide last column");
         return;
       }
       const newColumns = currentColumns.filter((id) => id !== columnId);
-      console.log("New visible columns (removed):", newColumns);
       setCurrentVisibleColumns(newColumns);
     } else {
       const newColumns = [...currentColumns, columnId];
-      console.log("New visible columns (added):", newColumns);
       setCurrentVisibleColumns(newColumns);
     }
   };

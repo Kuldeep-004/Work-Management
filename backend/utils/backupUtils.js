@@ -330,9 +330,6 @@ const uploadToPCloudBackup = async (filePath, fileName) => {
     if (!fs.existsSync(filePath)) {
       throw new Error(`File not found: ${filePath}`);
     }
-
-    console.log(`[BackupScheduler] Uploading to pCloud: ${fileName}`);
-
     const form = new FormData();
     form.append("file", fs.createReadStream(filePath));
     form.append("filename", fileName);

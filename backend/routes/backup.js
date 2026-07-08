@@ -181,7 +181,6 @@ router.get("/database", protect, admin, async (req, res) => {
             try {
               if (fs.existsSync(backupPath)) {
                 fs.unlinkSync(backupPath);
-                console.log("Backup file cleaned up:", backupPath);
               }
             } catch (cleanupError) {
               console.error("Error cleaning up backup file:", cleanupError);
@@ -389,8 +388,6 @@ router.get("/all-data", protect, admin, async (req, res) => {
 // Test route for pCloud backup functionality (Admin only)
 router.post("/test-pcloud", protect, admin, async (req, res) => {
   try {
-    console.log("[BackupTest] Testing pCloud backup functionality");
-
     const result = await createAndUploadBackup();
     await logBackupActivity(result, null, req.user._id);
 

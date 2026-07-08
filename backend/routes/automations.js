@@ -42,8 +42,6 @@ router.get('/templates/pending', protect, async (req, res) => {
       ...automation.toObject(),
       taskTemplate: automation.taskTemplate.filter(template => template.verificationStatus === 'pending')
     })).filter(automation => automation.taskTemplate.length > 0);
-
-    console.log('Found pending automation templates:', pendingAutomations.length);
     res.json(pendingAutomations);
   } catch (err) {
     console.error('Error fetching pending automation templates:', err);
@@ -147,7 +145,6 @@ router.put('/:id', protect, async (req, res) => {
           automation.lastRunDate = undefined;
           automation.lastRunMonth = undefined;
           automation.lastRunYear = undefined;
-          console.log(`[AutomationUpdate] Reset run status for automation ${automation._id} due to template update`);
         }
       } else {
         return res.status(400).json({ 
@@ -208,7 +205,6 @@ router.put('/:id', protect, async (req, res) => {
       automation.lastRunDate = undefined;
       automation.lastRunMonth = undefined;
       automation.lastRunYear = undefined;
-      console.log(`[AutomationUpdate] Reset run status for automation ${automation._id} due to trigger type change from ${oldTriggerType} to ${triggerType}`);
     }
 
     // Clear all template run history if requested
@@ -219,7 +215,6 @@ router.put('/:id', protect, async (req, res) => {
         template.lastProcessedYear = undefined;
         template.createdTaskIds = [];
       });
-      console.log(`[AutomationUpdate] Cleared template run history for automation ${automation._id} with ${automation.taskTemplate.length} templates`);
     }
     
     // Store old values for logging
@@ -560,7 +555,6 @@ router.post('/templates/:templateId/verify', protect, async (req, res) => {
         automation.lastRunDate = undefined;
         automation.lastRunMonth = undefined;
         automation.lastRunYear = undefined;
-        console.log(`[AutomationApproval] Reset run status for automation ${automation._id} due to new approved template "${template.title}"`);
       }
       
       await automation.save();
@@ -646,7 +640,6 @@ router.delete('/:id', protect, async (req, res) => {
     // Delete any associated tasks templates
     if (automation.taskTemplate && automation.taskTemplate.length > 0) {
       // This doesn't delete actual created tasks, just the templates
-      console.log(`Deleted automation ${req.params.id} with ${automation.taskTemplate.length} task templates`);
     }
     
     res.json({ message: 'Automation deleted successfully' });
@@ -695,7 +688,6 @@ router.put('/:automationId/templates/:templateId/verify', protect, async (req, r
         automation.lastRunDate = undefined;
         automation.lastRunMonth = undefined;
         automation.lastRunYear = undefined;
-        console.log(`[AutomationApproval] Reset run status for automation ${automation._id} due to new approved template "${template.title}"`);
       }
       
       await automation.save();

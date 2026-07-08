@@ -16,7 +16,6 @@ export const sendPushNotification = async (userId, title, body, data = {}) => {
   try {
     const user = await User.findById(userId);
     if (!user || !user.pushSubscription || user.notificationPermission !== 'granted') {
-      console.log(`User ${userId} doesn't have valid push subscription`);
       return false;
     }
 
@@ -40,7 +39,6 @@ export const sendPushNotification = async (userId, title, body, data = {}) => {
     };
 
     await webpush.sendNotification(subscription, payload);
-    console.log(`Push notification sent to user ${userId}`);
     return true;
   } catch (error) {
     console.error('Error sending push notification:', error);
@@ -77,8 +75,6 @@ export const sendTimesheetReminder = async () => {
 
     const results = await Promise.allSettled(promises);
     const successful = results.filter(result => result.status === 'fulfilled' && result.value).length;
-    
-    console.log(`Timesheet reminders sent to ${successful}/${users.length} users`);
     return { sent: successful, total: users.length };
   } catch (error) {
     console.error('Error sending timesheet reminders:', error);

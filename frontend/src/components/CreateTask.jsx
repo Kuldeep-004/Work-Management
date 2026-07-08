@@ -386,13 +386,9 @@ const CreateTask = ({
       const assignedUserIds = assignedToRaw.map((u) =>
         typeof u === "string" ? u : u._id,
       );
-      console.log("[EditModal-FIX] assignedToRaw:", assignedToRaw);
-      console.log("[EditModal-FIX] users:", users);
-      console.log("[EditModal-FIX] assignedUserIds:", assignedUserIds);
       const selected = usersWithCurrent.filter((u) =>
         assignedUserIds.includes(u._id),
       );
-      console.log("[EditModal-FIX] selectedUsers to set:", selected);
       setSelectedUsers(selected);
 
       // Set guides if available
@@ -521,7 +517,6 @@ const CreateTask = ({
         "[EditModal-FIX][users effect] assignedToRaw:",
         assignedToRaw,
       );
-      console.log("[EditModal-FIX][users effect] users:", users);
       console.log(
         "[EditModal-FIX][users effect] assignedUserIds:",
         assignedUserIds,
@@ -1570,7 +1565,6 @@ const CreateTask = ({
                           ...prev,
                           billed: newBilled,
                         };
-                        console.log("first", workTypes);
                         // If Internal Works is set to "yes" (billed:true), auto-select "HAA-Internal Works"
                         if (newBilled === true) {
                           const haaInternalWorks = workTypes.find(
@@ -2502,7 +2496,6 @@ const CreateTask = ({
                       initialData={initialData}
                       onUpdate={(updatedTask) => {
                         // Optionally handle the updated task data
-                        console.log("ITR progress updated:", updatedTask);
                       }}
                     />
                   ) : null;

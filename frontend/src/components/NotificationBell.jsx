@@ -87,9 +87,6 @@ const NotificationBell = () => {
   };
 
   const handleNotificationClick = async (notification) => {
-    console.log('Notification clicked:', notification);
-    console.log('Notification task:', notification.task, typeof notification.task);
-    
     // Mark as read first
     if (!notification.isRead) {
       await handleMarkAsRead(notification._id);

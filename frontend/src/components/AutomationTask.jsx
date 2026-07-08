@@ -335,13 +335,9 @@ const AutomationTask = ({
       const assignedUserIds = assignedToRaw.map((u) =>
         typeof u === "string" ? u : u._id,
       );
-      console.log("[EditModal-FIX] assignedToRaw:", assignedToRaw);
-      console.log("[EditModal-FIX] users:", users);
-      console.log("[EditModal-FIX] assignedUserIds:", assignedUserIds);
       const selected = usersWithCurrent.filter((u) =>
         assignedUserIds.includes(u._id),
       );
-      console.log("[EditModal-FIX] selectedUsers to set:", selected);
       setSelectedUsers(selected);
 
       // Set multi-user assignment toggle based on number of assigned users
@@ -401,7 +397,6 @@ const AutomationTask = ({
         "[EditModal-FIX][users effect] assignedToRaw:",
         assignedToRaw,
       );
-      console.log("[EditModal-FIX][users effect] users:", users);
       console.log(
         "[EditModal-FIX][users effect] assignedUserIds:",
         assignedUserIds,
@@ -579,9 +574,6 @@ const AutomationTask = ({
                 ? taskData.assignedTo
                 : [taskData.assignedTo],
             };
-
-            console.log("Creating task with data:", taskRequestData);
-
             const taskResponse = await fetch(`${API_BASE_URL}/api/tasks`, {
               method: "POST",
               headers: {
@@ -602,7 +594,6 @@ const AutomationTask = ({
             let taskResult;
             try {
               taskResult = await taskResponse.json();
-              console.log("Task creation response:", taskResult);
             } catch (err) {
               console.error("Error parsing task creation response:", err);
               throw new Error("Failed to parse task creation response");
@@ -612,13 +603,11 @@ const AutomationTask = ({
             let taskObj;
             if (Array.isArray(taskResult) && taskResult.length > 0) {
               taskObj = taskResult[0];
-              console.log("Using first task from array:", taskObj);
             } else {
               taskObj = taskResult;
             }
 
             if (taskObj && taskObj._id) {
-              console.log("Got valid task ID:", taskObj._id);
               setCreatedTaskId(taskObj._id);
               await uploadFiles(taskObj._id);
               toast.success("Files uploaded successfully");

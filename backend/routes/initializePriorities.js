@@ -10,8 +10,6 @@ const router = express.Router();
 // Initialize priority orders (run this once to fix existing data)
 router.get('/initialize-priority-orders', async (req, res) => {
   try {
-    console.log('Initializing priority orders...');
-    
     // Get all priorities that don't have an order or have order = null
     const prioritiesWithoutOrder = await Priority.find({
       $or: [
@@ -20,9 +18,6 @@ router.get('/initialize-priority-orders', async (req, res) => {
         { order: undefined }
       ]
     }).sort({ createdAt: 1 });
-
-    console.log(`Found ${prioritiesWithoutOrder.length} priorities without order`);
-
     if (prioritiesWithoutOrder.length === 0) {
       return res.json({ message: 'All priorities already have order values' });
     }
@@ -34,7 +29,6 @@ router.get('/initialize-priority-orders', async (req, res) => {
     // Update each priority without order
     for (const priority of prioritiesWithoutOrder) {
       await Priority.findByIdAndUpdate(priority._id, { order: nextOrder });
-      console.log(`Set priority "${priority.name}" order to ${nextOrder}`);
       nextOrder++;
     }
 

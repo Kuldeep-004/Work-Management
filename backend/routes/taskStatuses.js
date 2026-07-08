@@ -167,8 +167,6 @@ router.put('/bulk-update-order', protect, adminOrTeamHead, async (req, res) => {
       { count: statuses.length },
       req
     );
-
-    console.log('=== BULK UPDATE SUCCESSFUL ===');
     res.json({ message: 'Task status orders updated successfully' });
   } catch (error) {
     console.error('Error in bulk-update-order:', error);

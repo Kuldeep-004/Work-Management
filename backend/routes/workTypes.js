@@ -131,9 +131,6 @@ router.put('/:id', protect, isAdminOrTeamHead, async (req, res) => {
         severity: 'high',
         req
       });
-
-      console.log(`Work type "${oldName}" updated to "${newName}". Updated ${updateResult.updatedCount} tasks.`);
-      
       res.json({
         ...updatedWorkType.toObject(),
         message: `Work type updated successfully. ${updateResult.updatedCount} tasks were updated with the new work type name.`,

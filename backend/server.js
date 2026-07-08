@@ -172,15 +172,11 @@ setInterval(() => {
         userId: userId,
         isOnline: false,
       });
-
-      console.log(`User ${userId} marked offline due to heartbeat timeout`);
     }
   }
 }, 15000); // Check every 15 seconds
 
 io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
-
   // Handle user authentication
   socket.on("authenticate", async (token) => {
     try {
@@ -210,8 +206,6 @@ io.on("connection", (socket) => {
         );
 
         socket.join(user._id.toString());
-        console.log(`User ${user.firstName} ${user.lastName} authenticated`);
-
         // Notify contacts about online status
         socket.broadcast.emit("user_online", {
           userId: user._id,
@@ -231,13 +225,11 @@ io.on("connection", (socket) => {
   // Handle joining chat rooms
   socket.on("join_chat", (chatId) => {
     socket.join(chatId);
-    console.log(`User ${socket.userId} joined chat ${chatId}`);
   });
 
   // Handle leaving chat rooms
   socket.on("leave_chat", (chatId) => {
     socket.leave(chatId);
-    console.log(`User ${socket.userId} left chat ${chatId}`);
   });
 
   // Handle user entering chat section
@@ -247,7 +239,6 @@ io.on("connection", (socket) => {
       userData.isInChat = true;
       userData.lastSeen = Date.now();
       connectedUsers.set(socket.userId, userData);
-      console.log(`User ${socket.userId} entered chat section`);
     }
   });
 
@@ -258,7 +249,6 @@ io.on("connection", (socket) => {
       userData.isInChat = false;
       userData.lastSeen = Date.now();
       connectedUsers.set(socket.userId, userData);
-      console.log(`User ${socket.userId} left chat section`);
     }
   });
 
@@ -283,7 +273,6 @@ io.on("connection", (socket) => {
       }
 
       connectedUsers.set(socket.userId, userData);
-      console.log(`User ${socket.userId} page visibility: ${isVisible}`);
     }
   });
 
@@ -367,8 +356,6 @@ io.on("connection", (socket) => {
 
   // Handle disconnection
   socket.on("disconnect", async () => {
-    console.log("User disconnected:", socket.id);
-
     if (socket.userId) {
       // Remove from connected users
       connectedUsers.delete(socket.userId);
@@ -395,8 +382,6 @@ io.on("connection", (socket) => {
         userId: socket.userId,
         isOnline: false,
       });
-
-      console.log(`User ${socket.userId} went offline`);
     }
   });
 });
@@ -408,7 +393,6 @@ app.set("io", io);
 mongoose
   .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/haacas13")
   .then(() => {
-    console.log("Connected to MongoDB");
   })
   .catch((err) => console.error("MongoDB connection error:", err));
 
@@ -469,7 +453,6 @@ async function updateUnreadCountsAsync(chatId, senderId) {
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
 });
 
 app.get("/", (req, res) => {

@@ -413,8 +413,6 @@ const AssignedTasks = () => {
 
     // Ensure taskId is a string
     const taskIdString = String(taskId);
-    console.log("taskIdString in assigned tasks:", taskIdString);
-
     // Clear URL parameter
     navigate(location.pathname, { replace: true });
 
@@ -438,13 +436,10 @@ const AssignedTasks = () => {
       }
 
       const taskDetails = await taskResponse.json();
-      console.log("Found task in assigned tasks:", taskDetails);
-
       // Search for the task in current tasks first
       const foundTask = tasks.find((t) => t._id === taskIdString);
 
       if (foundTask) {
-        console.log("Task found in current assigned tasks");
         // Highlight the task
         setHighlightedTaskId(taskIdString);
 
@@ -465,7 +460,6 @@ const AssignedTasks = () => {
 
       for (const tabType of tabTypes) {
         try {
-          console.log(`Searching in assigned ${tabType}`);
           const response = await fetch(
             `${API_BASE_URL}/api/tasks/assigned?tab=${tabType}`,
             {
@@ -475,7 +469,6 @@ const AssignedTasks = () => {
 
           if (response.ok) {
             const tabTasks = await response.json();
-            console.log(`Assigned tasks in ${tabType}:`, tabTasks.length);
             const task = tabTasks.find((t) => t._id === taskIdString);
 
             if (task) {
@@ -489,7 +482,6 @@ const AssignedTasks = () => {
       }
 
       if (foundTab) {
-        console.log(`Task found in assigned ${foundTab}`);
         // Switch to the tab where task was found
         updateActiveTab({ activeTab: foundTab });
 
@@ -503,7 +495,6 @@ const AssignedTasks = () => {
 
         toast.success(`Task found in assigned tasks - ${foundTab} tab`);
       } else {
-        console.log("Task not found in assigned tasks, trying received tasks");
         // Task exists but not in assigned tasks, might be in received tasks
         navigate(`/dashboard/received-tasks?highlightTask=${taskIdString}`);
         toast.success(`Task found in received tasks - redirecting...`);
@@ -917,10 +908,6 @@ const AssignedTasks = () => {
   };
 
   // Debug logs
-  console.log("ALL_COLUMNS:", ALL_COLUMNS);
-  console.log("visibleColumns:", activeTabObj.visibleColumns);
-  console.log("tasks:", tasks);
-
   if (!isAuthenticated()) {
     return null;
   }

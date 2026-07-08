@@ -273,19 +273,13 @@ const GroupManagementModal = ({ isOpen, onClose, chat, allUsers, onChatUpdate })
               closeConfirmation();
               try {
                 setLoading(true);
-                console.log('Attempting to delete group:', chat._id);
-                
                 const response = await fetch(`${API_BASE_URL}/api/chats/${chat._id}`, {
                   method: 'DELETE',
                   headers: {
                     Authorization: `Bearer ${user.token}`
                   }
                 });
-
-                console.log('Delete response status:', response.status);
-                
                 if (response.ok) {
-                  console.log('Group deleted successfully');
                   // Close the modal and notify parent
                   onClose();
                   if (onChatUpdate) {

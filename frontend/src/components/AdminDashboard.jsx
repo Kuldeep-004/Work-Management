@@ -1153,7 +1153,6 @@ const AdminDashboard = () => {
 
   const handleStatusClick = (taskId, status) => {
     // Implement the logic to handle status click
-    console.log(`Status clicked for task ${taskId}, new status: ${status}`);
   };
 
   const handleEditTask = useCallback((task) => {

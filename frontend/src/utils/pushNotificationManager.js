@@ -16,8 +16,6 @@ class PushNotificationManager {
     try {
       // Register service worker
       this.serviceWorkerRegistration = await navigator.serviceWorker.register('/service-worker.js');
-      console.log('Service Worker registered successfully');
-
       // Get VAPID public key
       const response = await fetch(`${API_BASE_URL}/api/push-subscription/vapid-public-key`);
       const data = await response.json();
@@ -67,8 +65,6 @@ class PushNotificationManager {
         },
         body: JSON.stringify({ subscription })
       });
-
-      console.log('Successfully subscribed to push notifications');
       return subscription;
     } catch (error) {
       console.error('Error subscribing to push notifications:', error);
@@ -96,8 +92,6 @@ class PushNotificationManager {
           'Authorization': `Bearer ${token}`
         }
       });
-
-      console.log('Successfully unsubscribed from push notifications');
     } catch (error) {
       console.error('Error unsubscribing from push notifications:', error);
       throw error;

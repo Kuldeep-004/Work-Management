@@ -223,7 +223,6 @@ export const batchMarkMessagesAsRead = async (chatId, userId) => {
 export const cleanupChatSessions = () => {
   // This would be called periodically to clean up memory
   // Implementation depends on your session management
-  console.log('Cleaning up chat sessions...');
 };
 
 /**

@@ -1373,18 +1373,12 @@ export const useAdvancedTaskTableLogic = (props) => {
           }),
         },
       );
-
-      console.log("Verification update response status:", response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to update verification");
       }
 
       const updatedTask = await response.json();
-
-      console.log("Updated task received:", updatedTask);
-
       // Update local state for all verification changes - no re-render needed
       if (
         taskType === "receivedVerification" &&
@@ -2644,7 +2638,6 @@ export const useAdvancedTaskTableLogic = (props) => {
 
       // Only allow reordering within the same group
       if (draggedGroupKey !== dropGroupKey) {
-        console.log("Cannot reorder tasks between different groups");
         setDraggedTaskId(null);
         setDragOverTaskId(null);
         return;
@@ -2838,7 +2831,6 @@ export const useAdvancedTaskTableLogic = (props) => {
         }
       });
       renderGroupedTasks = orderedGroupedTasks;
-      console.log(renderGroupedTasks);
     } else if (groupOrderLoaded && groupOrder.length > 0) {
       // For non-priority grouping, apply custom group order if available
       const orderedGroupedTasks = {};
