@@ -1833,6 +1833,9 @@ const AdminDashboard = () => {
                       ? task.comments.length.toString()
                       : "0";
                     break;
+                  case "remindedOn":
+                    value = task.remindedOn || "";
+                    break;
                   default:
                     value = "";
                 }
