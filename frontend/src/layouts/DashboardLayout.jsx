@@ -111,6 +111,7 @@ const DashboardLayout = ({ children }) => {
   }, [user]);
 
   const menuItems = [];
+  const canAccessCostPage = user?.role === "Admin" || user?.costAccess === true;
 
   // Add menu items based on user role
   if (user) {
@@ -525,6 +526,25 @@ const DashboardLayout = ({ children }) => {
         );
         break;
     }
+
+    if (canAccessCostPage && !menuItems.some((item) => item.id === "cost")) {
+      const settingsIndex = menuItems.findIndex(
+        (item) => item.id === "settings",
+      );
+      const costItem = {
+        id: "cost",
+        label: "Cost",
+        icon: ChartBarIcon,
+        path: "/dashboard/cost",
+      };
+
+      if (settingsIndex === -1) {
+        menuItems.push(costItem);
+      } else {
+        menuItems.splice(settingsIndex, 0, costItem);
+      }
+    }
+
     // Add Subordinate Timesheets link for TimeSheet Verifier (if not already admin or team head)
     if (
       (Array.isArray(user.role2)

@@ -46,7 +46,7 @@ const userSchema = new mongoose.Schema(
       default: "Fresher",
     },
     role2: {
-      type: [String], 
+      type: [String],
       enum: ["None", "TimeSheet Verifier", "Task Verifier"],
       default: ["None"],
     },
@@ -59,6 +59,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["Team Only", "All Users"],
       default: "Team Only",
+    },
+    costAccess: {
+      type: Boolean,
+      default: false,
     },
     status: {
       type: String,

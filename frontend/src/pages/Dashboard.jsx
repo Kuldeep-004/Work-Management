@@ -83,6 +83,7 @@ const Dashboard = () => {
           <Route path="task-verification" element={<TaskVerification />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="cost" element={<Cost />} />
           <Route path="notes" element={<Notes />} />
           <Route path="tutorials" element={<Tutorials />} />
           <Route path="task-report" element={<TaskReport />} />
@@ -112,6 +113,7 @@ const Dashboard = () => {
           <Route path="announcements" element={<Announcements />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="cost" element={<Cost />} />
           <Route path="task-report" element={<TaskReport />} />
           <Route path="clients" element={<Clients />} />
           <Route path="timesheets" element={<Timesheets />} />

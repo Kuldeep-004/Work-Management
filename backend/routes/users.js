@@ -454,6 +454,12 @@ router.patch("/:userId/update-fields", protect, async (req, res) => {
       }
     }
 
+    // Handle costAccess update
+    if (req.body.costAccess !== undefined) {
+      updatedFields.costAccess =
+        req.body.costAccess === true || req.body.costAccess === "true";
+    }
+
     // Handle requiresTaskApproval update
     if (req.body.requiresTaskApproval !== undefined) {
       updatedFields.requiresTaskApproval = Boolean(

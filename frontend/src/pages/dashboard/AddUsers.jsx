@@ -356,6 +356,42 @@ const AllUsers = () => {
     }
   };
 
+  const handleCostAccessChange = async (userId, newCostAccess) => {
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/users/${userId}/update-fields`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.token}`,
+          },
+          body: JSON.stringify({ costAccess: newCostAccess }),
+        },
+      );
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to update cost access");
+      }
+
+      setUsers((prev) =>
+        prev.map((u) =>
+          u._id === userId ? { ...u, costAccess: newCostAccess } : u,
+        ),
+      );
+
+      if (userId === user._id) {
+        await refreshUserData();
+      }
+
+      toast.success("Cost page access updated successfully");
+    } catch (err) {
+      console.error("Error updating cost access:", err);
+      toast.error(err.message);
+    }
+  };
+
   const handleDeleteUser = async (userId) => {
     if (!window.confirm("Are you sure you want to delete this user?")) {
       return;
@@ -439,6 +475,9 @@ const AllUsers = () => {
               </th>
               <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[140px]">
                 User Access Level
+              </th>
+              <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[140px]">
+                Cost Access
               </th>
               <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[160px]">
                 Task Approval
@@ -603,6 +642,18 @@ const AllUsers = () => {
                   >
                     <option value="Team Only">Team Only</option>
                     <option value="All Users">All Users</option>
+                  </select>
+                </td>
+                <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[140px]">
+                  <select
+                    value={u.costAccess ? "yes" : "no"}
+                    onChange={(e) =>
+                      handleCostAccessChange(u._id, e.target.value === "yes")
+                    }
+                    className="w-full min-w-[130px] px-2 py-1 border border-gray-300 rounded text-sm"
+                  >
+                    <option value="no">No Access</option>
+                    <option value="yes">Can Access</option>
                   </select>
                 </td>
                 <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-600 min-w-[160px]">

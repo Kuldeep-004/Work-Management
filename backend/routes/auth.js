@@ -140,30 +140,24 @@ router.post("/login", async (req, res) => {
 
     // Check if user is approved
     if (user.status === "pending") {
-      return res
-        .status(403)
-        .json({
-          message:
-            "Your account is pending approval. Please wait for Admin approval.",
-        });
+      return res.status(403).json({
+        message:
+          "Your account is pending approval. Please wait for Admin approval.",
+      });
     }
 
     if (user.status === "rejected") {
-      return res
-        .status(403)
-        .json({
-          message:
-            "Your account has been rejected by the administrator. Please contact Admin for more information.",
-        });
+      return res.status(403).json({
+        message:
+          "Your account has been rejected by the administrator. Please contact Admin for more information.",
+      });
     }
 
     if (user.status === "deleted") {
-      return res
-        .status(403)
-        .json({
-          message:
-            "This account has been deactivated. Please contact Admin for more information.",
-        });
+      return res.status(403).json({
+        message:
+          "This account has been deactivated. Please contact Admin for more information.",
+      });
     }
 
     // Check password
@@ -185,6 +179,10 @@ router.post("/login", async (req, res) => {
       team: user.team,
       role: user.role,
       role2: user.role2,
+      timesheetView: user.timesheetView,
+      userAccessLevel: user.userAccessLevel,
+      costAccess: user.costAccess,
+      requiresTaskApproval: user.requiresTaskApproval,
       status: user.status,
       isEmailVerified: user.isEmailVerified,
       photo: user.photo,
@@ -200,7 +198,7 @@ router.post("/login", async (req, res) => {
       {
         userRole: user.role,
         loginTime: new Date(),
-      }
+      },
     );
   } catch (error) {
     res.status(500).json({ message: error.message });

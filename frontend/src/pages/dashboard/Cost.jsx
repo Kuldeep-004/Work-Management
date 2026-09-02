@@ -1403,7 +1403,9 @@ const Cost = () => {
     );
   };
 
-  if (user?.role !== "Admin") {
+  const hasCostAccess = user?.role === "Admin" || user?.costAccess === true;
+
+  if (!hasCostAccess) {
     return (
       <div className="p-8 text-center text-lg font-semibold">Access denied</div>
     );
@@ -1472,16 +1474,18 @@ const Cost = () => {
           >
             Completed Unbilled Tasks Costing
           </button>
-          <button
-            onClick={() => setActiveTab("userRates")}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === "userRates"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-            }`}
-          >
-            User Hourly Rates
-          </button>
+          {user?.role === "Admin" && (
+            <button
+              onClick={() => setActiveTab("userRates")}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "userRates"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              User Hourly Rates
+            </button>
+          )}
         </nav>
       </div>
 
@@ -2526,7 +2530,7 @@ const Cost = () => {
       )}
 
       {/* User Hourly Rates Tab */}
-      {activeTab === "userRates" && (
+      {user?.role === "Admin" && activeTab === "userRates" && (
         <div>
           <h2 className="text-2xl font-bold mb-6">User Hourly Rates</h2>
           <div className="mb-4 flex items-center gap-2">
