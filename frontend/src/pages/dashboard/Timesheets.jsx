@@ -347,6 +347,44 @@ const Timesheets = () => {
 
 
 
+  const parseTimeToMinutes = (timeValue) => {
+    if (!timeValue) return null;
+
+    const raw = String(timeValue).trim();
+
+    if (raw.includes(' ')) {
+      const [timePart, ampm] = raw.split(' ');
+      if (['AM', 'PM'].includes(ampm)) {
+        const [hour, minute] = timePart.split(':').map(Number);
+        if (!Number.isNaN(hour) && !Number.isNaN(minute)) {
+          let h = hour;
+          if (ampm === 'PM' && h !== 12) h += 12;
+          if (ampm === 'AM' && h === 12) h = 0;
+          return h * 60 + minute;
+        }
+      }
+    }
+
+    const [hours, minutes] = raw.split(':').map(Number);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+    return hours * 60 + minutes;
+  };
+
+  const getCurrentTime24 = () => {
+    const now = new Date();
+    const pad = (n) => n.toString().padStart(2, '0');
+    return `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  };
+
+  const getRoundedDownCurrentTime24 = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const roundedMinutes = Math.floor(minutes / 5) * 5;
+    now.setMinutes(roundedMinutes, 0, 0);
+    const pad = (n) => n.toString().padStart(2, '0');
+    return `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  };
+
   const handleAddTimeslot = async () => {
     if (!timesheet) return;
     
@@ -355,11 +393,18 @@ const Timesheets = () => {
     // Get all entries (both existing and pending)
     const allEntries = [...(timesheet.entries || []), ...pendingEntries];
     
-    // If there are existing entries, use the last entry's end time
     if (allEntries.length > 0) {
       const lastEntry = allEntries[allEntries.length - 1];
       startTime = lastEntry.endTime;
-      endTime = lastEntry.endTime;
+      const startMinutes = parseTimeToMinutes(startTime);
+      const nowMinutes = parseTimeToMinutes(getCurrentTime24());
+
+      if (startMinutes !== null && nowMinutes !== null && startMinutes < nowMinutes) {
+        endTime = getRoundedDownCurrentTime24();
+      } else {
+        endTime = lastEntry.endTime || startTime;
+      }
+
     } else {
       // Fallback: Get current time, round up to next multiple of 5 minutes
       const now = new Date();
@@ -371,7 +416,6 @@ const Timesheets = () => {
       now.setMilliseconds(0);
       const pad = (n) => n.toString().padStart(2, '0');
       startTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-      // End time same as start time
       endTime = startTime;
     }
     
